@@ -61,7 +61,16 @@ function headerHtml(active) {
   return `
     <div class="topbar-inner">
       <a class="brand" href="dashboard.html">
-        <span class="brand-mark" aria-hidden="true"><span>S</span></span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" fill="none">
+            <rect x="1" y="3" width="6" height="10" fill="#0E1024"/>
+            <rect x="9" y="3" width="6" height="10" fill="#0E1024"/>
+            <rect x="7" y="3" width="2" height="10" fill="#0E1024"/>
+            <rect x="2" y="4" width="4" height="8" fill="#FFFFFF"/>
+            <rect x="10" y="4" width="4" height="8" fill="#FFFFFF"/>
+            <rect x="3" y="4" width="1" height="5" fill="#FF3E9A"/>
+          </svg>
+        </span>
         Socius AI
       </a>
       <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="topnav" aria-label="Open menu">

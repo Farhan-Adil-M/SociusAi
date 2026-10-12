@@ -475,9 +475,70 @@ html { scroll-behavior: smooth; }
   .px-footer-note { margin-left: 0; }
 }
 
-@media (max-width: 460px) {
-  .px-actions { flex-direction: column; align-items: stretch; }
+@media (max-width: 460px) {  .px-actions { flex-direction: column; align-items: stretch; }
   .px-actions .px-btn { width: 100%; }
   .px-title { text-shadow: 4px 4px 0 var(--px-blue-soft); }
   .px-window { box-shadow: 6px 6px 0 var(--px-ink); }
+}
+
+/* ======================================================= journey & mosaic v2 */
+
+#how .px-steps {
+  position: relative;
+  padding-top: 46px; /* room above the cards for the nodes that sit on the route */
+}
+#how .px-steps::before {
+  content: '';
+  position: absolute;
+  top: 23px; /* vertical centre of the 46px number node */
+  left: 24px;
+  right: 24px;
+  border-top: 4px dashed var(--px-ink);
+}
+/* Route ends at a goal: the next thing you do is open the app. */
+#how .px-steps::after {
+  content: 'open app';
+  position: absolute;
+  z-index: 2;
+  top: 23px;
+  right: 24px;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  color: var(--px-ink);
+  background: var(--px-pink-soft);
+  border: 3px solid var(--px-ink);
+  padding: 4px 8px;
+}
+#how .px-step {
+  position: relative;
+  z-index: 1;
+  background: var(--px-white);
+  border: 3px solid var(--px-ink);
+  box-shadow: 6px 6px 0 var(--px-ink);
+  padding: clamp(18px, 2.2vw, 26px);
+}
+#how .px-step-num {
+  position: absolute;
+  top: -46px;
+}
+
+.px-features { grid-template-columns: 7fr 5fr; }
+.px-feature:nth-child(2) .px-feature-icon,
+.px-feature:nth-child(4) .px-feature-icon { background: var(--px-blue-soft); }
+.px-feature:first-child h3 { font-size: 19px; }
+
+@media (max-width: 780px) {
+  #how .px-steps { padding-top: 0; }
+  #how .px-steps::before, #how .px-steps::after { display: none; }
+  #how .px-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 30px;
+    top: calc(100% + 3px);
+    height: 18px;
+    border-left: 4px dashed var(--px-ink);
+  }
+  #how .px-step-num { position: static; margin-bottom: var(--s3); }
+  .px-features { grid-template-columns: 1fr; }
 }
