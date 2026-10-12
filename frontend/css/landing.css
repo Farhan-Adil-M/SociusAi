@@ -138,10 +138,11 @@ html { scroll-behavior: smooth; }
 .px-title {
   font-family: var(--font-pixel);
   font-weight: 700;
-  font-size: clamp(30px, 5vw, 54px);
-  line-height: 1.14;
+  font-size: clamp(28px, 4.3vw, 46px);
+  line-height: 1.2;
   color: var(--px-ink);
   text-shadow: 6px 6px 0 var(--px-blue-soft);
+  max-width: 15ch;
 }
 
 .px-lead {
