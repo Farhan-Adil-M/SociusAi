@@ -5,7 +5,7 @@ import express from 'express';
 import { ApiError } from '../middleware/errors.js';
 import { chooseDifficulty, applyAttempt } from '../services/learner.js';
 import { generateQuiz, gradeAnswers } from '../services/quizService.js';
-import { assertSourcesExist } from '../services/retrieval.js';
+import { resolveScope, assertSourcesExist } from '../services/retrieval.js';
 import { logActivity, nowIso } from '../store/sqlite.js';
 
 const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
@@ -14,7 +14,7 @@ export function quizRouter({ db, ai, vector }) {
   const router = express.Router();
 
   router.post('/generate', async (req, res) => {
-    const { topic, questionCount, difficulty, sourceIds } = req.body ?? {};
+    const { topic, questionCount, difficulty, sourceIds, sessionId } = req.body ?? {};
     if (typeof topic !== 'string' || topic.trim().length < 2 || topic.trim().length > 80) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Topic must be between 2 and 80 characters.');
     }
@@ -28,17 +28,23 @@ export function quizRouter({ db, ai, vector }) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'sourceIds must be an array of source id strings.');
     }
 
-    await assertSourcesExist(db, sourceIds ?? []);
+    const scope = resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+    if (!scope.session) {
+      await assertSourcesExist(db, sourceIds ?? []); // legacy path: plain source filter
+    }
 
     // No difficulty given → the learner model chooses for this topic.
     const stats = db.prepare('SELECT * FROM learner_topics WHERE topic = ?').get(topic.trim().toLowerCase());
     const chosenDifficulty = difficulty ?? chooseDifficulty(stats);
 
     const quiz = await generateQuiz(
-      { topic: topic.trim(), questionCount: questionCount ?? 5, difficulty: chosenDifficulty, sourceIds: sourceIds ?? [] },
+      { topic: topic.trim(), questionCount: questionCount ?? 5, difficulty: chosenDifficulty, sourceIds: scope.sourceIds },
       { db, ai, vector },
     );
-    res.status(201).json({ quiz });
+    if (scope.session) {
+      db.prepare('UPDATE quizzes SET session_id = ? WHERE id = ?').run(scope.session.id, quiz.id);
+    }
+    res.status(201).json({ quiz, sessionId: scope.session?.id ?? null });
   });
 
   router.post('/:quizId/answer', async (req, res) => {
@@ -75,7 +81,7 @@ export function quizRouter({ db, ai, vector }) {
     db.prepare('INSERT INTO quiz_attempts (quiz_id, answers_json, correct, total, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(quizId, JSON.stringify(req.body.answers), correct, total, now);
     db.prepare('UPDATE quizzes SET answered_at = ? WHERE id = ?').run(now, quizId);
-    logActivity(db, 'quiz', quiz.topic, `${correct}/${total} correct (${percent}%)`);
+    logActivity(db, 'quiz', quiz.topic, `${correct}/${total} correct (${percent}%)`, quiz.session_id);
 
     res.json({
       result: {

@@ -351,3 +351,97 @@ Catalog visibility ≠ account access: many listed models returned HTTP 404 for 
 ## Non-goals for v1 (explicit)
 
 Real authentication (login page is a labeled visual prototype), multi-user profiles, browser-extension capture, lecture-video processing, OCR for scanned PDFs, spaced-repetition scheduling for flashcards, cloud deployment.
+
+---
+
+# v1.1 — Study sessions, AI organisation, persistent flashcard decks (2026-10-13)
+
+All changes are **additive**: existing request/response shapes are unchanged, all new fields are optional.
+New server-minted IDs: `ses_…`, `deck_…`. The server owns all database writes; client-supplied IDs in bodies are never authoritative.
+
+## Categories (fixed enum, used by sessions)
+
+`subject` · `research` · `self-study` · `exam-prep` · `general`
+
+## Unsorted
+
+A source or deck whose `sessionId` is `null` lives in **Unsorted**. Lists report `unsortedSourceCount`.
+
+## Study sessions
+
+### `GET /api/sessions?category=&q=&sort=recent|alpha|active&includeArchived=`
+
+Query: `sort` default `recent` (by `updatedAt`); `alpha` = title A–Z (case-insensitive); `active` = `lastActivityAt` desc.
+→ `200 { sessions: [ { id, title, category, description, tags: string[], status: "active"|"archived", sourceCount, deckCount, lastActivityAt, createdAt, updatedAt } ], unsortedSourceCount }`
+
+### `POST /api/sessions`
+
+`{ title, category?, description?, tags? }` → `201 { session }`
+Validation: title 2–80 chars; `category` in the enum (default `subject`); ≤8 tags, each 1–24 chars.
+
+### `GET /api/sessions/:id`
+
+→ `200 { session, sources: [source + { sessionId, tags }], decks: [{ id, topic, cardCount, createdAt }] }`
+`404 { error: { code: "SESSION_NOT_FOUND", … } }`
+
+### `PATCH /api/sessions/:id`
+
+`{ title?, category?, description?, tags?, status? }` (any subset; at least one) → `200 { session }`
+Archiving (`status: "archived"`) keeps sources assigned and working — it only hides the session from default lists (`?includeArchived=1` to see it). Nothing is deleted.
+
+## Source organisation
+
+Additions to the source object everywhere: `{ sessionId, tags, orgSource: "manual"|"ai" }`.
+
+### `PATCH /api/sources/:id`
+
+`{ sessionId?: "ses_…"|null, title?, tags? }` (any subset) → `200 { source }`
+Manual move/edit; sets `orgSource: "manual"` and marks the source as manually managed (`manualOverride`) — later AI suggestions never replace these choices automatically. `sessionId: null` = move to Unsorted.
+Errors: `404 SOURCE_NOT_FOUND`, `404 SESSION_NOT_FOUND`.
+
+### `POST /api/sources/:id/suggest-organization`
+
+`{ description? }` → `200 { sourceId, applicable, suggestion }` where
+`suggestion = { matchSessionId, newSession: { category, title, subject, tags } | null, confidence: "high"|"low", reason }`
+Exactly one of `matchSessionId` / `newSession` is non-null; `matchSessionId` always references a session the server listed to the model. The suggestion is stored server-side (reviewable). `applicable: false` means the user already made manual choices — show, don't apply.
+Errors: `404 SOURCE_NOT_FOUND`, `502 NIM_ERROR` (never blocks anything — the upload already happened in a earlier call).
+
+### `POST /api/sources/:id/accept-suggestion`
+
+No body → `200 { source, session }` — applies the server-stored suggestion: existing session → assigns; new session → creates (if a case-insensitive title match exists, reuses it) then assigns. Accepting is an explicit user action and also marks the source as manually managed.
+Errors: `400 VALIDATION_ERROR` (no suggestion stored), `404 SOURCE_NOT_FOUND`.
+
+## Session-scoped AI features
+
+`POST /api/tutor/ask`, `POST /api/quiz/generate`, `POST /api/flashcards/generate` gain an **optional `sessionId`**.
+
+- `sessionId` only → backend resolves the session to exactly its sources (server-enforced scope, not a UI highlight).
+- `sourceIds` only → existing behaviour, unchanged.
+- both → every `sourceId` must belong to the session, else `400 VALIDATION_ERROR`.
+- neither → all material (today's behaviour).
+
+Empty session: `400 { error: { code: "SESSION_EMPTY", message: "No material in «Physics» yet…" } }`. Quiz answer-key protection unchanged.
+
+## Persistent flashcard decks
+
+### `GET /api/decks?sessionId=&category=&q=&sort=recent|alpha|active`
+
+→ `200 { decks: [ { id, topic, sessionId, sessionTitle, category, cardCount, knownCount, reviewCount, createdAt, lastReviewedAt } ] }`
+`category` filters via the parent session (decks under Unsorted have `category: null`). Unsorted decks are excluded from `category` filters unless `sessionId=unsorted` is used.
+
+### `GET /api/decks/:deckId`
+
+→ `200 { deck: { …as above + sourceIds }, cards: [ { idx, front, back, citations, status: "new"|"known"|"review", reviewedAt } ] }`
+`404 DECK_NOT_FOUND`
+
+### `POST /api/flashcards/generate`
+
+As before, plus: optional `sessionId`; response gains `deckId`, `sessionId`. The deck is **saved** (cards + citations + generation scope `sourceIds` stored). Unsorted when no session given.
+
+### `PATCH /api/decks/:deckId/cards/:idx`
+
+`{ status: "new"|"known"|"review" }` → `200 { deckId, idx, status, lastReviewedAt }` (deck-level `lastReviewedAt` stamped). `404 DECK_NOT_FOUND` / `400 VALIDATION_ERROR`.
+
+### `DELETE /api/decks/:deckId`
+
+`204`. Deleting a deck removes only derived content — sources and study sessions are untouched; the frontend must double-confirm.

@@ -5,6 +5,7 @@ import { retrieve, toCitation } from './retrieval.js';
 import { parseJsonLoose } from './quizService.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
+import { newId, nowIso } from '../store/sqlite.js';
 
 const MAX_ATTEMPTS = 2;
 
@@ -22,7 +23,7 @@ export function normalizeCard(raw, hits) {
   return { front, back, citations };
 }
 
-export async function generateFlashcards({ topic, count = 8, sourceIds = [] }, { ai, vector } = {}) {
+export async function generateFlashcards({ topic, count = 8, sourceIds = [], sessionId = null }, { ai, vector, db } = {}) {
   const chat = ai?.chatCompletion ?? chatCompletion;
   const hits = await retrieve(topic, { sourceIds, k: 8, ai, vector });
 
@@ -59,9 +60,20 @@ export async function generateFlashcards({ topic, count = 8, sourceIds = [] }, {
       'The model could not produce valid flashcards from this material. Try another topic or add more material.');
   }
 
-  return {
+  const result = {
     topic,
     model: config.nimAssessModel,
     cards: cards.map((card, i) => ({ id: `card_${i + 1}`, ...card })),
   };
+
+  // Persisted: flashcards become browseable study resources, not one-shot responses.
+  let deckId = null;
+  if (db) {
+    deckId = newId('deck');
+    db.prepare('INSERT INTO decks (id, session_id, topic, source_ids_json, card_count, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(deckId, sessionId, topic, JSON.stringify(sourceIds), cards.length, nowIso());
+    const insertCard = db.prepare('INSERT INTO deck_cards (deck_id, idx, front, back, citations_json) VALUES (?, ?, ?, ?, ?)');
+    result.cards.forEach((card, idx) => insertCard.run(deckId, idx, card.front, card.back, JSON.stringify(card.citations)));
+  }
+  return { ...result, deckId, sessionId };
 }

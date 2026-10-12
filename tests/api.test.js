@@ -12,53 +12,7 @@ import path from 'node:path';
 import AdmZip from 'adm-zip';
 import { openDb } from '../server/store/sqlite.js';
 import { createApp } from '../server/app.js';
-
-const EMBEDDING = Array(2048).fill(0.5);
-
-// In-memory stand-in for ChromaDB with the same interface we use.
-function fakeVector() {
-  const store = [];
-  return {
-    store,
-    addChunks: async ({ ids, embeddings, documents, metadatas }) => {
-      ids.forEach((id, i) => store.push({ id, embedding: embeddings[i], text: documents[i], metadata: metadatas[i] }));
-    },
-    queryChunks: async ({ nResults = 6, sourceIds = [] }) => {
-      const pool = sourceIds.length ? store.filter((s) => sourceIds.includes(s.metadata.sourceId)) : store;
-      return pool.slice(0, nResults).map((s) => ({ ...s, distance: 0.2 }));
-    },
-    pingChroma: async () => true,
-    resetCollection: async () => { store.length = 0; },
-  };
-}
-
-const TUTOR_ANSWER = 'Mitosis produces two identical daughter cells [1].';
-const QUIZ_JSON = JSON.stringify({
-  questions: [
-    { question: 'Which process produces two identical cells?', choices: ['Mitosis', 'Meiosis', 'Fusion', 'Diffusion'], answer: 'Mitosis', explanation: 'Mitosis copies the nucleus once.', cite: [1, 2] },
-    { question: 'How many divisions does meiosis involve?', choices: ['One', 'Two', 'Three', 'None'], answer: 'Two', explanation: 'Meiosis divides twice.', cite: [2] },
-    { question: 'Where does mitosis occur in the cell?', choices: ['Nucleus', 'Ribosome', 'Membrane', 'Vacuole'], answer: 'Nucleus', explanation: 'The nucleus divides.', cite: [1] },
-  ],
-});
-const FLASHCARD_JSON = JSON.stringify({
-  cards: [{ front: 'What does mitosis produce?', back: 'Two genetically identical daughter cells.', cite: [1] }],
-});
-
-function makeAi() {
-  const calls = [];
-  return {
-    calls,
-    embedTexts: async (texts) => texts.map(() => EMBEDDING),
-    embedQuery: async () => EMBEDDING,
-    chatCompletion: async (messages) => {
-      calls.push(messages);
-      const system = messages[0].content;
-      if (system.includes('flashcards')) return FLASHCARD_JSON;
-      if (system.includes('multiple-choice')) return QUIZ_JSON;
-      return TUTOR_ANSWER;
-    },
-  };
-}
+import { fakeVector, makeAi, TUTOR_ANSWER } from './helpers.js';
 
 function buildPptxBuffer() {
   const zip = new AdmZip();
@@ -195,7 +149,7 @@ test('full learning loop over the HTTP API (stubbed AI + vector store)', async (
     });
     assert.equal(res.status, 201);
     const body = await res.json();
-    assert.equal(body.cards.length, 1);
+    assert.equal(body.cards.length, 3); // stub fixture returns a three-card pile
     assert.ok(body.cards[0].front.length > 0);
     assert.equal(body.cards[0].citations[0].sourceId, sourceId);
   });

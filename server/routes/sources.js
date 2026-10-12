@@ -12,6 +12,8 @@ import { extractPptx } from '../services/extract/pptx.js';
 import { extractWebpage } from '../services/extract/webpage.js';
 import { addChunks } from '../store/vectorStore.js';
 import { embedTexts } from '../services/embeddings.js';
+import { retrieve, toCitation, assertSourcesExist } from '../services/retrieval.js';
+import { suggestOrganization, acceptOrganization } from '../services/organizer.js';
 import { logActivity, newId, nowIso } from '../store/sqlite.js';
 
 const ALLOWED_EXTENSIONS = new Set(['.pdf', '.pptx']);
@@ -34,11 +36,19 @@ function sizeLabelFor(type, pageCount, slideCount) {
   return `${slideCount} slides`;
 }
 
-function sourceRowToApi(row) {
+function parseSourceTags(value) {
+  try { return JSON.parse(value) || []; } catch { return []; }
+}
+
+export function sourceRowToApi(row) {
   return {
     id: row.id,
     type: row.type,
     title: row.title,
+    url: row.url ?? null,
+    sessionId: row.session_id ?? null,
+    tags: parseSourceTags(row.tags_json),
+    orgSource: row.org_source ?? 'manual',
     pageCount: row.page_count,
     slideCount: row.slide_count,
     chunkCount: row.chunk_count,
@@ -118,9 +128,83 @@ export function sourcesRouter({ db, ai, vector }) {
     res.status(201).json({ source: { ...source, url } });
   });
 
+  router.post('/:id/suggest-organization', async (req, res) => {
+    const { description } = req.body ?? {};
+    if (description !== undefined && (typeof description !== 'string' || description.length > 500)) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Description must be at most 500 characters.');
+    }
+    const result = await suggestOrganization(db, { sourceId: req.params.id, description }, { chat: ai?.chatCompletion, });
+    res.json(result); // 502 NIM_ERROR on model failure — the source simply stays Unsorted
+  });
+
+  router.post('/:id/accept-suggestion', (req, res) => {
+    const { source, session } = acceptOrganization(db, { sourceId: req.params.id });
+    logActivity(db, 'organize', null, `${source.title} → ${session?.title ?? 'Unsorted'}`, session?.id ?? null);
+    res.json({ source: sourceRowToApi(source), session: session ? { id: session.id, title: session.title, category: session.category } : null });
+  });
+
   router.get('/', (req, res) => {
-    const rows = db.prepare('SELECT * FROM sources ORDER BY created_at DESC').all();
-    res.json({ sources: rows.map(sourceRowToApi) });
+    const { sessionId } = req.query;
+    const filters = [];
+    const params = [];
+    if (sessionId === 'unsorted') {
+      filters.push('session_id IS NULL');
+    } else if (typeof sessionId === 'string' && sessionId !== '') {
+      filters.push('session_id = ?');
+      params.push(sessionId);
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const rows = db.prepare(`SELECT * FROM sources ${where} ORDER BY created_at DESC`).all(...params);
+    const unsortedSourceCount = db.prepare('SELECT COUNT(*) AS n FROM sources WHERE session_id IS NULL').get().n;
+    res.json({ sources: rows.map(sourceRowToApi), unsortedSourceCount });
+  });
+
+  router.patch('/:id', (req, res) => {
+    const row = db.prepare('SELECT * FROM sources WHERE id = ?').get(req.params.id);
+    if (!row) throw new ApiError(404, 'SOURCE_NOT_FOUND', `Source "${req.params.id}" does not exist.`);
+
+    const { sessionId, title, tags } = req.body ?? {};
+    const updates = [];
+    const params = [];
+
+    if (sessionId !== undefined) {
+      if (sessionId !== null) {
+        const session = db.prepare('SELECT * FROM study_sessions WHERE id = ?').get(sessionId);
+        if (!session) throw new ApiError(404, 'SESSION_NOT_FOUND', `Session "${sessionId}" does not exist.`);
+      }
+      updates.push('session_id = ?');
+      params.push(sessionId); // null = back to Unsorted
+      const destination = sessionId === null ? 'Unsorted' : db.prepare('SELECT title FROM study_sessions WHERE id = ?').get(sessionId)?.title ?? sessionId;
+      logActivity(db, 'organize', null, `${row.title} → moved to ${destination}`, sessionId);
+    }
+    if (title !== undefined) {
+      if (typeof title !== 'string' || title.trim().length < 1 || title.trim().length > 160) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Title must be 1–160 characters.');
+      }
+      updates.push('title = ?');
+      params.push(title.trim());
+    }
+    if (tags !== undefined) {
+      if (!Array.isArray(tags) || tags.length > 8) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Tags must be an array (at most 8).');
+      }
+      const clean = tags.map((tag) => String(tag).trim()).filter(Boolean);
+      if (clean.some((tag) => tag.length > 24)) throw new ApiError(400, 'VALIDATION_ERROR', 'Each tag must be 1–24 characters.');
+      updates.push('tags_json = ?');
+      params.push(JSON.stringify(clean));
+    }
+
+    if (updates.length === 0) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Provide sessionId, title, or tags to update.');
+    }
+
+    // Manual choices are sticky: the organiser never replaces them automatically.
+    updates.push('manual_override = 1');
+    updates.push('org_source = ?');
+    params.push('manual');
+
+    db.prepare(`UPDATE sources SET ${updates.join(', ')} WHERE id = ?`).run(...params, row.id);
+    res.json({ source: sourceRowToApi(db.prepare('SELECT * FROM sources WHERE id = ?').get(row.id)) });
   });
 
   return router;
