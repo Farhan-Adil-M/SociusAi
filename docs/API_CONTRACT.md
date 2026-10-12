@@ -1,0 +1,353 @@
+# Socius AI — API Contract (v1)
+
+Shared specification between backend (`server/`, owned by OpenCode) and frontend (`frontend/`, owned by Freebuff).
+**This file is owned by the backend agent.** Propose changes in chat before editing; both sides must follow it.
+
+Base URL: same origin — Express serves the API under `/api` and the static frontend at `/`.
+All request and response bodies are JSON (`Content-Type: application/json`) except file upload.
+
+---
+
+## Conventions
+
+**Success:** the endpoint's JSON object directly, with the documented status code.
+
+**Error envelope** (every non-2xx response):
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "Question must be between 3 and 300 characters." } }
+```
+
+Stable error codes:
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | Missing/invalid input (details in `message`) |
+| `INVALID_URL` | 400 | Webpage URL is not a valid http(s) URL |
+| `UNSUPPORTED_FILE` | 400 | Upload is not a supported .pdf or .pptx |
+| `EMPTY_CONTENT` | 400 | No readable text extracted (e.g. scanned PDF) |
+| `FILE_TOO_LARGE` | 413 | Upload exceeds `MAX_UPLOAD_MB` |
+| `SOURCE_NOT_FOUND` | 404 | Referenced source ID does not exist |
+| `QUIZ_NOT_FOUND` | 404 | Quiz ID does not exist |
+| `QUIZ_ALREADY_ANSWERED` | 409 | Attempt already recorded; response body includes stored `result` |
+| `QUIZ_CONTENT_INVALID` | 422 | Model could not produce valid questions after bounded retries |
+| `NIM_ERROR` | 502 | AI provider failed or returned unusable output |
+| `NIM_TIMEOUT` | 504 | AI provider did not respond in time |
+| `CHROMA_UNAVAILABLE` | 503 | Vector store unreachable |
+| `INTERNAL` | 500 | Unexpected server error |
+
+**IDs:** readable strings, `src_…`, `quiz_…`, `card_…` (server-generated).
+
+**Citation schema** — used by tutor answers, quiz questions, and flashcards. Built **only** from retrieved ChromaDB metadata; the language model never supplies filenames, pages, or slide numbers.
+
+```json
+{
+  "sourceId": "src_a1b2c3",
+  "type": "pdf",
+  "title": "chapter3.pdf",
+  "url": null,
+  "location": { "page": 12 },
+  "excerpt": "…the exact retrieved chunk text (≤300 chars)…",
+  "score": 0.81
+}
+```
+
+- `type`: `"pdf" | "pptx" | "webpage"`
+- `title`: filename for uploads; webpage title (or hostname) for webpages
+- `url`: set for webpages, `null` otherwise
+- `location`: `{ "page": n }` for PDF, `{ "slide": n }` for PPTX, `{ "paragraph": n }` for webpages, or `null` if unknown
+- `score`: Chroma similarity (0–1, higher = closer); optional, may be omitted
+
+Frontend rendering guidance: show `title` + `location` as the citation chip; expose `excerpt` and `url` on expand/click.
+
+---
+
+## Endpoints
+
+### GET /api/health
+
+Liveness + dependency status. The frontend calls this once on load to decide what to enable.
+
+**Response 200** (always 200 if the server is running — degraded dependencies are reported inside):
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "sqlite": { "ok": true },
+    "chroma": { "ok": true, "message": "" },
+    "nim": { "ok": true, "chatModel": "nvidia/nemotron-3.5-lightning-30b-a3b", "embeddingModel": "nvidia/nemotron-3-embed-1b", "message": "" }
+  }
+}
+```
+
+`status` is `"ok"` when every check is ok, else `"degraded"`. NIM check results are cached ~60 s. Secrets are never included.
+
+---
+
+### POST /api/sources/upload
+
+Ingest a PDF or PowerPoint file: extract text with page/slide locations → chunk → embed → store in ChromaDB → register the source. All-or-nothing: if embedding fails, nothing is saved.
+
+**Request:** `multipart/form-data`, one file field `file`. Allowed: `.pdf`, `.pptx`. Max size `MAX_UPLOAD_MB` (default 25 MB).
+
+**Response 201:**
+
+```json
+{
+  "source": {
+    "id": "src_a1b2c3",
+    "type": "pdf",
+    "title": "chapter3.pdf",
+    "pageCount": 14,
+    "slideCount": null,
+    "chunkCount": 42,
+    "createdAt": "2026-10-12T17:00:00.000Z"
+  }
+}
+```
+
+**Errors:** 400 `VALIDATION_ERROR` (no file field), 400 `UNSUPPORTED_FILE`, 400 `EMPTY_CONTENT` (message explains: likely scanned/image-only), 413 `FILE_TOO_LARGE`, 502 `NIM_ERROR` (embedding call failed), 503 `CHROMA_UNAVAILABLE`.
+
+---
+
+### POST /api/sources/webpage
+
+Ingest pasted webpage text with its URL.
+
+**Request:**
+
+```json
+{ "url": "https://example.org/lesson1", "title": "Lesson 1: Cells", "text": "The student pastes the page text here… (min 50 chars)" }
+```
+
+`title` optional (defaults to URL hostname). `text` required, 50–200 000 chars.
+
+**Response 201:** same `source` shape as upload, `"type": "webpage"`, `pageCount`/`slideCount` null.
+
+**Errors:** 400 `INVALID_URL`, 400 `VALIDATION_ERROR` (text too short/long), 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`.
+
+---
+
+### GET /api/sources
+
+List ingested sources, newest first. Metadata only — never passages.
+
+**Response 200:**
+
+```json
+{
+  "sources": [
+    { "id": "src_a1b2c3", "type": "pdf", "title": "chapter3.pdf", "sizeLabel": "14 pages", "chunkCount": 42, "createdAt": "2026-10-12T17:00:00.000Z" }
+  ]
+}
+```
+
+`sizeLabel` is pre-formatted: `"14 pages"`, `"8 slides"`, or `"webpage"`.
+
+---
+
+### POST /api/tutor/ask
+
+Source-grounded question answering.
+
+**Request:**
+
+```json
+{ "question": "What is the difference between mitosis and meiosis?", "sourceIds": ["src_a1b2c3"] }
+```
+
+`question`: 3–300 chars. `sourceIds` optional filter (all sources if omitted).
+
+**Response 200:**
+
+```json
+{
+  "answer": "Mitosis produces two identical cells…",
+  "citations": [ { "sourceId": "src_a1b2c3", "type": "pdf", "title": "chapter3.pdf", "url": null, "location": { "page": 12 }, "excerpt": "…", "score": 0.81 } ],
+  "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "needsContent": false
+}
+```
+
+- Citations come from retrieval (max 6, deduplicated by chunk).
+- If retrieved passages are insufficient, the tutor abstains:
+  `200` with `"answer": "I couldn't find enough in your study materials to answer that. Try adding material on this topic, or ask about a topic covered in your sources.", "citations": [], "needsContent": true`.
+- Conversation history is not required for v1; each question is answered independently.
+
+**Errors:** 400 `VALIDATION_ERROR`, 404 `SOURCE_NOT_FOUND`, 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`, 504 `NIM_TIMEOUT`.
+
+---
+
+### POST /api/flashcards/generate
+
+Generate flashcards (front/back + topic + citations) from retrieved passages for a topic.
+
+**Request:**
+
+```json
+{ "topic": "Photosynthesis", "count": 8, "sourceIds": ["src_a1b2c3"] }
+```
+
+`count`: 3–12, default 8. `sourceIds` optional.
+
+**Response 201:**
+
+```json
+{
+  "topic": "Photosynthesis",
+  "cards": [
+    { "id": "card_1", "front": "What role does chlorophyll play in photosynthesis?", "back": "Chlorophyll absorbs light energy…", "citations": [ /* Citation schema */ ] }
+  ],
+  "model": "nvidia/nemotron-3-super-120b-a12b"
+}
+```
+
+Cards are validated server-side (front/back non-empty, within length bounds); invalid cards are discarded. Card study results are not persisted in v1 (see roadmap note in README).
+
+**Errors:** 400 `VALIDATION_ERROR`, 404 `SOURCE_NOT_FOUND`, 422 `QUIZ_CONTENT_INVALID`, 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`, 504 `NIM_TIMEOUT`.
+
+---
+
+### POST /api/quiz/generate
+
+Generate a source-grounded multiple-choice quiz. **The answer key never leaves the backend in this response.**
+
+**Request:**
+
+```json
+{ "topic": "Photosynthesis", "questionCount": 5, "difficulty": "medium", "sourceIds": ["src_a1b2c3"] }
+```
+
+- `topic`: required, 2–80 chars.
+- `questionCount`: 3–10, default 5.
+- `difficulty`: optional `"easy" | "medium" | "hard"`; **if omitted, the learner model chooses** (see `GET /api/learner/progress`).
+- `sourceIds` optional filter.
+
+**Response 201:**
+
+```json
+{
+  "quiz": {
+    "id": "quiz_x9y8z7",
+    "topic": "Photosynthesis",
+    "difficulty": "medium",
+    "questions": [
+      {
+        "index": 0,
+        "text": "Which pigment absorbs light energy for photosynthesis?",
+        "choices": [ { "id": "a", "text": "Chlorophyll" }, { "id": "b", "text": "Starch" }, { "id": "c", "text": "Oxygen" }, { "id": "d", "text": "Carbon dioxide" } ],
+        "citations": [ /* Citation schema */ ]
+      }
+    ]
+  }
+}
+```
+
+`choices` is always 4 items with ids `a`–`d`. There is **no** `correctChoiceId` or `explanation` field in this payload — by contract and by server-side filtering. The key is stored in SQLite, keyed by `(quizId, index)`.
+
+**Errors:** 400 `VALIDATION_ERROR`, 404 `SOURCE_NOT_FOUND`, 422 `QUIZ_CONTENT_INVALID`, 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`, 504 `NIM_TIMEOUT`.
+
+---
+
+### POST /api/quiz/:quizId/answer
+
+Submit the full attempt. Deterministic grading (string comparison against the stored key — no AI involved). Reveals the key, updates the learner model once.
+
+**Request:**
+
+```json
+{ "answers": [ { "index": 0, "choiceId": "b" }, { "index": 1, "choiceId": null } ] }
+```
+
+- One entry per question, `index` 0-based, `choiceId` one of `"a".."d"` or `null` (unanswered → incorrect).
+- Out-of-range or duplicate indices → 400.
+
+**Response 200:**
+
+```json
+{
+  "result": {
+    "score": { "correct": 3, "total": 5, "percent": 60 },
+    "questions": [
+      { "index": 0, "yourChoiceId": "b", "correctChoiceId": "c", "correct": false, "explanation": "Chlorophyll absorbs light energy…", "citations": [ /* Citation schema */ ] }
+    ],
+    "masteryUpdate": { "topic": "Photosynthesis", "before": 0.5, "after": 0.6, "delta": 0.1 },
+    "recommendedDifficulty": "medium"
+  }
+}
+```
+
+**Idempotency:** a second submission to the same quiz returns **409** `QUIZ_ALREADY_ANSWERED` with the stored result under `"result"` — display it, do not resubmit.
+
+**Errors:** 400 `VALIDATION_ERROR`, 404 `QUIZ_NOT_FOUND`, 409 `QUIZ_ALREADY_ANSWERED`, 500 `INTERNAL`.
+
+---
+
+### GET /api/learner/progress
+
+Read-only rollup from SQLite. No AI or vector calls.
+
+**Response 200:**
+
+```json
+{
+  "topics": [
+    { "topic": "Photosynthesis", "masteryPercent": 60, "difficulty": "medium", "correct": 3, "total": 5, "needsRevision": false, "lastPracticedAt": "2026-10-12T17:30:00.000Z" }
+  ],
+  "overall": { "quizzesTaken": 2, "questionsAnswered": 10, "accuracyPercent": 70 },
+  "suggestedNext": { "topic": "Recursion", "difficulty": "easy" },
+  "recentActivity": [
+    { "type": "quiz", "topic": "Photosynthesis", "detail": "4/5 correct", "at": "2026-10-12T17:30:00.000Z" },
+    { "type": "upload", "topic": null, "detail": "chapter3.pdf (14 pages)", "at": "2026-10-12T17:00:00.000Z" },
+    { "type": "question", "topic": null, "detail": "Asked about mitosis", "at": "2026-10-12T17:10:00.000Z" }
+  ]
+}
+```
+
+- `masteryPercent`: 0–100 (see learner rules below).
+- `needsRevision`: `total >= 3 AND mastery < 0.6`.
+- `difficulty`: the difficulty that `POST /api/quiz/generate` will use when `difficulty` is omitted for this topic.
+- `suggestedNext`: worst-mastery topic that needs revision, else least-recently practiced; `null` if no topic yet.
+- `recentActivity`: newest first, max 10. Empty account: all empty arrays / zeros / `null` — the frontend shows its empty state.
+
+**Errors:** 500 `INTERNAL`.
+
+---
+
+## Learner model (deterministic, server-side)
+
+Per topic (topic = trimmed key from the quiz request):
+
+- `mastery = correct / total` across all graded attempts.
+- Next difficulty: `mastery < 0.5 → "easy"`, `0.5–0.79 → "medium"`, `≥ 0.8 → "hard"`.
+- `needsRevision = total >= 3 AND mastery < 0.6`.
+
+Pure functions in `server/services/learner.js`, covered by unit tests. Persisted in SQLite; survives restart.
+
+---
+
+## Mock mode (frontend-only)
+
+`frontend/js/api.js` is the only file that talks to the backend. With `?mock=1` (or `localStorage.socius_mock === '1'`) it serves fixtures from `frontend/js/mocks/` matching **this** contract exactly — including error payloads. Mocks must be labeled as demo data in the UI (e.g. a small "Demo data" badge), never presented as real AI output. Real mode (default once the backend runs) calls the same functions against `/api/...`.
+
+---
+
+## Verified AI configuration (as of 2026-10-12, account-scoped)
+
+| Role | Model | Evidence |
+|---|---|---|
+| Embeddings (documents **and** queries) | `nvidia/nemotron-3-embed-1b` (2048 dims) | live `/v1/embeddings` call OK |
+| Tutoring (fast generation) | `nvidia/nemotron-3.5-lightning-30b-a3b` | live `/v1/chat/completions` OK |
+| Assessment + flashcards (stronger generation) | `nvidia/nemotron-3-super-120b-a12b` | live `/v1/chat/completions` OK |
+
+Reserve (verified working): `z-ai/glm-5.3-flash`, `z-ai/glm-5.3`, `openai/gpt-oss-20b`.
+Catalog visibility ≠ account access: many listed models returned HTTP 404 for this account. Model IDs live in `.env` (`NIM_EMBED_MODEL`, `NIM_CHAT_MODEL`, `NIM_ASSESS_MODEL`) — swap without code changes.
+
+**Rebuilding the vector index** (required if the embedding model ever changes): stop the server, delete the Chroma collection and the chunks table, then run `npm run reindex` — it re-embeds from the extracted text already stored in SQLite (no re-uploading). Stored vectors embedding model is recorded; startup refuses a mismatched model.
+
+---
+
+## Non-goals for v1 (explicit)
+
+Real authentication (login page is a labeled visual prototype), multi-user profiles, browser-extension capture, lecture-video processing, OCR for scanned PDFs, spaced-repetition scheduling for flashcards, cloud deployment.

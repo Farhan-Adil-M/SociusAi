@@ -1,0 +1,21 @@
+{
+  "name": "socius-ai",
+  "version": "0.1.0",
+  "description": "Socius AI — AI study companion: grounded tutoring, quizzes, and adaptive learning.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node --env-file=.env server/index.js",
+    "dev": "node --watch --env-file=.env server/index.js",
+    "test": "node --test tests/",
+    "reindex": "node --env-file=.env scripts/reindex.js"
+  },
+  "dependencies": {
+    "adm-zip": "0.6.1",
+    "chromadb": "3.5.0",
+    "express": "5.3.0",
+    "multer": "2.4.0",
+    "pdf-parse": "2.4.5"
+  }
+}
