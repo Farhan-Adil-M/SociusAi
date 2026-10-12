@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flashcards — Socius AI</title>
+  <meta name="description" content="Generate a flashcard deck from your material and work through it.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/flashcards.css">
+</head>
+<body class="shell">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar" data-shell="header"></header>
+
+  <main id="main" class="shell-main">
+    <div class="page-head">
+      <p class="page-eyebrow">Flashcards</p>
+      <h1 class="page-title">Flashcards</h1>
+      <p class="page-sub">Generate a deck from your material, reveal each answer, and mark what you know. Decks are kept for this session only.</p>
+    </div>
+
+    <div data-health class="stack stack-3"></div>
+
+    <!-- Session stage (card, progress, controls) -->
+    <section data-stage>
+      <div class="panel">
+        <div class="panel-body">
+          <div class="state">
+            <span class="state-icon" data-stage-icon></span>
+            <span class="state-title">No deck yet</span>
+            <p class="state-text">Enter a topic below and Socius AI writes question-and-answer cards from your own material.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <p class="sr-only" aria-live="polite" data-live></p>
+
+    <!-- Deck generator -->
+    <section class="fc-setup" aria-labelledby="setup-title">
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title" id="setup-title">New deck</h2>
+          <span class="row-meta" data-scope-note></span>
+        </div>
+        <form class="panel-body fc-form" data-generate-form novalidate>
+          <div class="field fc-field-topic">
+            <label class="field-label" for="fc-topic">Topic</label>
+            <input class="input" id="fc-topic" type="text" placeholder="e.g. Photosynthesis"
+                   maxlength="80" aria-describedby="fc-topic-error" required>
+            <p class="field-error" id="fc-topic-error" role="alert" hidden></p>
+          </div>
+
+          <div class="field fc-field-small">
+            <label class="field-label" for="fc-count">Cards</label>
+            <select class="select" id="fc-count">
+              <option value="5">5 cards</option>
+              <option value="8" selected>8 cards</option>
+              <option value="10">10 cards</option>
+              <option value="12">12 cards</option>
+            </select>
+          </div>
+
+          <div class="field fc-field-small">
+            <label class="field-label" for="fc-scope">Search in</label>
+            <select class="select" id="fc-scope" data-scope>
+              <option value="">All material</option>
+            </select>
+          </div>
+
+          <button class="btn btn-primary btn-lg fc-generate" type="submit" data-generate>
+            Generate deck
+          </button>
+        </form>
+        <div data-setup-status></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell-footer" data-shell="footer"></footer>
+  <script type="module" src="js/pages/flashcards.js"></script>
+</body>
+</html>

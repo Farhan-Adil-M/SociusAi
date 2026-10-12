@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Socius AI — study with your own materials</title>
+  <meta name="description" content="Upload your lecture PDFs, slides and notes. Socius AI answers from those files with page-level citations, then builds quizzes and flashcards that adapt to how you do.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/landing.css">
+</head>
+<body class="landing">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="px-nav">
+    <div class="px-nav-inner">
+      <a class="px-brand" href="index.html">
+        <span class="px-brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" fill="none">
+            <rect x="1" y="3" width="6" height="10" fill="#0E1024"/>
+            <rect x="9" y="3" width="6" height="10" fill="#0E1024"/>
+            <rect x="7" y="3" width="2" height="10" fill="#0E1024"/>
+            <rect x="2" y="4" width="4" height="8" fill="#FFFFFF"/>
+            <rect x="10" y="4" width="4" height="8" fill="#FFFFFF"/>
+            <rect x="3" y="4" width="1" height="5" fill="#FF3E9A"/>
+          </svg>
+        </span>
+        Socius&nbsp;AI
+      </a>
+      <nav class="px-nav-links" aria-label="Main">
+        <a href="#how">How it works</a>
+        <a href="#features">What you get</a>
+        <a href="#difficulty">Difficulty</a>
+      </nav>
+      <a class="px-btn px-btn-sm" href="login.html">Open the app</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="px-hero">
+      <div class="px-hero-inner">
+        <div class="px-hero-copy">
+          <h1 class="px-title">Your notes can<br>talk back.</h1>
+          <p class="px-lead">
+            Upload the lecture PDF, the slides, the page you actually have to study.
+            Socius AI answers from those files only, names the page it used, and then
+            quizzes you until the material sticks.
+          </p>
+          <div class="px-actions">
+            <a class="px-btn" href="login.html">Start studying</a>
+            <a class="px-btn px-btn-ghost" href="#how">See how it works</a>
+          </div>
+          <ul class="px-formats" aria-label="Supported material types">
+            <li>PDF</li>
+            <li>PPTX</li>
+            <li>Web pages</li>
+          </ul>
+        </div>
+
+        <!-- Pixel desktop window: a sample tutor answer with its citation -->
+        <figure class="px-window" data-window>
+          <div class="px-window-bar">
+            <span class="px-window-title">socius_tutor.exe</span>
+            <span class="px-window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+          <div class="px-window-body">
+            <p class="px-line px-line-you">
+              <span class="px-prompt" aria-hidden="true">&gt;</span>
+              <span data-type="question">Where do the light-dependent reactions take place?</span><span class="px-caret" data-caret hidden aria-hidden="true"></span>
+            </p>
+            <div class="px-line px-line-ai" data-answer>
+              <p>
+                In the thylakoid membrane. Chlorophyll absorbs light there and splits
+                water, which releases oxygen and charges the ATP and NADPH that the
+                Calvin cycle needs.
+              </p>
+            </div>
+            <ul class="px-cites" data-cites>
+              <li><span class="px-cite-file"></span>biology-photosynthesis.pdf · p.&nbsp;12</li>
+              <li><span class="px-cite-file"></span>lecture-04-cells.pptx · slide&nbsp;9</li>
+            </ul>
+          </div>
+          <figcaption class="px-window-status">
+            <span class="px-dot" aria-hidden="true"></span>
+            grounded in 3 sources · answer cites pages, not guesses
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="px-section" id="how">
+      <div class="px-section-inner">
+        <h2 class="px-h2">How it works</h2>
+        <ol class="px-steps">
+          <li class="px-step">
+            <span class="px-step-num" aria-hidden="true">1</span>
+            <h3>Add the material you have</h3>
+            <p>Drop in a PDF or PowerPoint, or paste a web page. Socius extracts the text, keeps its page and slide positions, and makes it searchable.</p>
+          </li>
+          <li class="px-step">
+            <span class="px-step-num" aria-hidden="true">2</span>
+            <h3>Ask, then check the answer</h3>
+            <p>Every answer shows the file, the page, and the exact passage it came from. Open the citation and read the source yourself.</p>
+          </li>
+          <li class="px-step">
+            <span class="px-step-num" aria-hidden="true">3</span>
+            <h3>Practise until it sticks</h3>
+            <p>Quizzes and flashcards are built from the same material. Your score decides what you see next — no guesswork, no magic.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="px-section px-section-alt" id="features">
+      <div class="px-section-inner">
+        <h2 class="px-h2">What you get</h2>
+        <div class="px-features">
+          <article class="px-feature">
+            <span class="px-feature-icon" data-sprite="doc" aria-hidden="true"></span>
+            <h3>Answers with receipts</h3>
+            <p>Retrieval finds the relevant passages first, so the answer is written from your material — and the citation tells you exactly where to look.</p>
+          </article>
+          <article class="px-feature">
+            <span class="px-feature-icon" data-sprite="quiz" aria-hidden="true"></span>
+            <h3>Quizzes you can't peek at</h3>
+            <p>Four-choice questions generated per topic. The answer key stays on the server until you submit, so nothing leaks before you commit.</p>
+          </article>
+          <article class="px-feature">
+            <span class="px-feature-icon" data-sprite="cards" aria-hidden="true"></span>
+            <h3>Flashcards in one click</h3>
+            <p>Turn a topic into a deck of question-and-answer cards, flip through them, and mark what you know so you can see what is left.</p>
+          </article>
+          <article class="px-feature">
+            <span class="px-feature-icon" data-sprite="chart" aria-hidden="true"></span>
+            <h3>Mastery you can measure</h3>
+            <p>Your progress is a plain ratio: correct answers over attempts. It survives restarts and never quietly rounds itself up.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Difficulty -->
+    <section class="px-section" id="difficulty">
+      <div class="px-section-inner px-split">
+        <div>
+          <h2 class="px-h2">The difficulty follows you</h2>
+          <p class="px-lead px-lead-narrow">
+            Miss too many questions and the next set eases off. Clear a topic and it
+            gets harder. The rule is written down, not learned behind closed doors.
+          </p>
+          <ul class="px-rules">
+            <li><span class="px-rule-key">under 50%</span> mastery → <strong>easy</strong> questions</li>
+            <li><span class="px-rule-key">50–79%</span> mastery → <strong>medium</strong> questions</li>
+            <li><span class="px-rule-key">80% and up</span> mastery → <strong>hard</strong> questions</li>
+          </ul>
+        </div>
+        <div class="px-meter" role="img" aria-label="Mastery meter at 60 percent, set to medium difficulty">
+          <div class="px-meter-head">
+            <span>Photosynthesis</span>
+            <span class="px-meter-value">60%</span>
+          </div>
+          <div class="px-meter-track" aria-hidden="true">
+            <i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i></i><i></i><i></i><i></i>
+          </div>
+          <div class="px-meter-labels" aria-hidden="true">
+            <span>easy</span><span>medium</span><span>hard</span>
+          </div>
+          <p class="px-meter-note">next quiz: <strong>medium</strong></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Call to action -->
+    <section class="px-cta">
+      <div class="px-cta-inner">
+        <h2 class="px-h2 px-h2-light">Open it and try a real question</h2>
+        <p>The study tools work straight away with the material already loaded. The sign-in page is a labelled prototype — there is no account system yet.</p>
+        <a class="px-btn px-btn-lg" href="login.html">Start studying</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="px-footer">
+    <div class="px-footer-inner">
+      <span>Socius AI</span>
+      <span class="px-footer-sep" aria-hidden="true"></span>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="study.html">Study</a>
+      <a href="quiz.html">Quiz</a>
+      <span class="px-footer-note">Frontend demo · answers are generated by an AI and can be wrong</span>
+    </div>
+  </footer>
+
+  <script type="module" src="js/pages/landing.js"></script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard — Socius AI</title>
+  <meta name="description" content="Your study workspace: mastery, topics to revise, materials and recent activity.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body class="shell">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar" data-shell="header"></header>
+
+  <main id="main" class="shell-main">
+    <div class="page-head">
+      <p class="page-eyebrow" data-today>Dashboard</p>
+      <h1 class="page-title" data-welcome>Welcome back</h1>
+      <p class="page-sub" data-summary>Loading your workspace…</p>
+    </div>
+
+    <div data-health class="stack stack-3"></div>
+
+    <!-- Continue studying -->
+    <section class="dash-continue" data-continue aria-labelledby="continue-title">
+      <div class="loading-row"><span class="spinner" aria-hidden="true"></span><span>Finding your next topic…</span></div>
+    </section>
+
+    <!-- Links to the three study tools -->
+    <nav class="dash-jump" aria-label="Study tools">
+      <a class="dash-jump-item" href="study.html">
+        <span class="dash-jump-icon" data-icon="book" aria-hidden="true"></span>
+        <span class="dash-jump-text">
+          <span class="dash-jump-title">Study</span>
+          <span class="dash-jump-desc">Read your material and ask the tutor</span>
+        </span>
+        <span class="dash-jump-arrow" data-icon="arrowRight" aria-hidden="true"></span>
+      </a>
+      <a class="dash-jump-item" href="flashcards.html">
+        <span class="dash-jump-icon" data-icon="layers" aria-hidden="true"></span>
+        <span class="dash-jump-text">
+          <span class="dash-jump-title">Flashcards</span>
+          <span class="dash-jump-desc">Flip through a deck you generate yourself</span>
+        </span>
+        <span class="dash-jump-arrow" data-icon="arrowRight" aria-hidden="true"></span>
+      </a>
+      <a class="dash-jump-item" href="quiz.html">
+        <span class="dash-jump-icon" data-icon="clipboard" aria-hidden="true"></span>
+        <span class="dash-jump-text">
+          <span class="dash-jump-title">Quiz</span>
+          <span class="dash-jump-desc">Test yourself; difficulty follows your score</span>
+        </span>
+        <span class="dash-jump-arrow" data-icon="arrowRight" aria-hidden="true"></span>
+      </a>
+    </nav>
+
+    <div class="dash-columns dash-columns--wide-left">
+      <!-- Learning progress and overall mastery -->
+      <section class="panel" aria-labelledby="mastery-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="mastery-title">Learning progress</h2>
+          <span class="row-meta" data-mastery-meta></span>
+        </div>
+        <div class="panel-body" data-mastery>
+          <div class="loading-row"><span class="spinner" aria-hidden="true"></span><span>Reading your progress…</span></div>
+        </div>
+      </section>
+
+      <!-- Topics that need revision -->
+      <section class="panel" aria-labelledby="revision-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="revision-title">Needs revision</h2>
+        </div>
+        <div data-revision>
+          <div class="loading-row"><span class="spinner" aria-hidden="true"></span><span>Checking topics…</span></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="dash-columns dash-columns--even">
+      <!-- Recently studied materials -->
+      <section class="panel" aria-labelledby="materials-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="materials-title">Recently studied material</h2>
+          <a class="section-link" href="study.html">Open study</a>
+        </div>
+        <div data-materials>
+          <div class="loading-row"><span class="spinner" aria-hidden="true"></span><span>Loading your material…</span></div>
+        </div>
+      </section>
+
+      <!-- Recent learning activity -->
+      <section class="panel" aria-labelledby="activity-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="activity-title">Recent activity</h2>
+        </div>
+        <div data-activity>
+          <div class="loading-row"><span class="spinner" aria-hidden="true"></span><span>Loading activity…</span></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="shell-footer" data-shell="footer"></footer>
+  <script type="module" src="js/pages/dashboard.js"></script>
+</body>
+</html>

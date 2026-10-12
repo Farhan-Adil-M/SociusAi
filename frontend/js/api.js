@@ -1,0 +1,134 @@
+// api.js — the ONLY file in the frontend allowed to call fetch().
+//
+// Every function here maps 1:1 to an endpoint in docs/API_CONTRACT.md and
+// returns the documented response object. Failures are thrown as ApiError with
+// the contract's stable `error.code`, so pages can react to codes instead of
+// parsing text.
+//
+// Mock mode: enabled by `?mock=1` in the URL or `localStorage.socius_mock = '1'`.
+// In mock mode nothing touches the network — responses come from
+// js/mocks/fixtures.js, and the UI shows a "Demo data" badge.
+
+const MOCK_KEY = 'socius_mock';
+
+/** True when the page is running on fixture data instead of the backend. */
+export function isMockMode() {
+  try {
+    const url = new URL(window.location.href);
+    const param = url.searchParams.get('mock');
+    if (param === '1') { localStorage.setItem(MOCK_KEY, '1'); return true; }
+    if (param === '0') { localStorage.removeItem(MOCK_KEY); return false; }
+    return localStorage.getItem(MOCK_KEY) === '1';
+  } catch {
+    return localStorage.getItem(MOCK_KEY) === '1';
+  }
+}
+
+export class ApiError extends Error {
+  constructor(code, message, status = 0, data = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+    this.data = data; // full response body, when there was one (e.g. QUIZ_ALREADY_ANSWERED)
+  }
+}
+
+const HTTP_FALLBACKS = {
+  400: 'The request was not valid.',
+  404: 'Not found.',
+  409: 'That was already submitted.',
+  413: 'That file is too large.',
+  422: 'The content could not be used.',
+  500: 'Something went wrong on the server.',
+  502: 'The AI service failed to respond.',
+  503: 'A service is temporarily unavailable.',
+  504: 'The AI service took too long to respond.',
+};
+
+async function request(path, { method = 'GET', body, formData, signal } = {}) {
+  if (isMockMode()) {
+    const { handleMock } = await import('./mocks/fixtures.js');
+    try {
+      return await handleMock(path, { method, body });
+    } catch (error) {
+      if (error && error.code) throw new ApiError(error.code, error.message, error.status || 400, error.data || null);
+      throw error;
+    }
+  }
+
+  const init = { method, headers: { Accept: 'application/json' }, credentials: 'same-origin', signal };
+  if (formData) {
+    // Browser sets the multipart boundary itself — never set Content-Type manually.
+    init.body = formData;
+  } else {
+    init.headers['Content-Type'] = 'application/json';
+    if (body !== undefined) init.body = JSON.stringify(body);
+  }
+
+  let response;
+  try {
+    response = await fetch(path, init);
+  } catch (error) {
+    if (error && error.name === 'AbortError') throw error;
+    throw new ApiError('NETWORK_ERROR', '', 0);
+  }
+
+  const text = await response.text().catch(() => '');
+  let data = null;
+  if (text) { try { data = JSON.parse(text); } catch { data = null; } }
+
+  if (!response.ok) {
+    const envelope = data && data.error ? data.error : {};
+    const message = envelope.message || HTTP_FALLBACKS[response.status] || 'Request failed.';
+    throw new ApiError(envelope.code || 'INTERNAL', message, response.status, data);
+  }
+  return data;
+}
+
+/** Only include sourceIds when the learner actually picked a filter. */
+function withSources(payload, sourceIds) {
+  if (Array.isArray(sourceIds) && sourceIds.length > 0) payload.sourceIds = sourceIds;
+  return payload;
+}
+
+export const api = {
+  // GET /api/health
+  getHealth: () => request('/api/health'),
+
+  // GET /api/sources
+  listSources: () => request('/api/sources'),
+
+  // POST /api/sources/upload (multipart, one field: file)
+  uploadSource: (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return request('/api/sources/upload', { method: 'POST', formData: form });
+  },
+
+  // POST /api/sources/webpage
+  addWebpage: ({ url, title, text }) =>
+    request('/api/sources/webpage', { method: 'POST', body: { url, ...(title ? { title } : {}), text } }),
+
+  // POST /api/tutor/ask
+  askTutor: ({ question, sourceIds }) =>
+    request('/api/tutor/ask', { method: 'POST', body: withSources({ question }, sourceIds) }),
+
+  // POST /api/flashcards/generate
+  generateFlashcards: ({ topic, count, sourceIds }) =>
+    request('/api/flashcards/generate', { method: 'POST', body: withSources({ topic, count }, sourceIds) }),
+
+  // POST /api/quiz/generate
+  generateQuiz: ({ topic, questionCount, difficulty, sourceIds }) => {
+    const payload = withSources({ topic, questionCount }, sourceIds);
+    if (difficulty) payload.difficulty = difficulty;
+    return request('/api/quiz/generate', { method: 'POST', body: payload });
+  },
+
+  // POST /api/quiz/:quizId/answer
+  answerQuiz: (quizId, answers) =>
+    request(`/api/quiz/${encodeURIComponent(quizId)}/answer`, { method: 'POST', body: { answers } }),
+
+  // GET /api/learner/progress
+  getProgress: () => request('/api/learner/progress'),
+};

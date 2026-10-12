@@ -1,0 +1,213 @@
+/* Study page — a materials rail on the left, a long-form reading column with
+   the tutor conversation on the right, and a composer pinned to the bottom.
+   Optimised for reading: generous measure, serif answer text, quiet chrome. */
+
+.study-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 292px) minmax(0, 1fr);
+  gap: var(--s5);
+  align-items: start;
+  margin-top: var(--s5);
+}
+
+/* --------------------------------------------------------------- sidebar */
+
+.study-side {
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--s4));
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  max-height: calc(100vh - var(--topbar-h) - var(--s7));
+  overflow-y: auto;
+}
+
+.study-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.study-sources { display: flex; flex-direction: column; }
+
+.src-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+.src-option:hover { background: var(--canvas); }
+.src-option input { margin-top: 3px; accent-color: var(--blue); flex: none; }
+.src-option input:disabled { cursor: default; }
+.src-option:has(input:checked) { background: var(--blue-soft); }
+.src-option:has(input:disabled) { cursor: default; }
+.src-option:has(input:disabled) .src-meta { color: var(--ink-3); }
+
+.src-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.src-title { font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.src-meta { font-size: var(--fs-xs); color: var(--ink-3); }
+.src-all { font-weight: 600; }
+
+/* Add-material panel */
+.study-add {
+  padding: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  background: var(--canvas);
+  border-top: 1px solid var(--line);
+}
+.study-add-block { display: flex; flex-direction: column; gap: var(--s2); }
+.study-add .field-hint { line-height: 1.4; }
+.study-add-status { font-size: var(--fs-xs); }
+
+/* ------------------------------------------------------------- workspace */
+
+.study-workspace {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h) - 168px);
+  min-height: 520px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.study-area {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding: clamp(20px, 3vw, 34px) clamp(18px, 4vw, 44px);
+}
+
+/* Empty conversation */
+.study-intro {
+  max-width: 62ch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  padding-top: clamp(12px, 4vh, 48px);
+}
+.study-intro h3 { font-family: var(--font-sans); font-size: var(--fs-lg); }
+.study-intro p { font-size: var(--fs-md); color: var(--ink-2); line-height: 1.6; }
+
+.study-suggest { display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
+.study-suggest button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+}
+.study-suggest button:hover { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-ink); }
+
+/* Exchanges */
+.exchange {
+  padding-bottom: var(--s5);
+  margin-bottom: var(--s5);
+  border-bottom: 1px solid var(--line);
+}
+.exchange:last-child { border-bottom: 0; margin-bottom: 0; }
+
+.exchange-who {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  margin-bottom: var(--s2);
+}
+.exchange-who::before {
+  content: "";
+  width: 8px; height: 8px;
+  background: var(--line-strong);
+}
+.exchange--answer .exchange-who::before { background: var(--blue); }
+
+.exchange-q p {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.exchange--answer { background: var(--canvas); border-radius: var(--r-lg); padding: var(--s4) clamp(16px, 2.5vw, 26px); }
+.exchange--answer .exchange-who::before { background: var(--blue); }
+
+.exchange-a-body {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.72;
+  color: var(--ink-2);
+  max-width: 66ch;
+}
+.exchange-a-body p + p { margin-top: var(--s3); }
+
+.exchange-citations { margin-top: var(--s4); }
+.exchange-citations-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  margin-bottom: var(--s2);
+}
+
+.exchange-pending {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s4);
+  background: var(--canvas);
+  border-radius: var(--r-lg);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+/* -------------------------------------------------------------- composer */
+
+.study-composer {
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+  padding: var(--s3) var(--s4) var(--s3);
+}
+.study-composer-row { display: flex; gap: var(--s3); align-items: flex-start; }
+.study-composer .textarea { min-height: 52px; resize: none; }
+.study-send { min-height: 52px; padding: 0 var(--s5); }
+
+.study-composer-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: var(--s2);
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 900px) {
+  .study-layout { grid-template-columns: minmax(0, 1fr); }
+  .study-side { position: static; max-height: none; }
+  .study-workspace { height: auto; min-height: 0; }
+  .study-area { max-height: 62vh; min-height: 320px; }
+}
+
+@media (max-width: 560px) {
+  .study-composer-row { flex-direction: column; }
+  .study-send { width: 100%; min-height: 44px; }
+  .study-composer-foot { flex-direction: column; gap: var(--s1); }
+}

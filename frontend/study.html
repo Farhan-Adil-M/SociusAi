@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Study — Socius AI</title>
+  <meta name="description" content="Read your material and ask the tutor questions that cite the exact page.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/study.css">
+</head>
+<body class="shell">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar" data-shell="header"></header>
+
+  <main id="main" class="shell-main">
+    <div class="page-head">
+      <p class="page-eyebrow">Study</p>
+      <h1 class="page-title">Ask your material</h1>
+      <p class="page-sub">Pick what the tutor may search, then ask. Every answer shows the file and page it came from, so you can check it yourself.</p>
+    </div>
+
+    <div data-health class="stack stack-3"></div>
+
+    <div class="study-layout">
+      <!-- Course-material selector -->
+      <aside class="study-side" aria-labelledby="materials-heading">
+        <div class="study-side-head">
+          <h2 class="panel-title" id="materials-heading">Course material</h2>
+          <button type="button" class="btn btn-secondary btn-sm" data-add-toggle aria-expanded="false" aria-controls="add-panel">
+            Add material
+          </button>
+        </div>
+
+        <div class="study-sources" data-sources>
+          <div class="loading-row"><span class="spinner" aria-hidden="true"></span><span>Loading material…</span></div>
+        </div>
+
+        <div class="study-add" id="add-panel" hidden>
+          <div class="study-add-block">
+            <label class="field-label" for="file-input">Upload a PDF or PowerPoint</label>
+            <input class="input" id="file-input" type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+            <p class="field-hint">Text-based files only, up to 25 MB.</p>
+          </div>
+          <hr class="hairline">
+          <form class="study-add-block stack stack-2" data-webpage-form novalidate>
+            <label class="field-label" for="webpage-url">Or paste a web page</label>
+            <input class="input" id="webpage-url" type="url" placeholder="https://example.org/lesson" required>
+            <textarea class="textarea" id="webpage-text" placeholder="Paste the page text here (at least 50 characters)" required></textarea>
+            <button class="btn btn-secondary btn-sm" type="submit">Add web page</button>
+          </form>
+          <div data-add-status aria-live="polite"></div>
+        </div>
+      </aside>
+
+      <!-- Reading area + tutor -->
+      <section class="study-workspace" aria-labelledby="tutor-heading">
+        <h2 class="sr-only" id="tutor-heading">Tutor conversation</h2>
+
+        <div class="study-area" data-transcript></div>
+        <p class="sr-only" aria-live="polite" data-live></p>
+
+        <form class="study-composer" data-composer novalidate>
+          <label class="sr-only" for="question">Ask a question about your material</label>
+          <div class="study-composer-row">
+            <textarea class="textarea" id="question" name="question" rows="2"
+                      placeholder="Ask a question about your material…"
+                      aria-describedby="question-hint" maxlength="300"></textarea>
+            <button class="btn btn-primary study-send" type="submit" data-send disabled>
+              <span data-send-label>Send</span>
+            </button>
+          </div>
+          <div class="study-composer-foot" id="question-hint">
+            <span class="field-hint">Enter sends · Shift + Enter adds a line. Questions must be 3–300 characters.</span>
+            <span class="field-hint" data-count>0 / 300</span>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <footer class="shell-footer" data-shell="footer"></footer>
+  <script type="module" src="js/pages/study.js"></script>
+</body>
+</html>

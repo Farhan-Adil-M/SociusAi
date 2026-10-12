@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — Socius AI</title>
+  <meta name="description" content="Prototype sign-in for Socius AI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body class="auth-page">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="auth-top">
+    <div class="auth-top-inner">
+      <a class="brand" href="index.html">
+        <span class="brand-mark" aria-hidden="true"><span>S</span></span>
+        Socius AI
+      </a>
+      <a class="auth-top-link" href="index.html">Back to home</a>
+    </div>
+  </header>
+
+  <main id="main" class="auth-main">
+    <section class="auth-card" aria-labelledby="signin-title">
+      <div class="auth-head">
+        <p class="page-eyebrow">Student access</p>
+        <h1 id="signin-title" class="auth-title">Sign in</h1>
+        <p class="auth-sub">Enter any email and password to open the study workspace in this browser.</p>
+      </div>
+
+      <div class="banner banner-warn" role="note">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5L2.5 20h19z"/><path d="M12 9.5V14"/><path d="M12 17.2h.01"/></svg>
+        <span><strong>Prototype sign-in.</strong> Socius AI has no authentication backend — nothing is verified, sent anywhere, or stored on a server. Your email is kept only in this browser so the dashboard can greet you.</span>
+      </div>
+
+      <form class="stack stack-4 auth-form" novalidate autocomplete="on">
+        <div class="field">
+          <label class="field-label" for="email">Email address</label>
+          <input class="input" id="email" name="email" type="email" inputmode="email"
+                 autocomplete="email" placeholder="you@university.edu"
+                 aria-describedby="email-error" required>
+          <p class="field-error" id="email-error" role="alert" hidden></p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="password">Password</label>
+          <div class="input-group">
+            <input class="input" id="password" name="password" type="password"
+                   autocomplete="current-password" placeholder="At least 6 characters"
+                   aria-describedby="password-error" required>
+            <button type="button" class="input-group-btn" data-toggle-password
+                    aria-label="Show password" aria-pressed="false"></button>
+          </div>
+          <p class="field-error" id="password-error" role="alert" hidden></p>
+        </div>
+
+        <button class="btn btn-primary btn-lg btn-block" type="submit" data-submit>
+          Sign in to the demo
+        </button>
+      </form>
+
+      <div class="auth-foot">
+        <p>Just looking around? <a href="dashboard.html">Open the dashboard directly</a>.</p>
+        <p class="muted">No account is created. <a href="index.html">Back to the home page</a>.</p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/pages/login.js"></script>
+</body>
+</html>
