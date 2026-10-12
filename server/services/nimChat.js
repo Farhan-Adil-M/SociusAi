@@ -30,7 +30,20 @@ export async function chatCompletion(messages, { model = config.nimChatModel, te
   }
 
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content;
+  let content = data.choices?.[0]?.message?.content;
+
+  // The reasoning-style models occasionally return empty content once in a
+  // while. Retry ONCE, then fail loudly — never invent an answer.
+  if (!content || content.trim() === '') {
+    const retry = await fetch(`${config.nimBaseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.nimApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
+      signal: AbortSignal.timeout(config.nimTimeoutMs),
+    }).catch(() => null);
+    content = retry?.ok ? (await retry.json())?.choices?.[0]?.message?.content : null;
+  }
+
   if (!content || content.trim() === '') {
     throw new ApiError(502, 'NIM_ERROR', 'The AI model returned an empty response. Try again.');
   }

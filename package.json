@@ -9,6 +9,7 @@
     "start": "node --env-file=.env server/index.js",
     "dev": "node --watch --env-file=.env server/index.js",
     "test": "node --test tests/",
+    "e2e": "node --env-file=.env scripts/e2e-smoke.mjs",
     "reindex": "node --env-file=.env scripts/reindex.js"
   },
   "dependencies": {
