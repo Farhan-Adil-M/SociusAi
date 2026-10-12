@@ -23,7 +23,8 @@ html { scroll-behavior: smooth; }
   color: var(--px-ink);
 }
 
-.landing h1, .landing h2, .landing h3 { letter-spacing: -0.02em; }
+.landing h1, .landing .px-h2 { letter-spacing: 0.05em; } /* Silkscreen is drawn for positive tracking */
+.landing h3 { letter-spacing: -0.01em; } /* step titles are Plex — negative tracking belongs here */
 .landing h3 { font-family: var(--font-sans); font-weight: 700; }
 
 .landing main section { scroll-margin-top: 76px; }

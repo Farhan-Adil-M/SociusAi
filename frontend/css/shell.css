@@ -140,10 +140,9 @@
 
 .page-head { margin-bottom: var(--s5); }
 .page-eyebrow {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-3);
   margin-bottom: var(--s2);
 }

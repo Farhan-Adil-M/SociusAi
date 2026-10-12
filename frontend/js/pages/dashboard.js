@@ -96,7 +96,7 @@ function renderContinue(progress) {
 
 /* ------------------------------------------------------------- mastery */
 
-function renderMastery(progress) {
+function renderMastery(progress, materialCount = 0) {
   const host = document.querySelector('[data-mastery]');
   const meta = document.querySelector('[data-mastery-meta]');
   const topics = progress?.topics || [];
@@ -116,10 +116,15 @@ function renderMastery(progress) {
   const average = Math.round(topics.reduce((sum, topic) => sum + topic.masteryPercent, 0) / topics.length);
   meta.textContent = `${topics.length} ${topics.length === 1 ? 'topic' : 'topics'} tracked`;
 
+  // With one topic "overall accuracy" and "average mastery" are the same number —
+  // show the material count instead of a duplicated stat.
+  const materialsTile = `<div class="stat"><span class="stat-value">${materialCount}</span><span class="stat-label">Materials ready</span></div>`;
+  const averageTile = `<div class="stat"><span class="stat-value">${average}%</span><span class="stat-label">Average mastery</span></div>`;
+
   const stats = `
     <div class="stat-grid">
       <div class="stat"><span class="stat-value">${overall.accuracyPercent}%</span><span class="stat-label">Overall accuracy</span></div>
-      <div class="stat"><span class="stat-value">${average}%</span><span class="stat-label">Average mastery</span></div>
+      ${topics.length > 1 ? averageTile : materialsTile}
       <div class="stat"><span class="stat-value">${overall.quizzesTaken}</span><span class="stat-label">Quizzes taken</span></div>
       <div class="stat"><span class="stat-value">${overall.questionsAnswered}</span><span class="stat-label">Questions answered</span></div>
     </div>`;
@@ -243,7 +248,7 @@ async function load() {
     const progress = progressResult.value;
     renderSummary(progress, sources);
     renderContinue(progress);
-    renderMastery(progress);
+    renderMastery(progress, sources.length);
     renderRevision(progress);
     renderActivity(progress);
     return;
