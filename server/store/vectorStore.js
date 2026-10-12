@@ -8,6 +8,17 @@ import { ApiError } from '../middleware/errors.js';
 
 let collectionPromise = null;
 
+// We ALWAYS send pre-computed vectors from NVIDIA NIM, so the collection never
+// needs Chroma's own embedding. The client still requires an embedding function
+// handle when opening a collection, so we hand it one that refuses to run —
+// catching accidental text-based calls instead of silently embedding wrongly.
+const explicitVectorsOnly = {
+  name: 'socius-explicit-vectors',
+  async generate() {
+    throw new Error('This client always sends explicit NVIDIA NIM embeddings — never text.');
+  },
+};
+
 function makeClient() {
   if (config.chromaApiKey) {
     return new CloudClient({
@@ -25,7 +36,10 @@ function makeClient() {
 
 export function getCollection() {
   if (!collectionPromise) {
-    collectionPromise = makeClient().getOrCreateCollection({ name: config.chromaCollection })
+    collectionPromise = makeClient().getOrCreateCollection({
+      name: config.chromaCollection,
+      embeddingFunction: explicitVectorsOnly,
+    })
       .catch((err) => {
         collectionPromise = null; // allow retry on next call
         throw err;
