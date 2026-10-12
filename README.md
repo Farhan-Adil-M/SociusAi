@@ -58,7 +58,8 @@ Open http://localhost:3000 — `GET /api/health` shows whether sqlite, Chroma, a
 ## Test
 
 ```bash
-npm test             # 48 tests: chunking, extraction, learner model, grading, full HTTP API loop (no network needed)
+npm test             # 58 tests: chunking, extraction, learner model, grading, sessions, decks, full HTTP API loop (no network needed)
+npm run e2e          # real-services smoke: upload → scoped tutor → quiz → grade → organised session → saved deck (needs server + Chroma running)
 ```
 
 Live end-to-end checks (need a running server + Chroma):
@@ -94,13 +95,16 @@ Expected: `embed dims: 2048` and one sentence back. Models in use: `nvidia/nemot
 ## Project layout
 
 ```
-docs/API_CONTRACT.md   shared API contract (source of truth for both agents)
+docs/API_CONTRACT.md   shared API contract (source of truth for both agents; v1.1 = sessions + decks)
 server/                backend — Express, modular services, SQLite, ChromaDB client
 frontend/              frontend — HTML/CSS/vanilla JS (owned by the frontend agent)
 scripts/reindex.js     vector index rebuild
+scripts/e2e-smoke.mjs  real-services loop smoke (npm run e2e)
 tests/                 node:test suite (runs offline)
 data/                  runtime data: SQLite file, local Chroma storage (git-ignored)
 ```
+
+v1.1 additions: persistent **study sessions** (organise sources; AI suggests placement; manual choices always win) and **saved flashcard decks** grouped by session with persisted review status. Session scope is enforced server-side for tutoring, quizzes, and deck generation — see the contract's v1.1 section.
 
 ## Known limitations (honest list)
 

@@ -81,4 +81,40 @@ const again = await post(`/api/quiz/${quizBody.quiz.id}/answer`, answers);
 if (again.status !== 409) fail(`resubmit returned ${again.status}, expected 409`);
 console.log('6) resubmit → 409 QUIZ_ALREADY_ANSWERED ✓');
 
+// 7) session-scoped organisation: create a session, move the PDF in, ask scoped
+const ses = await post('/api/sessions', { title: 'Smoke Biology', category: 'subject' });
+const sesBody = await ses.json();
+if (ses.status !== 201) fail(`session create: ${JSON.stringify(sesBody.error)}`);
+const sessionId = sesBody.session.id;
+const move = await fetch(`${BASE}/api/sources/${up.source.id}`, {
+  method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId }),
+});
+if (move.status !== 200) fail(`source move: ${JSON.stringify(await move.json())}`);
+const scopedAsk = await post('/api/tutor/ask', { question: 'Where do the light-dependent reactions take place?', sessionId });
+if (scopedAsk.status !== 200) fail(`scoped tutor: ${JSON.stringify(await scopedAsk.json())}`);
+const scopedBody = await scopedAsk.json();
+if (!scopedBody.citations.length) fail('scoped tutor returned no citations');
+if (scopedBody.citations.some((c) => c.sourceId !== up.source.id)) fail('scoped tutor used sources outside the session');
+console.log(`7) scoped tutor ✓ (citations only from ${up.source.id}, sessionId echoed: ${scopedBody.sessionId})`);
+
+// 8) a deck generated INSIDE the session is saved and counted
+const deckRes = await post('/api/flashcards/generate', { topic: 'Photosynthesis', count: 3, sessionId });
+if (deckRes.status !== 201) fail(`deck generate: ${JSON.stringify(await deckRes.json())}`);
+const deckBody = await deckRes.json();
+const library = await fetch(`${BASE}/api/decks?sessionId=${sessionId}`).then((r) => r.json());
+const saved = library.decks.find((d) => d.id === deckBody.deckId);
+if (!saved) fail('generated deck did not appear in the library');
+if (saved.cardCount !== deckBody.cards.length) fail('deck cardCount mismatch');
+await fetch(`${BASE}/api/decks/${saved.id}/cards/0`, {
+  method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'known' }),
+});
+const afterMark = await fetch(`${BASE}/api/decks/${saved.id}`).then((r) => r.json());
+if (afterMark.deck.knownCount !== 1) fail('card status did not persist');
+console.log(`8) deck saved in session ✓ (${saved.cardCount} cards, knownCount=1 after marking)`);
+
+// 9) sources list reflects session assignment
+const srcList = await fetch(`${BASE}/api/sources?sessionId=${sessionId}`).then((r) => r.json());
+if (!srcList.sources.some((s) => s.id === up.source.id)) fail('session source filter failed');
+console.log('9) session source filter ✓');
+
 console.log('\nSMOKE PASSED — full learning loop verified against real services.');
