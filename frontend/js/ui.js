@@ -157,10 +157,10 @@ export function showError(container, error, { title = 'That did not work', onRet
 
 /* -------------------------------------------------------------- citations */
 
-function citationChip(citation, index) {
+function citationChip(citation, index, uid) {
   const title = citation.title || 'Untitled source';
   const loc = locationLabel(citation);
-  const detailId = `cite-detail-${index}`;
+  const detailId = `${uid}-cite-${index}`;
   return `
     <button type="button" class="citation" aria-expanded="false" aria-controls="${detailId}">
       ${sourceIcon(citation.type, { size: 13 })}
@@ -180,12 +180,13 @@ function citationChip(citation, index) {
 }
 
 /**
- * Render a citation list as expandable chips. Call wireCitations(container)
- * once on the parent element so clicks can be handled with one listener.
+ * Render a citation list as expandable chips. `uid` must be unique per list on
+ * the page (study answers, quiz results…), so detail panels never share ids.
+ * Call wireCitations(container) once on the parent element.
  */
-export function renderCitations(citations) {
+export function renderCitations(citations, uid = 'c') {
   if (!Array.isArray(citations) || citations.length === 0) return '';
-  return `<div class="citations">${citations.map(citationChip).join('')}</div>`;
+  return `<div class="citations">${citations.map((citation, index) => citationChip(citation, index, uid)).join('')}</div>`;
 }
 
 /** One delegated listener: open a citation detail, close the others. */

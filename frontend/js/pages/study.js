@@ -151,7 +151,10 @@ function append(html) {
   return node;
 }
 
+let answerCount = 0; // keeps citation detail-panel ids unique per answer block
+
 function answerHtml(data) {
+  answerCount += 1;
   const paragraphs = String(data.answer || '')
     .split(/\n+/)
     .filter(Boolean)
@@ -167,7 +170,7 @@ function answerHtml(data) {
   const citations = Array.isArray(data.citations) && data.citations.length > 0
     ? `<div class="exchange-citations">
          <p class="exchange-citations-label">Source passages — select one to read the excerpt</p>
-         ${renderCitations(data.citations)}
+         ${renderCitations(data.citations, `a${answerCount}`)}
        </div>`
     : (data.needsContent ? '' : '<p class="exchange-citations-label" style="margin-top: var(--s3);">No passages were retrieved for this answer.</p>');
 

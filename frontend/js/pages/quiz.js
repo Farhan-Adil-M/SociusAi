@@ -281,7 +281,7 @@ function renderResults() {
         ${Array.isArray(item.citations) && item.citations.length ? `
           <div class="qz-review-citations">
             <p class="exchange-citations-label">Source passages</p>
-            ${renderCitations(item.citations)}
+            ${renderCitations(item.citations, `q${item.index}`)}
           </div>` : ''}
       </article>`;
   }).join('');
