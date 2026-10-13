@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Socius AI Study Highlighter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="panel popup-panel">
+    <header class="popup-header">
+      <h1 class="popup-title">Socius AI</h1>
+      <p class="popup-subtitle">Study Highlighter</p>
+    </header>
+
+    <div class="popup-body">
+      <div class="toggle-row">
+        <span class="field-label" id="enabled-label">Highlight relevant text</span>
+        <label class="switch">
+          <input type="checkbox" id="enabled-toggle" aria-labelledby="enabled-label">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+      </div>
+
+      <form id="settings-form" novalidate>
+        <div class="field">
+          <label class="field-label" for="site-url">Socius AI site URL</label>
+          <input class="input" type="text" id="site-url" name="siteUrl"
+                 placeholder="http://localhost:3000" spellcheck="false" autocomplete="off">
+          <p class="field-error" id="site-url-error" hidden>Must start with http:// or https://</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="api-url">API URL</label>
+          <input class="input" type="text" id="api-url" name="apiUrl"
+                 placeholder="http://localhost:3000" spellcheck="false" autocomplete="off">
+          <p class="field-error" id="api-url-error" hidden>Must start with http:// or https://</p>
+        </div>
+
+        <div class="save-row">
+          <button type="submit" class="btn btn-primary" id="save-btn">Save</button>
+          <span class="badge badge-green" id="saved-badge" hidden>Saved</span>
+          <span class="field-error" id="save-error" hidden>Could not save settings.</span>
+        </div>
+      </form>
+
+      <div class="status-line" id="status-line" role="status" aria-live="polite">
+        <span class="spinner" id="status-spinner"></span>
+        <span class="status-dot" id="status-dot" hidden></span>
+        <span class="status-text" id="status-text">Checking connection&hellip;</span>
+      </div>
+
+      <button type="button" class="btn btn-primary btn-block" id="open-app-btn">Open Socius AI</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
