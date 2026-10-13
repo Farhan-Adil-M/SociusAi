@@ -53,12 +53,15 @@ Start it (keep this terminal open, or run it in the background):
 npm start            # or: npm run dev   (restarts on file changes)
 ```
 
-Open http://localhost:3000 — `GET /api/health` shows whether sqlite, Chroma, and NIM are all reachable.
+Open http://localhost:3000 — `GET /api/health` shows whether sqlite, Chroma, and NIM are all reachable. To open it from another device on your LAN, set `BIND_HOST` in `.env` (see “Exposure policy” below).
+
+**Exposure policy:** by default the server binds to `127.0.0.1` — this machine only. The app has **no authentication**: never port-forward it or put it behind a public URL; that requires an approved authentication/rate-limiting design first. On a trusted local network you may opt in by setting `BIND_HOST` in `.env` to your LAN IP (or `0.0.0.0`) and restarting — the startup log then prints the `http://<lan-ip>:<port>` URLs to open from other devices, and anyone on that network can upload, delete data, and spend NIM tokens.
 
 ## Test
 
 ```bash
-npm test             # 58 tests: chunking, extraction, learner model, grading, sessions, decks, full HTTP API loop (no network needed)
+npm test             # 64 offline tests: chunking, extraction, learner model, grading, sessions, decks, retrieval eval, full HTTP API loop
+npm run eval         # live retrieval evaluation against the running server (fixed eval set, prints an honest report)
 npm run e2e          # real-services smoke: upload → scoped tutor → quiz → grade → organised session → saved deck (needs server + Chroma running)
 ```
 
@@ -108,7 +111,7 @@ v1.1 additions: persistent **study sessions** (organise sources; AI suggests pla
 
 ## Known limitations (honest list)
 
-- Login is a visual prototype — there is no real authentication.
+- Login is a visual prototype — there is no real authentication, and the server is localhost-only by design.
 - Text-based PDFs and .pptx only; scanned/image-only documents are rejected with a clear message (no OCR).
-- Flashcards are generated on demand and not yet persisted per student.
 - The tutor answers each question independently (no multi-turn conversation memory).
+- Flashcard decks persist with per-card "known / review" status; spaced-repetition scheduling is not implemented.

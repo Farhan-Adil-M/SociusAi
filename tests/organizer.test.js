@@ -156,3 +156,25 @@ test('upload works fine even when the AI service is completely down', async (t) 
   assert.equal(sources.sources[0].sessionId, null); // sits in Unsorted, ready for manual organisation
   assert.equal(sources.unsortedSourceCount, 1);
 });
+
+test('honest 502 without touching ingestion when the model returns empty or unusable output twice', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-org3-'));
+  const db = openDb(path.join(dir, 'app.db'));
+  db.prepare("INSERT INTO sources (id, type, title, created_at) VALUES ('src_x', 'webpage', 'Unorganised note', '2026-10-13T00:00:00.000Z')").run();
+
+  // empty content twice (what the audit observed live)
+  await assert.rejects(
+    () => suggestOrganization(db, { sourceId: 'src_x' }, { chat: async () => '' }),
+    (err) => err.code === 'NIM_ERROR' && err.status === 502,
+  );
+  // unusable text twice
+  await assert.rejects(
+    () => suggestOrganization(db, { sourceId: 'src_x' }, { chat: async () => 'no json here at all, sorry' }),
+    (err) => err.code === 'NIM_ERROR',
+  );
+
+  // the source is still ingested and still Unsorted —organisation failure must not break the library
+  const row = db.prepare('SELECT * FROM sources WHERE id = ?').get('src_x');
+  assert.equal(row.session_id, null);
+  assert.equal(row.title, 'Unorganised note');
+});

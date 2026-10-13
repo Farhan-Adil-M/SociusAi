@@ -2,7 +2,7 @@
 // Needed after changing NIM_EMBED_MODEL (vectors from different models cannot
 // be mixed). No re-uploading required:  npm run reindex
 
-import { config } from '../server/config.js';
+import { assertConfig, config } from '../server/config.js';
 import { openDb, getMeta, setMeta } from '../server/store/sqlite.js';
 import { chunkSegments } from '../server/services/chunker.js';
 import { embedTexts } from '../server/services/embeddings.js';

@@ -3,6 +3,7 @@
 // ChromaDB stays responsible for vectors and semantic search only.
 
 import { DatabaseSync } from 'node:sqlite';
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
@@ -88,20 +89,6 @@ export function openDb(dbPath = path.join(config.dataDir, 'app.db')) {
       last_practiced_at TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS decks (
-      id               TEXT PRIMARY KEY,
-      session_id       TEXT REFERENCES study_sessions(id),
-      topic            TEXT NOT NULL,
-      source_ids_json  TEXT NOT NULL DEFAULT '[]',
-      card_count       INTEGER NOT NULL DEFAULT 0,
-      created_at       TEXT NOT NULL,
-      last_reviewed_at TEXT
-    );
-
-    -- Study-session organisation: AI suggestions stored per source; manual
-    -- choices are sticky (manual_override) and never replaced automatically.
-    -- (The sources row itself carries session_id/tags/org/override columns.)
-
     CREATE TABLE IF NOT EXISTS activity (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       type       TEXT NOT NULL,
@@ -116,7 +103,7 @@ export function openDb(dbPath = path.join(config.dataDir, 'app.db')) {
       value TEXT NOT NULL
     );
 
-    -- Persistent flashcard decks. Cards inherit their session from the deck.
+    -- Persistent flashcard decks (v1.1). Cards inherit their session from the deck.
     CREATE TABLE IF NOT EXISTS decks (
       id               TEXT PRIMARY KEY,
       session_id       TEXT REFERENCES study_sessions(id),
@@ -159,23 +146,33 @@ function addColumnIfMissing(db, table, column, ddl) {
 }
 
 function migrate(db, dbPath) {
-  if (schemaVersion(db) >= 2) return;
+  const version = schemaVersion(db);
 
-  // Safety copy once per database (the .bak is skipped on later runs).
-  if (dbPath && fs.existsSync(dbPath) && !fs.existsSync(`${dbPath}.v1.bak`)) {
-    try { fs.copyFileSync(dbPath, `${dbPath}.v1.bak`); } catch { /* read-only fs etc. */ }
+  if (version < 2) {
+    // Safety copy once per database (the .bak is skipped on later runs).
+    if (dbPath && fs.existsSync(dbPath) && !fs.existsSync(`${dbPath}.v1.bak`)) {
+      try { fs.copyFileSync(dbPath, `${dbPath}.v1.bak`); } catch { /* read-only fs etc. */ }
+    }
+
+    addColumnIfMissing(db, 'sources', 'session_id', 'session_id TEXT');
+    addColumnIfMissing(db, 'sources', 'tags_json', "tags_json TEXT NOT NULL DEFAULT '[]'");
+    addColumnIfMissing(db, 'sources', 'org_source', "org_source TEXT NOT NULL DEFAULT 'manual'");
+    addColumnIfMissing(db, 'sources', 'manual_override', 'manual_override INTEGER NOT NULL DEFAULT 0');
+    addColumnIfMissing(db, 'sources', 'suggestion_json', 'suggestion_json TEXT');
+    addColumnIfMissing(db, 'quizzes', 'session_id', 'session_id TEXT');
+    addColumnIfMissing(db, 'activity', 'session_id', 'session_id TEXT');
+
+    db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '2') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run();
   }
 
-  addColumnIfMissing(db, 'sources', 'session_id', 'session_id TEXT');
-  addColumnIfMissing(db, 'sources', 'tags_json', "tags_json TEXT NOT NULL DEFAULT '[]'");
-  addColumnIfMissing(db, 'sources', 'org_source', "org_source TEXT NOT NULL DEFAULT 'manual'");
-  addColumnIfMissing(db, 'sources', 'manual_override', 'manual_override INTEGER NOT NULL DEFAULT 0');
-  addColumnIfMissing(db, 'sources', 'suggestion_json', 'suggestion_json TEXT');
-  addColumnIfMissing(db, 'quizzes', 'session_id', 'session_id TEXT');
-  addColumnIfMissing(db, 'activity', 'session_id', 'session_id TEXT');
-
-  db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '2') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-    .run();
+  if (version < 3) {
+    // Quiz attempts store the built result so replays return the EXACT same
+    // shape the student originally saw (no double-counting, no reshaping).
+    addColumnIfMissing(db, 'quiz_attempts', 'result_json', 'result_json TEXT');
+    db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '3') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run();
+  }
 }
 
 export function nowIso() {
@@ -183,7 +180,7 @@ export function nowIso() {
 }
 
 export function newId(prefix) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${randomBytes(6).toString('hex')}`; // 12 unpredictable hex chars
 }
 
 export function logActivity(db, type, topic, detail, sessionId = null) {
@@ -201,4 +198,8 @@ export function getMeta(db, key) {
 export function setMeta(db, key, value) {
   db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
     .run(key, value);
+}
+
+export function delMeta(db, key) {
+  db.prepare('DELETE FROM app_meta WHERE key = ?').run(key);
 }

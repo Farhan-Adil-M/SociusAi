@@ -66,7 +66,7 @@ test('migration upgrades a real v1 database without losing rows', () => {
   for (const col of ['session_id', 'tags_json', 'org_source', 'manual_override', 'suggestion_json']) {
     assert.ok(cols.has(col), `missing column ${col}`);
   }
-  assert.equal(db.prepare("SELECT value FROM app_meta WHERE key = 'schema_version'").get().value, '2');
+  assert.equal(db.prepare("SELECT value FROM app_meta WHERE key = 'schema_version'").get().value, '3');
   assert.ok(fs.existsSync(`${dbPath}.v1.bak`), 'v1 backup copy');
   // Idempotent: re-open does not re-badge or duplicate anything.
   openDb(dbPath);

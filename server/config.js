@@ -20,6 +20,11 @@ export const config = {
   port: Number(optional('PORT', 3000)),
   maxUploadMb: Number(optional('MAX_UPLOAD_MB', 25)),
 
+  // Interface the HTTP server binds to. Default is loopback-only; setting a
+  // LAN address (or 0.0.0.0) lets other devices on the network connect.
+  // There is no authentication — only do this on a network you trust.
+  bindHost: optional('BIND_HOST', '127.0.0.1'),
+
   // NVIDIA NIM — every value verified against our account (see docs/API_CONTRACT.md).
   nimApiKey: optional('NIM_API_KEY', ''),
   nimBaseUrl: optional('NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1'),

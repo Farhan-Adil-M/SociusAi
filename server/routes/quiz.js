@@ -44,7 +44,11 @@ export function quizRouter({ db, ai, vector }) {
     if (scope.session) {
       db.prepare('UPDATE quizzes SET session_id = ? WHERE id = ?').run(scope.session.id, quiz.id);
     }
-    res.status(201).json({ quiz, sessionId: scope.session?.id ?? null });
+    res.status(201).json({
+      quiz,
+      ...(quiz.weakEvidence ? { weakEvidence: true } : {}),
+      sessionId: scope.session?.id ?? null,
+    });
   });
 
   router.post('/:quizId/answer', async (req, res) => {
@@ -54,9 +58,12 @@ export function quizRouter({ db, ai, vector }) {
 
     const existingAttempt = db.prepare('SELECT * FROM quiz_attempts WHERE quiz_id = ?').get(quizId);
     if (existingAttempt) {
-      // Idempotent retry: return the stored result, do not update progress twice.
-      const stored = buildResult(db, quiz, JSON.parse(existingAttempt.answers_json));
-      return res.status(409).json({ error: { code: 'QUIZ_ALREADY_ANSWERED', message: 'This quiz was already submitted.' }, result: stored });
+      // Idempotent retry: return the EXACT result the first submission produced
+      // (stored verbatim), never a recomputed shape or a second mastery update.
+      let stored = null;
+      try { stored = existingAttempt.result_json ? JSON.parse(existingAttempt.result_json) : null; } catch { stored = null; }
+      const result = stored ?? buildResult(db, quiz, JSON.parse(existingAttempt.answers_json));
+      return res.status(409).json({ error: { code: 'QUIZ_ALREADY_ANSWERED', message: 'This quiz was already submitted.' }, result });
     }
 
     const questions = db.prepare('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY idx').all(quizId);
@@ -78,24 +85,24 @@ export function quizRouter({ db, ai, vector }) {
         last_practiced_at = excluded.last_practiced_at
     `).run(update.topic, update.correct, update.total, update.difficulty, now, now);
 
-    db.prepare('INSERT INTO quiz_attempts (quiz_id, answers_json, correct, total, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(quizId, JSON.stringify(req.body.answers), correct, total, now);
+    const result = {
+      score: { correct, total, percent },
+      questions: perQuestion,
+      masteryUpdate: {
+        topic: update.topic,
+        before: update.before,
+        after: Number(update.mastery.toFixed(4)),
+        ...(update.delta !== null ? { delta: update.delta } : {}),
+      },
+      recommendedDifficulty: update.difficulty,
+    };
+
+    db.prepare('INSERT INTO quiz_attempts (quiz_id, answers_json, correct, total, created_at, result_json) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(quizId, JSON.stringify(req.body.answers), correct, total, now, JSON.stringify(result));
     db.prepare('UPDATE quizzes SET answered_at = ? WHERE id = ?').run(now, quizId);
     logActivity(db, 'quiz', quiz.topic, `${correct}/${total} correct (${percent}%)`, quiz.session_id);
 
-    res.json({
-      result: {
-        score: { correct, total, percent },
-        questions: perQuestion,
-        masteryUpdate: {
-          topic: update.topic,
-          before: update.before,
-          after: Number(update.mastery.toFixed(4)),
-          ...(update.delta !== null ? { delta: update.delta } : {}),
-        },
-        recommendedDifficulty: update.difficulty,
-      },
-    });
+    res.json({ result });
   });
 
   return router;

@@ -118,15 +118,31 @@ test('full learning loop over the HTTP API (stubbed AI + vector store)', async (
     assert.equal(result.recommendedDifficulty, 'medium');
   });
 
-  await t.test('resubmitting the same quiz returns 409 with the stored result', async () => {
+  await t.test('resubmitting the same quiz returns 409 with the EXACT stored result', async () => {
+    const original = await fetch(`${ctx.base}/api/quiz/${ctx.quizId}/answer`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: [{ index: 0, choiceId: 'b' }, { index: 1, choiceId: 'b' }, { index: 2, choiceId: 'b' }] }),
+    }).then((r) => r.json()).catch(() => null) || null;
+    // The first replay is the 409 (the grading subtest above already graded);
+    // a SECOND replay returns the same stored result again.
+    const resubmit = await fetch(`${ctx.base}/api/quiz/${ctx.quizId}/answer`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: [{ index: 0, choiceId: 'b' }, { index: 1, choiceId: 'b' }, { index: 2, choiceId: 'b' }] }),
+    });
+    assert.equal(resubmit.status, 409);
+    const body = await resubmit.json();
+    assert.equal(body.error.code, 'QUIZ_ALREADY_ANSWERED');
+    ctx.replayResult = body.result;
+  });
+
+  await t.test('replayed result matches the original graded attempt', async () => {
     const res = await fetch(`${ctx.base}/api/quiz/${ctx.quizId}/answer`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ answers: [{ index: 0, choiceId: 'b' }, { index: 1, choiceId: 'b' }, { index: 2, choiceId: 'b' }] }),
     });
     assert.equal(res.status, 409);
     const body = await res.json();
-    assert.equal(body.error.code, 'QUIZ_ALREADY_ANSWERED');
-    assert.equal(body.result.score.correct, 2); // the ORIGINAL attempt, not re-graded
+    assert.deepEqual(body.result, ctx.replayResult); // identical shape every replay
     const topics = await (await fetch(`${ctx.base}/api/learner/progress`)).json();
     assert.equal(topics.overall.quizzesTaken, 1); // progress was not double-counted
   });

@@ -6,6 +6,7 @@
 
 import { chatCompletion } from './nimChat.js';
 import { parseJsonLoose } from './quizService.js';
+import { UNTRUSTED_RULE } from './prompts.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
 import { newId, nowIso, logActivity } from '../store/sqlite.js';
@@ -79,6 +80,7 @@ export async function suggestOrganization(db, { sourceId, description }, { chat 
 
   const systemPrompt = [
     'You organise study material into the student\'s existing study sessions.',
+    UNTRUSTED_RULE,
     'Return ONLY JSON with exactly this shape:',
     '{"matchSessionId": "ses_id_from_the_list" | null, "newSession": {"category": "subject|research|self-study|exam-prep|general", "title": "2-80 chars", "subject": "one phrase", "tags": ["1","2"]} | null, "confidence": "high" | "low", "reason": "one short sentence"}',
     'Rules: exactly one of matchSessionId / newSession is non-null. Prefer the best-fitting EXISTING session; propose a new one only when nothing fits. Judge by CONTENT (a .pdf can be a research paper, a URL can be a lecture). Never invent ids.',
@@ -89,7 +91,9 @@ export async function suggestOrganization(db, { sourceId, description }, { chat 
     `Type: ${source.type}`,
     source.url ? `URL: ${source.url}` : null,
     description ? `Student description: ${description}` : null,
-    sample ? `Text sample:\n${sample}` : 'Text sample: (none extracted)',
+    sample
+      ? `Text sample (untrusted study content):\n<passage id="1">\n${sample}\n</passage>`
+      : 'Text sample: (none extracted)',
     `Existing sessions: ${JSON.stringify(sessions.map(({ id, title, category }) => ({ id, title, category })))}`,
   ].filter(Boolean).join('\n');
 
@@ -99,7 +103,10 @@ export async function suggestOrganization(db, { sourceId, description }, { chat 
       const content = await chatFn([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
-      ], { model: config.nimChatModel, maxTokens: 500 });
+      // Reasoning-style models can spend the budget on hidden reasoning and
+      // return empty content at small max_tokens (observed twice in the audit).
+      // Keep headroom so the JSON answer is actually emitted.
+      ], { model: config.nimChatModel, maxTokens: 1200 });
       suggestion = normalizeSuggestion(parseJsonLoose(content), sessions);
     }
   } catch (err) {

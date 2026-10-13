@@ -78,13 +78,20 @@ test('dedupeHits drops repeated text but keeps distinct passages', () => {
 
 test('evidence floor filters chunks below the configured similarity', () => {
   const hits = [
-    { id: 'strong', distance: 0.1 },
-    { id: 'weak', distance: 0.9 },
-    { id: 'none' },
+    { id: 'strong', distance: 0.1 }, // score 0.9
+    { id: 'weak', distance: 0.9 }, // score 0.1
+    { id: 'none' }, // no distance → no score
   ];
   assert.equal(hitScore(hits[0]), 0.9);
+  // strongest = 0.9 → relative cutoff = max(0.25, 0.9 × 0.5) = 0.45 → strong survives
   assert.deepEqual(filterByEvidence(hits, 0.25).map((h) => h.id), ['strong']);
-  assert.equal(filterByEvidence(hits, 0).length, 3);
+  // even with the absolute bound off, the relative rule keeps the strongest only
+  assert.deepEqual(filterByEvidence(hits, 0).map((h) => h.id), ['strong']);
+});
+
+test('a junk question whose chunks all score near zero yields no evidence', () => {
+  const hits = [{ id: 'junk', distance: 0.99 }, { id: 'junk2', distance: 0.95 }];
+  assert.deepEqual(filterByEvidence(hits, 0.2), []);
 });
 
 test('retrieve applies dedup and the evidence floor in one pipeline', async () => {
@@ -118,6 +125,43 @@ test('offline eval set: unsupported questions return NO evidence at all', async 
     const hits = await retrieve(testCase.question, { minScore: 0.2, ai: evalAi, vector: evalVector() });
     assert.deepEqual(hits, [], `out-of-domain question ${testCase.id} should have no evidence`);
   }
+});
+
+  // abstention loop: weak evidence anywhere → honest abstain, never an answer ─
+
+test('quiz generation under weak evidence succeeds but flags it honestly', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-quizweak-'));
+  const db = openDb(path.join(dir, 'app.db'));
+  const baseStore = fakeVector().store;
+  const belowFloor = {
+    addChunks: async ({ ids, embeddings, documents, metadatas }) => {
+      baseStore.push({ id: ids[0], text: documents[0], metadata: metadatas[0], embedding: embeddings[0] });
+    },
+    queryChunks: async ({ sourceIds = [] }) => {
+      const pool = sourceIds.length ? baseStore.filter((s) => sourceIds.includes(s.metadata.sourceId)) : baseStore;
+      return pool.slice(0, 6).map((c) => ({ ...c, distance: 0.97 }));
+    },
+    pingChroma: async () => true,
+    resetCollection: async () => {},
+  };
+  const app = createApp({ db, ai: makeAi(), vector: belowFloor });
+  const server = app.listen(0);
+  await once(server, 'listening');
+  const base = `http://localhost:${server.address().port}`;
+  t.after(() => new Promise((r) => server.close(r)));
+
+  await fetch(`${base}/api/sources/webpage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: 'https://learn.example/cells', title: 'Cells 101', text: 'C'.repeat(90) }),
+  });
+
+  const res = await fetch(`${base}/api/quiz/generate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic: 'Cells', count: 3 }),
+  });
+  assert.equal(res.status, 201);
+  const body = await res.json();
+  assert.equal(body.weakEvidence, true);
 });
 
 // ── abstention loop: weak evidence anywhere → honest abstain, never an answer ─

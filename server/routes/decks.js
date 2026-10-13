@@ -124,8 +124,11 @@ export function decksRouter({ db }) {
     }
 
     const now = nowIso();
-    db.prepare('UPDATE deck_cards SET status = ?, reviewed_at = ? WHERE deck_id = ? AND idx = ?')
+    const update = db.prepare('UPDATE deck_cards SET status = ?, reviewed_at = ? WHERE deck_id = ? AND idx = ?')
       .run(status, now, deck.id, idx);
+    if (update.changes === 0) {
+      throw new ApiError(404, 'DECK_NOT_FOUND', `Card ${idx} does not exist in the deck.`);
+    }
     db.prepare('UPDATE decks SET last_reviewed_at = ? WHERE id = ?').run(now, deck.id);
     res.json({ deckId: deck.id, idx, status, lastReviewedAt: now });
   });

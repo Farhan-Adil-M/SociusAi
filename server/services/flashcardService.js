@@ -2,6 +2,7 @@
 
 import { chatCompletion } from './nimChat.js';
 import { retrieve, toCitation, hitScore } from './retrieval.js';
+import { wrapPassages, UNTRUSTED_RULE } from './prompts.js';
 import { parseJsonLoose } from './quizService.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
@@ -33,9 +34,10 @@ export async function generateFlashcards({ topic, count = 8, sourceIds = [], ses
       'Not enough indexed material on this topic yet. Upload relevant material or pick another topic.');
   }
 
-  const evidence = hits.map((hit, i) => `Passage ${i + 1}:\n${hit.text}`).join('\n\n');
+  const evidence = wrapPassages(hits);
   const systemPrompt = [
     'You create study flashcards strictly from the passages provided.',
+    UNTRUSTED_RULE,
     `Topic: ${topic}.`,
     'Return ONLY JSON, no other text: {"cards":[{"front":"question or concept","back":"concise answer or explanation","cite":[1,2]}]}',
     '"front" is what the student sees first; "back" reveals the answer. "cite" lists supporting passage numbers (1-based).',

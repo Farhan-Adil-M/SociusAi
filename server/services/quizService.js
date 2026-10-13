@@ -4,6 +4,7 @@
 import { chatCompletion } from './nimChat.js';
 import { retrieve, toCitation, hitScore } from './retrieval.js';
 import { applyAttempt } from './learner.js';
+import { wrapPassages, UNTRUSTED_RULE } from './prompts.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
 import { newId, nowIso } from '../store/sqlite.js';
@@ -110,6 +111,7 @@ async function generateQuestionBatch({ topic, difficulty, count, evidence }, cha
   const systemPrompt = [
     'You write multiple-choice quiz questions strictly from the passages provided.',
     `Topic: ${topic}. Difficulty: ${difficulty}.`,
+    UNTRUSTED_RULE,
     'Return ONLY a JSON object, no other text, in exactly this shape:',
     '{"questions":[{"question":"...","choices":["...","...","...","..."],"answer":"the exact correct choice text","explanation":"1-3 sentences explaining why","cite":[1,2]}]}',
     'Rules: exactly 4 unique choices; "answer" must match one choice exactly; "cite" lists passage numbers that support the question (1-based); every question must be answerable from the passages alone.',
@@ -137,13 +139,7 @@ export async function generateQuiz({ topic, questionCount = 5, difficulty, sourc
         'Not enough indexed material on this topic yet. Upload relevant material or pick another topic.');
     }
 
-    const evidence = hits
-      .map((hit, i) => {
-        const meta = hit.metadata ?? {};
-        const where = meta.page != null ? `p.${meta.page}` : meta.slide != null ? `s.${meta.slide}` : '';
-        return `Passage ${i + 1} [${meta.title ?? 'source'}${where ? ' ' + where : ''}]:\n${hit.text}`;
-      })
-      .join('\n\n');
+    const evidence = wrapPassages(hits);
 
     const accepted = [];
     for (let attempt = 0; attempt < MAX_ATTEMPTS && accepted.length < questionCount; attempt++) {
@@ -178,8 +174,5 @@ export async function generateQuiz({ topic, questionCount = 5, difficulty, sourc
       return { index: idx, text: q.text, choices: q.choices, citations };
     });
 
-    return {
-      id: quizId, topic: topic.trim(), difficulty, questions: responseQuestions,
-      ...(weakEvidence ? { weakEvidence: true } : {}),
-    };
+    return { id: quizId, topic: topic.trim(), difficulty, questions: responseQuestions, weakEvidence: weakEvidence ? true : undefined };
 }

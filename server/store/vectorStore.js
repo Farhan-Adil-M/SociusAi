@@ -87,6 +87,17 @@ export async function queryChunks({ embedding, nResults = 6, sourceIds = [] }) {
   }
 }
 
+// For ingestion compensation (2.5): remove a specific set of chunk ids so a
+// failed persistence never leaves searchable orphan vectors behind.
+export async function deleteChunks(ids) {
+  try {
+    const collection = await getCollection();
+    await collection.delete({ ids });
+  } catch (err) {
+    throw chromaError(err);
+  }
+}
+
 export async function countChunks() {
   const collection = await getCollection();
   return collection.count();

@@ -10,11 +10,11 @@ import { chunkSegments } from '../services/chunker.js';
 import { extractPdf } from '../services/extract/pdf.js';
 import { extractPptx } from '../services/extract/pptx.js';
 import { extractWebpage } from '../services/extract/webpage.js';
-import { addChunks } from '../store/vectorStore.js';
+import { addChunks, deleteChunks } from '../store/vectorStore.js';
 import { embedTexts } from '../services/embeddings.js';
 import { retrieve, toCitation, assertSourcesExist } from '../services/retrieval.js';
 import { suggestOrganization, acceptOrganization } from '../services/organizer.js';
-import { logActivity, newId, nowIso } from '../store/sqlite.js';
+import { logActivity, newId, nowIso, getMeta, setMeta, delMeta } from '../store/sqlite.js';
 
 const ALLOWED_EXTENSIONS = new Set(['.pdf', '.pptx']);
 
@@ -57,7 +57,7 @@ export function sourceRowToApi(row) {
   };
 }
 
-async function persistSource(db, { type, title, url, segments, pageCount, slideCount }, { embed, store }) {
+async function persistSource(db, { type, title, url, segments, pageCount, slideCount }, { embed, store, remove }) {
   const sourceId = newId('src');
   const chunks = chunkSegments(segments);
   if (chunks.length === 0) {
@@ -65,6 +65,20 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
   }
 
   const vectors = await embed(chunks.map((c) => c.text));
+
+  // Embedding-model guard (v1.2): record the model on first ingestion, and stop
+  // clearly if the configured model no longer matches the recorded index — a
+  // mixed-model index would silently corrupt retrieval.
+  const storedModel = getMeta(db, 'embed_model');
+  if (storedModel && storedModel !== config.nimEmbedModel) {
+    throw new ApiError(503, 'CHROMA_UNAVAILABLE',
+      `The search index was built with "${storedModel}" but NIM_EMBED_MODEL is "${config.nimEmbedModel}". Run npm run reindex, then try again.`);
+  }
+  if (!storedModel && vectors[0]) {
+    setMeta(db, 'embed_model', config.nimEmbedModel);
+    setMeta(db, 'embed_dimension', String(vectors[0].length));
+  }
+
   const metadatas = chunks.map((c) => ({
     sourceId,
     type,
@@ -77,19 +91,43 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
   }));
 
   const ids = chunks.map((c) => `${sourceId}_${c.chunkIndex}`);
-  await store({
-    ids,
-    embeddings: vectors,
-    documents: chunks.map((c) => c.text),
-    metadatas,
-  });
-
   const createdAt = nowIso();
-  db.prepare('INSERT INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(sourceId, type, title, url ?? null, pageCount, slideCount, chunks.length, createdAt);
+  const removeVectors = () => (remove ?? deleteChunks)(ids);
 
-  const insertSegment = db.prepare('INSERT INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)');
-  segments.forEach((segment, i) => insertSegment.run(sourceId, i, JSON.stringify(segment.location ?? {}), segment.text));
+  try {
+    await store({
+      ids,
+      embeddings: vectors,
+      documents: chunks.map((c) => c.text),
+      metadatas,
+    });
+  } catch (err) {
+    // Compensation (v1.2): if vector storage partially failed, remove anything
+    // recorded persistently before rethrowing.
+    removeVectors();
+    if (!storedModel) {
+      delMeta(db, 'embed_model');
+      delMeta(db, 'embed_dimension');
+    }
+    throw err;
+  }
+
+  // Structured persistence AFTER indexing: if it fails, delete the freshly
+  // indexed vectors so no searchable orphans are left behind.
+  try {
+    db.prepare('INSERT INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(sourceId, type, title, url ?? null, pageCount, slideCount, chunks.length, createdAt);
+
+    const insertSegment = db.prepare('INSERT INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)');
+    segments.forEach((segment, i) => insertSegment.run(sourceId, i, JSON.stringify(segment.location ?? {}), segment.text));
+  } catch (err) {
+    removeVectors();
+    if (!storedModel) {
+      delMeta(db, 'embed_model');
+      delMeta(db, 'embed_dimension');
+    }
+    throw err;
+  }
 
   return {
     id: sourceId, type, title, pageCount, slideCount, chunkCount: chunks.length, createdAt,
@@ -101,6 +139,7 @@ export function sourcesRouter({ db, ai, vector }) {
   const router = express.Router();
   const embed = ai?.embedTexts ?? embedTexts;
   const store = vector?.addChunks ?? addChunks;
+  const remove = vector?.deleteChunks ?? deleteChunks;
 
   router.post('/upload', upload.single('file'), async (req, res) => {
     if (!req.file) {
@@ -116,14 +155,14 @@ export function sourcesRouter({ db, ai, vector }) {
       type: ext === '.pdf' ? 'pdf' : 'pptx',
       title: req.file.originalname,
       ...extracted,
-    }, { embed, store });
+    }, { embed, store, remove });
     logActivity(db, 'upload', null, `${source.title} (${source.pageCount ?? source.slideCount} ${source.pageCount != null ? 'pages' : 'slides'})`);
     res.status(201).json({ source: { ...source, url: null } });
   });
 
   router.post('/webpage', async (req, res) => {
     const { segments, title, url, pageCount, slideCount } = extractWebpage(req.body ?? {});
-    const source = await persistSource(db, { type: 'webpage', title, url, segments, pageCount, slideCount }, { embed, store });
+    const source = await persistSource(db, { type: 'webpage', title, url, segments, pageCount, slideCount }, { embed, store, remove });
     logActivity(db, 'upload', null, `${source.title} (webpage)`);
     res.status(201).json({ source: { ...source, url } });
   });

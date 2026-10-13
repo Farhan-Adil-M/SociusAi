@@ -7,7 +7,11 @@ import { getMeta } from '../store/sqlite.js';
 import { chatCompletion } from '../services/nimChat.js';
 import { embedQuery } from '../services/embeddings.js';
 
-const CACHE_MS = 60_000;
+// Health caching: the NIM probe is a PAID embedding request, so a fresh probe
+// runs at most once every 10 minutes. Between probes the cached verdict is
+// reported as-is — semantics: "known good within cache window", never a claim
+// that the model is reachable right now.
+const CACHE_MS = 10 * 60 * 1000;
 
 export function healthRouter({ db, ai, vector }) {
   const router = express.Router();
