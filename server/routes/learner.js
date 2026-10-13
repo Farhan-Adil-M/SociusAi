@@ -7,7 +7,7 @@ import { needsRevision, suggestNext, difficultyFor } from '../services/learner.j
 
 export function learnerRouter({ db, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   router.get('/progress', async (req, res) => {
     const topicRows = await db.all('SELECT * FROM learner_topics WHERE user_id = ? ORDER BY last_practiced_at DESC', req.userId);

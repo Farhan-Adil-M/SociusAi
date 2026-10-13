@@ -18,6 +18,7 @@
     "migrate:supabase": "node --env-file=.env scripts/migrate-supabase.mjs"
   },
   "dependencies": {
+    "@chroma-core/default-embed": "^0.1.9",
     "@libsql/client": "^0.18.0",
     "@supabase/supabase-js": "^2.117.3",
     "adm-zip": "0.6.1",

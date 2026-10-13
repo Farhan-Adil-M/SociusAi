@@ -87,8 +87,8 @@ function renderSignupFoot() {
   });
 }
 
-function setSignupMode(next) {
-  signupMode = next;
+function setSignupMode(isSignup) {
+  signupMode = isSignup;
   passwordInput.setAttribute('autocomplete', signupMode ? 'new-password' : 'current-password');
   renderSignupFoot();
   hideNotices();

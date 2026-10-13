@@ -10,6 +10,7 @@
 
 import { api } from '../api.js';
 import { getHealth } from './shell.js';
+import { storageUploadToStudySources } from '../auth.js';
 import { icon, escapeHtml, errorMessage, formatDate } from '../ui.js';
 
 /* -------------------------------------------------- shared input checks --- */
@@ -34,12 +35,18 @@ export function checkUploadFile(file) {
    the banner and status pill), so this adds no extra network call. When the
    field is missing or health fails, the hint keeps the markup's default 25. */
 export const DEFAULT_UPLOAD_MB = 25;
+/* Supabase mode uploads go DIRECTLY into Supabase Storage (see
+   storageUploadToStudySources in auth.js), so the serverless request-body cap
+   no longer applies — the bucket's own limit is the honest number. */
+const STORAGE_UPLOAD_MB = 25;
 
-/** Fill an upload-hint element with the backend's real limit, e.g. "…up to N MB.". */
+/** Fill an upload-hint element with the real limit, e.g. "…up to N MB.". */
 export function setUploadLimitHint(hintEl) {
   getHealth().then((health) => {
-    const maxMb = health.ok ? health.data?.checks?.limits?.maxUploadMb : null;
-    if (hintEl && Number(maxMb) > 0) {
+    if (!hintEl || !health.ok) return;
+    const viaStorage = health.data?.checks?.auth?.mode === 'supabase';
+    const maxMb = viaStorage ? STORAGE_UPLOAD_MB : health.data?.checks?.limits?.maxUploadMb;
+    if (Number(maxMb) > 0) {
       hintEl.textContent = `Text-based files only, up to ${maxMb} MB.`;
     }
   });
@@ -143,7 +150,15 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
     statusHost.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Extracting and indexing ${escapeHtml(file.name)}…</div>`;
     fileInput.value = '';
     try {
-      const data = await api.uploadSource(file);
+      let data;
+      const authCfg = getHealth()?.checks?.auth;
+      if (authCfg && authCfg.mode === 'supabase' && authCfg.supabaseUrl) {
+        // 25 MB path: direct-to-storage, then ask the backend to ingest it
+        const { storagePath } = await storageUploadToStudySources(file);
+        data = await api.ingestFromStorage(storagePath, { title: file.name, sizeBytes: file.size });
+      } else {
+        data = await api.uploadSource(file); // local/dev multipart (25 MB local cap)
+      }
       // Upload succeeded — everything below is organisation, never blocking.
       await offerSuggestion(data.source, { host: statusHost, onOrganised });
     } catch (error) {

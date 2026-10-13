@@ -156,6 +156,13 @@ export const api = {
   listSources: ({ sessionId } = {}) => request(withQuery('/api/sources', { sessionId })),
 
   // POST /api/sources/upload (multipart, one field: file)
+  // Supabase-storage ingest path: 25 MB files without serverless body limits
+  ingestFromStorage: (storagePath, { title, sizeBytes } = {}) =>
+    request('/api/sources/storage-ingest', {
+      method: 'POST',
+      body: { storagePath, title, sizeBytes },
+    }),
+
   uploadSource: (file) => {
     const form = new FormData();
     form.append('file', file);
@@ -271,8 +278,8 @@ export const api = {
       body: message === null ? { message: null } : { message },
     }),
 
-  // POST /api/onboarding/skip → { profile }
-  skipOnboarding: () => request('/api/onboarding/skip', { method: 'POST', body: {} }),
+  // POST /api/onboarding/skip exists in the API contract (used by tests and
+  // available to clients), but the UI never calls it: the intro is mandatory.
 
   // PATCH /api/profile — any subset of { interests, goals, purpose,
   // preferences, subjects }; each provided key replaces that value wholesale

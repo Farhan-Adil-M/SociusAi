@@ -255,10 +255,16 @@ function updateComposer() {
   const length = input.value.trim().length;
   countLabel.textContent = `${input.value.length} / 300`;
   const waitingForMaterial = Boolean(sessionContext) && sources.length === 0;
-  sendButton.disabled = sending || length < 3 || waitingForMaterial;
-  input.placeholder = waitingForMaterial
-    ? `Add material to «${sessionContext.title}» first…`
-    : 'Ask a question about your material…';
+  const locked = introRequired();
+  input.disabled = locked;
+  sendButton.disabled = sending || length < 3 || waitingForMaterial || locked;
+  input.placeholder = profileState === 'pending'
+    ? 'Checking your setup…'
+    : locked
+      ? 'Introduce yourself to unlock the tutor…'
+      : waitingForMaterial
+        ? `Add material to «${sessionContext.title}» first…`
+        : 'Ask a question about your material…';
 }
 
 function setSending(value) {
@@ -269,6 +275,10 @@ function setSending(value) {
 
 /** `approach` (optional) is a one-off style request for THIS answer only. */
 async function ask(question, { approach } = {}) {
+  if (introRequired()) { // belt & braces: composer is disabled, this stops programmatic paths too
+    openOnboarding(profileState === 'in_progress' ? 'resume' : 'new');
+    return;
+  }
   const asked = question.trim();
   // Small chip naming the requested style, so the compared answers are labelled.
   const styleChip = approach
@@ -424,7 +434,16 @@ fileInput.addEventListener('change', async () => {
   showDuplicateHint(dupHost, findDuplicateSource(sources, { fileName: file.name }));
   addStatus.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Extracting and indexing ${escapeHtml(file.name)}…</div>`;
   try {
-    const data = await api.uploadSource(file);
+    let data;
+    let authCfg = null;
+    try { authCfg = (await getHealth())?.checks?.auth; } catch { authCfg = null; }
+    if (authCfg && authCfg.mode === 'supabase' && authCfg.supabaseUrl) {
+      // big-file mode: direct-to-storage (no ~4.5 MB serverless body cap)
+      const { storagePath } = await storageUploadToStudySources(file);
+      data = await api.ingestFromStorage(storagePath, { title: file.name, sizeBytes: file.size });
+    } else {
+      data = await api.uploadSource(file); // local/dev multipart (25 MB)
+    }
     fileInput.value = '';
     showDuplicateHint(dupHost, null);
     await afterImport(data.source);
@@ -476,12 +495,18 @@ webpageForm.addEventListener('submit', async (event) => {
 
 const onboardPanel = document.getElementById('onboarding-panel');
 
-let offerDismissed = false; // "Not now" → offer stays gone for THIS page load only
 let onboardOpen = false;
 let onboardDone = false;
 let onboardSending = false;
 let onboardLastSent; // undefined = opening turn not sent yet; null = opening turn; string = last user reply
-let profileState = 'new';
+// pending → new → in_progress → completed (or skipped, set only via the API).
+// Intro is MANDATORY: the tutor composer stays locked while pending/new/
+// in_progress, so a fresh account must introduce itself before it can study.
+let profileState = 'pending';
+
+function introRequired() {
+  return profileState === 'pending' || profileState === 'new' || profileState === 'in_progress';
+}
 
 const onboardChat = () => onboardPanel.querySelector('[data-onboard-chat]');
 
@@ -489,10 +514,8 @@ function setOnboardBusy(value) {
   onboardSending = value;
   const input = onboardPanel.querySelector('[data-onboard-input]');
   const send = onboardPanel.querySelector('[data-onboard-send]');
-  const skip = onboardPanel.querySelector('[data-onboard-skip]');
   if (input) input.disabled = value || onboardDone;
   if (send) send.disabled = value || onboardDone || !(input && input.value.trim());
-  if (skip) skip.disabled = value;
 }
 
 function onboardScroll() {
@@ -555,7 +578,6 @@ function renderOnboardShell(title) {
       <label class="sr-only" for="onboard-input">Your reply</label>
       <input class="input" id="onboard-input" data-onboard-input maxlength="800" autocomplete="off" placeholder="Type your answer…">
       <button class="btn btn-primary btn-sm" type="submit" data-onboard-send disabled>Send</button>
-      <button class="btn btn-secondary btn-sm" type="button" data-onboard-skip>Skip setup</button>
     </form>`;
 
   const input = onboardPanel.querySelector('[data-onboard-input]');
@@ -570,24 +592,6 @@ function showOnboardNote(html) {
   onboardOpen = false;
   onboardPanel.hidden = false;
   onboardPanel.innerHTML = `<p class="onboard-note">${html}</p>`;
-}
-
-function hideOnboarding() {
-  onboardOpen = false;
-  onboardPanel.hidden = true;
-  onboardPanel.innerHTML = '';
-}
-
-function renderOffer() {
-  onboardPanel.hidden = false;
-  onboardPanel.innerHTML = `
-    <div class="onboard-card">
-      <span>Introduce yourself in ~2 minutes and the tutor will teach in your style — examples, step-by-step or straight to the point.</span>
-      <span class="onboard-actions">
-        <button type="button" class="btn btn-primary btn-sm" data-onboard-start>${icon('spark', { size: 12 })} Start</button>
-        <button type="button" class="btn btn-secondary btn-sm" data-onboard-later>Not now</button>
-      </span>
-    </div>`;
 }
 
 async function openOnboarding(mode) {
@@ -619,6 +623,8 @@ async function sendOnboardTurn(message, { echoUser = true } = {}) {
     if (data.done) {
       onboardDone = true;
       onboardLastSent = undefined; // nothing left to retry
+      profileState = data.state || 'completed'; // server marks it completed → unlock the tutor
+      updateComposer();
       chat.appendChild(Object.assign(document.createElement('div'), {
         className: 'onboard-error',
         innerHTML: `<button type="button" class="btn btn-primary btn-sm" data-onboard-continue>${icon('arrowRight', { size: 12 })} Continue to studying</button>`,
@@ -630,6 +636,8 @@ async function sendOnboardTurn(message, { echoUser = true } = {}) {
   } catch (error) {
     chat.querySelector('.exchange-pending')?.remove();
     if (error.code === 'ONBOARDING_COMPLETE') {
+      profileState = 'completed'; // already done on the server → unlock the tutor
+      updateComposer();
       showOnboardNote(ONBOARD_DONE_NOTE);
       return;
     }
@@ -650,24 +658,6 @@ function retryOnboard() {
   return sendOnboardTurn(onboardLastSent, { echoUser: false });
 }
 
-async function skipOnboardingFlow() {
-  if (onboardSending) return;
-  setOnboardBusy(true);
-  try {
-    await api.skipOnboarding();
-    showOnboardNote('Intro skipped — edit preferences anytime on the <a href="profile.html">Profile</a> page.');
-  } catch (error) {
-    setOnboardBusy(false);
-    if (error.code === 'ONBOARDING_COMPLETE') {
-      showOnboardNote(ONBOARD_DONE_NOTE);
-      return;
-    }
-    showOnboardError(errorMessage(error));
-    return;
-  }
-  setOnboardBusy(false);
-}
-
 onboardPanel.addEventListener('submit', (event) => {
   if (!event.target.matches('[data-onboard-form]')) return;
   event.preventDefault();
@@ -685,15 +675,9 @@ onboardPanel.addEventListener('click', (event) => {
     retryOnboard();
     return;
   }
-  if (event.target.closest('[data-onboard-start]')) { openOnboarding('new'); return; }
   if (event.target.closest('[data-onboard-continue]')) {
     showOnboardNote(ONBOARD_ACTIVE_NOTE);
     return;
-  }
-  if (event.target.closest('[data-onboard-skip]')) { skipOnboardingFlow(); return; }
-  if (event.target.closest('[data-onboard-later]')) {
-    offerDismissed = true; // re-offer on the next visit is intended
-    hideOnboarding();
   }
 });
 
@@ -702,7 +686,12 @@ async function initOnboarding() {
   try {
     profile = (await api.getProfile()).profile;
   } catch {
-    return; // no profile, no nudges — tutor works as before
+    // No profile to gate on — fail OPEN so the tutor stays usable (the
+    // composer starts locked while we're still 'pending' to avoid a
+    // pre-profile flash of an enabled composer).
+    profileState = 'none';
+    updateComposer();
+    return;
   }
   profileState = profile.state;
   const urlOpen = params.get('onboarding') === '1';
@@ -719,11 +708,12 @@ async function initOnboarding() {
     if (urlOpen) {
       showOnboardNote('Your profile is already set up — edit it on the <a href="profile.html">Profile</a> page.');
     }
-  } else if (urlOpen) {
+  } else {
+    // 'new' — mandatory: the interview opens straight away, no offer card,
+    // no Skip / Not now. The tutor composer stays locked until it finishes.
     openOnboarding('new');
-  } else if (!offerDismissed) {
-    renderOffer();
   }
+  updateComposer(); // unlock unless intro is still required
 }
 
 /* ------------------------------------------------------------------ init */

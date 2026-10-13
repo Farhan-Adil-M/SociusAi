@@ -169,8 +169,8 @@ function renderQuestion() {
     ? `<div class="banner banner-warn qz-warn">${icon('alert', { size: 16 })}
         <span><strong>${unanswered} ${unanswered === 1 ? 'question is' : 'questions are'} unanswered.</strong> Unanswered questions count as wrong. Submit anyway, or go back and answer them.
           <span class="qz-actions-center" style="margin-top: var(--s2);">
-            <button type="button" class="btn btn-primary btn-sm" data-submit-anyway>Submit anyway</button>
-            <button type="button" class="btn btn-secondary btn-sm" data-dismiss-warning>Go back and answer</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-answer-unanswered>Answer the unanswered question${unanswered === 1 ? '' : 's'}…</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-dismiss-warning>Submit anyway — unanswered count as wrong</button>
           </span>
         </span>
       </div>`
@@ -422,6 +422,11 @@ stage.addEventListener('click', (event) => {
 
   if (action === 'lock') { lockAnswer(); return; }
   if (action === 'continue') { goTo(state.index + 1); return; }
+  const unansweredIndex = state.answers.findIndex((a) => a === null);
+  if (action === 'answer-unanswered' && unansweredIndex >= 0) {
+    goTo(unansweredIndex);
+    return;
+  }
   if (action === 'submit-anyway') { submitQuiz(); return; }
   if (action === 'finish') {
     const unanswered = state.answers.filter((answer) => answer === null).length;

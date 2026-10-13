@@ -20,8 +20,18 @@ import { config } from '../config.js';
 const SEED_FILE = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../data/demo-seed.json');
 const SEED_SOURCE_PREFIX = 'seed_';
 
+/** Supabase mode: a forgotten userId must fail loudly, never fall through to
+ *  the shared prototype owner (audit: fail-open 'default' defaults). */
+function requireOwner(userId) {
+  if (config.supabaseUrl && (userId === undefined || userId === null || userId === '')) {
+    throw new Error('userId is required in supabase mode (ownership filter).');
+  }
+  return userId ?? 'default';
+}
+
 export function createSqliteVectorStore(db) {
-  async function addChunks({ ids, embeddings, documents, metadatas, userId = 'default' }) {
+  async function addChunks({ ids, embeddings, documents, metadatas, userId }) {
+    userId = requireOwner(userId);
     // user_id is written EXPLICITLY (pg mode forbids relying on the default).
     await db.batch(ids.map((id, i) => ({
       sql: 'INSERT INTO vector_chunks (id, user_id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET user_id = excluded.user_id, source_id = excluded.source_id, text = excluded.text, embedding_json = excluded.embedding_json, metadata_json = excluded.metadata_json',
@@ -41,7 +51,8 @@ export function createSqliteVectorStore(db) {
     return dot / Math.sqrt(na * nb);
   }
 
-  async function queryChunks({ embedding, nResults = 6, sourceIds = [], userId = 'default' }) {
+  async function queryChunks({ embedding, nResults = 6, sourceIds = [], userId }) {
+    userId = requireOwner(userId);
     const rows = await db.all('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks WHERE user_id = ?', userId);
     return rows
       .map((row) => ({
@@ -87,12 +98,18 @@ export function createSqliteVectorStore(db) {
  * ensureUserSeeded. Embeddings are computed live (model-consistent — no
  * committed vector blobs to go stale). Idempotent: no-ops when data exists.
  */
-export async function seedDemoCorpusIfEmpty({ db, vector, ai, userId = 'default' }) {
+export async function seedDemoCorpusIfEmpty({ db, vector, ai, userId = 'default', skipGlobalCheck = false }) {
   // User-qualified ids: chunk ids embed the owner so PKs cannot collide across
   // users, and the sources row is owned by this seed user, not a shared one.
   const SEED_SOURCE_ID = `${SEED_SOURCE_PREFIX}${userId}`;
-  const count = await vector.countChunks();
-  if (count > 0) return { seeded: false, reason: `store already has ${count} chunks` };
+  // Global emptiness is the right gate for the prototype cold start (one dev
+  // user), but NOT for per-user seeding: another user's chunks must not deny
+  // THIS user their first material — ensureUserSeeded passes skipGlobalCheck
+  // after its own per-user check.
+  if (!skipGlobalCheck) {
+    const count = await vector.countChunks();
+    if (count > 0) return { seeded: false, reason: `store already has ${count} chunks` };
+  }
   if (!fs.existsSync(SEED_FILE)) return { seeded: false, reason: 'no seed file' };
 
   const seed = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8'));
@@ -154,5 +171,7 @@ export async function ensureUserSeeded({ db, vector, ai, userId }) {
   if (!userId) return { seeded: false, reason: 'no user id' };
   const mine = (await db.get('SELECT COUNT(*) AS n FROM vector_chunks WHERE user_id = ?', userId)).n;
   if (mine > 0) return { seeded: false, reason: `user already has ${mine} chunks` };
-  return seedDemoCorpusIfEmpty({ db, vector, ai, userId });
+  // Per-user check done — the global "store already has chunks" gate would
+  // wrongly deny this user whenever anyone else has data, so skip it.
+  return seedDemoCorpusIfEmpty({ db, vector, ai, userId, skipGlobalCheck: true });
 }

@@ -72,7 +72,7 @@ const LIST_COLUMNS = `
 
 export function sessionsRouter({ db, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   router.get('/', async (req, res) => {
     const { category, q, includeArchived } = req.query;
@@ -97,7 +97,7 @@ export function sessionsRouter({ db, auth }) {
       params.push(like, like, like);
     }
 
-    const orderBy = { recent: 's.updated_at DESC', alpha: 's.title COLLATE NOCASE ASC', active: 'last_activity DESC' }[sort];
+    const orderBy = { recent: 's.updated_at DESC', alpha: 'LOWER(s.title) ASC', active: 'last_activity DESC' }[sort];
     const rows = await db.all(`SELECT ${LIST_COLUMNS} FROM study_sessions s ${where} ORDER BY ${orderBy}`, ...params);
 
     const unsortedSourceCount = (await db.get('SELECT COUNT(*) AS n FROM sources WHERE user_id = ? AND session_id IS NULL', req.userId)).n;

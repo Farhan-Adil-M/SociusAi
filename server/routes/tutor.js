@@ -45,7 +45,7 @@ async function maybeStartAutoDeck({ db, ai, vector, scope, userId }) {
 
 export function tutorRouter({ db, ai, vector, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   // One-off teaching approach for this answer (v1.4): stored styles plus the
   // request-only values 'simpler' and 'different'.

@@ -28,7 +28,7 @@ function parseFields(json) {
 }
 
 async function loadSubjects(db, userId) {
-  return db.all('SELECT * FROM learner_subjects WHERE user_id = ? ORDER BY subject COLLATE NOCASE', userId);
+  return db.all('SELECT * FROM learner_subjects WHERE user_id = ? ORDER BY LOWER(subject)', userId);
 }
 
 // ---- validation (all input is untrusted; clients cannot write 'source') ----
@@ -145,7 +145,7 @@ export function profileToApi(row, subjects) {
 
 export function profileRouter({ db, ai, vector, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   router.get('/', async (req, res) => {
     const row = await loadProfileRow(db, req.userId);
@@ -223,7 +223,7 @@ export function profileRouter({ db, ai, vector, auth }) {
 // Turn logic, model validation and all writes live in services/onboarding.js.
 export function onboardingRouter({ db, ai, vector, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   router.post('/message', async (req, res) => {
     const raw = req.body?.message;

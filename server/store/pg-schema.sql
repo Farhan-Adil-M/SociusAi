@@ -50,6 +50,7 @@ create table if not exists public.sources (
   origin      text not null default 'upload'
 );
 create index if not exists sources_user on public.sources(user_id);
+create index if not exists sources_session on public.sources(session_id);
 
 create table if not exists public.source_segments (
   source_id  text not null references public.sources(id) on delete cascade,
@@ -70,6 +71,7 @@ create table if not exists public.quizzes (
   session_id     text references public.study_sessions(id) on delete set null
 );
 create index if not exists quizzes_user on public.quizzes(user_id);
+create index if not exists quizzes_session on public.quizzes(session_id);
 
 create table if not exists public.quiz_questions (
   quiz_id           text not null references public.quizzes(id) on delete cascade,
@@ -114,6 +116,7 @@ create table if not exists public.decks (
   last_reviewed_at text
 );
 create index if not exists decks_user on public.decks(user_id);
+create index if not exists decks_session on public.decks(session_id);
 
 create table if not exists public.deck_cards (
   deck_id        text not null references public.decks(id) on delete cascade,
@@ -202,22 +205,22 @@ alter table public.learning_events enable row level security;
 alter table public.vector_chunks   enable row level security;
 
 drop policy if exists own_rows on public.profiles;
-create policy own_rows on public.profiles for all using (auth.uid() = id) with check (auth.uid() = id);
+create policy own_rows on public.profiles for all using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 drop policy if exists own_rows on public.study_sessions;
-create policy own_rows on public.study_sessions for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.study_sessions for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.sources;
-create policy own_rows on public.sources for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.sources for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.quizzes;
-create policy own_rows on public.quizzes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.quizzes for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.quiz_attempts;
-create policy own_rows on public.quiz_attempts for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.quiz_attempts for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.learner_topics;
-create policy own_rows on public.learner_topics for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.learner_topics for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.decks;
-create policy own_rows on public.decks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.decks for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.activity;
-create policy own_rows on public.activity for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.activity for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.learner_subjects;
-create policy own_rows on public.learner_subjects for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.learner_subjects for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_rows on public.learning_events;
-create policy own_rows on public.learning_events for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy own_rows on public.learning_events for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);

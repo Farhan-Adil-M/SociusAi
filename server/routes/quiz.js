@@ -14,7 +14,7 @@ const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 
 export function quizRouter({ db, ai, vector, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   router.post('/generate', async (req, res) => {
     const { topic, questionCount, difficulty, sourceIds, sessionId } = req.body ?? {};

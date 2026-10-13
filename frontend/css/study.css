@@ -224,25 +224,6 @@
 }
 .onboard-title svg { color: var(--blue); }
 
-/* Dismissible offer card — banner vocabulary */
-.onboard-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  margin: var(--s3) var(--s4);
-  padding: var(--s3) var(--s4);
-  background: var(--blue-soft);
-  border: 1px solid var(--blue-line);
-  border-left: 3px solid var(--blue);
-  border-radius: var(--r-md);
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  line-height: 1.5;
-}
-.onboard-card strong { color: var(--blue-ink); }
-.onboard-actions { display: flex; flex: none; gap: var(--s2); }
-
 /* One-line state notes (completed / skipped / already set up) */
 .onboard-note {
   margin-block: var(--s2);

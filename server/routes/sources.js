@@ -170,8 +170,49 @@ export function sourcesRouter({ db, ai, vector, auth }) {
   const embed = ai?.embedTexts ?? embedTexts;
   const store = vector?.addChunks ?? addChunks;
   const remove = vector?.deleteChunks ?? deleteChunks;
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
+
+  // Supabase-Storage ingest: the browser uploads the file DIRECTLY to the
+  // study-sources bucket (bypassing the ~4.5 MB serverless request cap, so
+  // 25 MB PDFs work in production), then hands us the object path. We fetch
+  // the bytes back with the USER'S OWN JWT (RLS keeps it owner-safe) and run
+  // the normal extraction pipeline.
+  router.post('/storage-ingest', async (req, res) => {
+    const { storagePath, title, sizeBytes } = req.body ?? {};
+    if (typeof storagePath !== 'string' || !storagePath.includes('/') || storagePath.includes('..')) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'storagePath is required (bucket object path like <userId>/<file>).');
+    }
+    const APP_MAX = Number(process.env.MAX_STORAGE_UPLOAD_MB ?? 25);
+    if (Number.isFinite(Number(sizeBytes)) && Number(sizeBytes) > APP_MAX * 1024 * 1024) {
+      throw new ApiError(413, 'FILE_TOO_LARGE', `This file is ${(Number(sizeBytes) / 1048576).toFixed(1)} MB — storage upload limit is ${APP_MAX} MB.`);
+    }
+    const ext = path.extname(storagePath).toLowerCase();
+    if (ext !== '.pdf' && ext !== '.pptx') {
+      throw new ApiError(400, 'UNSUPPORTED_FILE', 'Only .pdf and .pptx files can be ingested.');
+    }
+    const userToken = req.userToken;
+    if (!userToken) {
+      throw new ApiError(500, 'INTERNAL', 'Storage ingest requires the authenticated request token.');
+    }
+    const objectUrl = `${config.supabaseUrl}/storage/v1/object/study-sources/${storagePath}`;
+    const response = await fetch(objectUrl, { headers: { Authorization: `Bearer ${userToken}` } });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new ApiError(422, 'STORAGE_FETCH_FAILED',
+        `Could not read the uploaded file from storage (${response.status}). Re-upload the file and try again.${detail ? '' : ''}`);
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const extracted = ext === '.pdf' ? await extractPdf(bytes) : extractPptx(bytes);
+    const source = await persistSource(db, {
+      type: ext === '.pdf' ? 'pdf' : 'pptx',
+      title: typeof title === 'string' && title.trim() ? title.trim().slice(0, 160) : storagePath.split('/').pop(),
+      userId: req.userId,
+      ...extracted,
+    }, { embed, store, remove });
+    await logActivity(db, 'upload', null, `${source.title} via storage (${source.pageCount ?? source.slideCount} pages)`, null, req.userId);
+    res.status(201).json({ source: { ...source, url: null } });
+  });
   router.post('/upload', uploadSingleFile, async (req, res) => {
     if (!req.file) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Attach one file in the "file" field.');

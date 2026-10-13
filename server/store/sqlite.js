@@ -38,9 +38,14 @@ export function parseJsonObject(text, fallback = {}) {
   }
 }
 
-export async function logActivity(db, type, topic, detail, sessionId = null, userId = 'default') {
+export async function logActivity(db, type, topic, detail, sessionId = null, userId) {
+  // Supabase mode: a forgotten userId must fail loudly, never fall through to
+  // the shared prototype owner (audit: fail-open defaults).
+  if (config.supabaseUrl && (userId === undefined || userId === null || userId === '')) {
+    throw new Error('logActivity requires a userId in supabase mode.');
+  }
   await db.run('INSERT INTO activity (type, topic, detail, at, session_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-    type, topic ?? null, detail, nowIso(), sessionId, userId);
+    type, topic ?? null, detail, nowIso(), sessionId, userId ?? 'default');
 }
 
 // ---- app-level metadata (researched values that must survive restarts) ----
@@ -85,6 +90,23 @@ export async function loadProfileRow(db, userId) {
     return row ? normalizePgProfile(row) : null;
   }
   return await db.get('SELECT * FROM learner_profile WHERE id = ?', userId) ?? null;
+}
+
+/**
+ * Ownership-root bootstrap. On pg, EVERY per-user table (sessions, sources,
+ * activity, subjects, decks, …) has a foreign key to profiles(id), so a
+ * brand-new account cannot write anything until its profile row exists.
+ * Onboarding normally creates it, but a fresh user may act first (create a
+ * session) — so the auth guard ensures the row idempotently. SQLite does not
+ * enforce those foreign keys, so it stays a no-op there.
+ */
+export async function ensureProfileRow(db, userId) {
+  if (!isPgEngine(db)) return;
+  await db.run(
+    `INSERT INTO public.profiles (id, onboarding_state, onboarding_json, fields_json, created_at, updated_at)
+     VALUES (?, 'new', '[]', '{}', ?, ?) ON CONFLICT (id) DO NOTHING`,
+    userId, nowIso(), nowIso(),
+  );
 }
 
 /**

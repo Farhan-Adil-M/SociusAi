@@ -6,7 +6,7 @@
 // frontend — the browser only ever receives the PUBLIC (anon) config.
 //
 // - mode 'supabase': @supabase/supabase-js is lazy-loaded ONCE from
-//   Lfrontend/vendor/supabase.js (vendored in the repo — no CDN calls). The
+//   frontend/vendor/supabase.js (vendored in the repo — no CDN calls). The
 //   session is stored by supabase-js in localStorage (its `sb-…-auth-token`
 //   key) and is restored on every page load via auth.getSession(); refresh is
 //   handled by the library (we force one refresh after an UNAUTHENTICATED 401).
@@ -195,3 +195,25 @@ export async function requireSignIn() {
   return false;
 }
 export { authReady as waitForAuth };
+
+/** 25 MB-capable upload path: the file goes DIRECTLY into Supabase Storage so
+ *  serverless request-body limits cannot reject it. Returns the object path
+ *  ({ storagePath }) the backend ingests. Requires the study-sources bucket +
+ *  RLS policy (owner-only uploads): `storage/objects` owner-scoped. */
+export async function storageUploadToStudySources(file, { userId } = {}) {
+  const booted = await authReady();
+  if (booted.mode !== 'supabase' || !client) {
+    throw Object.assign(new Error('storage-unavailable'), { code: 'STORAGE_UNAVAILABLE' });
+  }
+  const who = userId ?? (session?.user?.id ?? '');
+  const safeName = file.name.replace(/[\\/]+/g, '_');
+  const objectPath = `${who}/${Date.now()}_${safeName}`;
+  const { error } = await client.storage.from('study-sources')
+    .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream' });
+  if (error) {
+    const err = new Error(error.message ?? 'Storage upload failed');
+    err.code = error.status || 'STORAGE_UPLOAD_FAILED';
+    throw err;
+  }
+  return { storagePath: objectPath };
+}

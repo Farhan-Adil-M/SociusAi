@@ -34,7 +34,7 @@ function deckRowToApi(row, extra = {}) {
 
 export function decksRouter({ db, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   router.get('/', async (req, res) => {
     const { sessionId: sessionFilter, category, q } = req.query;
@@ -79,7 +79,7 @@ export function decksRouter({ db, auth }) {
     // "active" = last studied first, never-studied decks last, newest first then.
     const orderBy = {
       recent: 'd.created_at DESC',
-      alpha: 'd.topic COLLATE NOCASE ASC',
+      alpha: 'LOWER(d.topic) ASC',
       active: `CASE WHEN d.last_reviewed_at IS NOT NULL THEN d.last_reviewed_at ELSE '' END DESC, d.created_at DESC`,
     }[sort];
 
@@ -182,7 +182,7 @@ export function decksRouter({ db, auth }) {
 // with its id. Mounted by app.js under /api/flashcards.
 export function flashcardsRouter({ db, ai, vector, auth }) {
   const router = express.Router();
-  router.use(requireAuth({ auth }));
+  router.use(requireAuth({ auth, db }));
 
   router.post('/generate', async (req, res) => {
     const { topic, count, sourceIds, sessionId } = req.body ?? {};

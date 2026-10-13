@@ -118,7 +118,7 @@ When finished, report:
 - Any tasks not completed and why.
 - Remaining risks and manual checks.
 
-## Phase 6 — Real accounts & hosted data (current: commits 95aa849 + 23177a4)
+## Phase 6 — Real accounts & hosted data (current: live E2E 21/21 green)
 
 - [x] Supabase tier-1: pg schema + RLS policies + composite PKs (migrate:supabase, stamp 7 live)
 - [x] pgEngine third engine over the facade; supabase/prototype mode split (auth middleware)
@@ -129,6 +129,21 @@ When finished, report:
 - [x] fixed: onboarding `now` crash; RLS on app_meta; quiz_attempts owner index; OR IGNORE/REPLACE removed;
       reindex per-owner scoping (was cross-user corruption)
 - [x] two dedicated test accounts live as confirmed identities (see .env.e2e)
-- [ ] **BLOCKED (user, 1 min):** Dashboard → Auth → Providers → Email → turn **Confirm email OFF**, so real-mode
-      E2E (`node --env-file=.env --env-file=.env.e2e scripts/e2e-auth-isolation.mjs`) can prove two-user sign-in.
-- [ ] re-run the E2E script above once the settings change.
+- [x] **sign-in unblocked WITHOUT a dashboard change:** gotrue scans its token columns as Go
+      strings (supabase/auth#1940) — manually-created users must store `''`, not NULL, in
+      confirmation_token / recovery_token / email_change / email_change_token_new /
+      email_change_token_current / phone_change / phone_change_token / reauthentication_token,
+      plus instance_id = zero-uuid. Fixed by direct SQL; both test accounts now password-grant.
+- [x] live two-user E2E green: `node --env-file=.env --env-file=.env.e2e scripts/e2e-auth-isolation.mjs`
+      → 21/21 (auth, per-user session/source/tutor, cross-user 404s, profile isolation, persistence)
+- [x] tutor 500 root cause fixed: chromadb 3.x needs @chroma-core/default-embed at collection
+      creation (vectorStore now hands it a real interface instance)
+- [x] mandatory onboarding: study page locks the tutor composer until the intro finishes
+      (no Skip / Not now); browser-verified 11/11 via Playwright
+- [x] 25 MB uploads in supabase mode: direct-to-Storage path (study-sources bucket, owner-only
+      RLS) + POST /api/sources/storage-ingest; local multipart keeps its 25 MB cap
+- [x] fresh-account writes fixed: auth guard bootstraps the profile row every pg table FKs to
+- [x] SQLite-ism removed: COLLATE NOCASE → LOWER(...) (sessions, subjects, decks sorts)
+- [x] skill hardening applied live: (select auth.uid()) in all 10 own_rows policies; owner indexes
+      on sources.session_id / quizzes.session_id / decks.session_id; fail-open 'default' owner
+      defaults now throw in supabase mode; per-user seed no longer gated on the global chunk count

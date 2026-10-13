@@ -44,12 +44,15 @@ export function filterByEvidence(hits, minScore, relativeKeep = config.ragRelati
   return hits.filter((_, i) => scores[i] >= cutoff);
 }
 
-export async function retrieve(question, { sourceIds = [], k = DEFAULT_K, minScore = config.ragMinSimilarity, ai, vector, userId = 'default' } = {}) {
+export async function retrieve(question, { sourceIds = [], k = DEFAULT_K, minScore = config.ragMinSimilarity, ai, vector, userId } = {}) {
+  // Supabase mode owns every read by user — a missing userId is a bug, not a
+  // default (audit: fail-open 'default' defaults).
+  if (config.supabaseUrl && !userId) throw new Error('retrieve requires a userId in supabase mode.');
   const embedFn = ai?.embedQuery ?? embedQuery;
   const queryFn = vector?.queryChunks ?? queryChunks;
 
   const embedding = await embedFn(question);
-  let hits = await queryFn({ embedding, nResults: k, sourceIds, userId });
+  let hits = await queryFn({ embedding, nResults: k, sourceIds, userId: userId ?? 'default' });
   hits = dedupeHits(hits);
   hits = filterByEvidence(hits, minScore);
   return hits;

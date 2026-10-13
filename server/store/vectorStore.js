@@ -3,6 +3,9 @@
 // server (see README "Local Chroma fallback"). Callers never see the difference.
 
 import { ChromaClient, CloudClient } from 'chromadb';
+// chromadb 3.x validates the embedding function when it creates a concrete
+// collection; the guard class we hand in must satisfy the interface shape.
+import { DefaultEmbeddingFunction } from '@chroma-core/default-embed';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
 
@@ -12,12 +15,14 @@ let collectionPromise = null;
 // needs Chroma's own embedding. The client still requires an embedding function
 // handle when opening a collection, so we hand it one that refuses to run —
 // catching accidental text-based calls instead of silently embedding wrongly.
-const explicitVectorsOnly = {
-  name: 'socius-explicit-vectors',
-  async generate() {
-    throw new Error('This client always sends explicit NVIDIA NIM embeddings — never text.');
-  },
-};
+// Chroma 3.x validates the embedding function on collection creation, so we
+// hand it one from its own interface family (@chroma-core/default-embed).
+// Our code NEVER calls generate(): every write ships an explicit NVIDIA NIM
+// vector (the old hand-rolled guard object failed the interface check).
+const explicitVectorsOnly = new DefaultEmbeddingFunction({
+  api_token: 'explicit-vectors-only', // value never used: we always pass vectors
+  model: 'unused',
+});
 
 function makeClient() {
   if (config.chromaApiKey) {
@@ -52,7 +57,18 @@ function isNotFound(err) {
   return err && (err.name === 'InvalidCollectionError' || err.name === 'NotFoundError');
 }
 
-export async function addChunks({ ids, embeddings, documents, metadatas, userId = 'default' }) {
+function requireOwner(userId) {
+  // Supabase mode has real accounts: a forgotten userId must fail loudly —
+  // silently defaulting would write or read the shared 'default' owner.
+  // Prototype mode (no SUPABASE envs) keeps the fixed dev user by design.
+  if (config.supabaseUrl && (userId === undefined || userId === null || userId === '')) {
+    throw new Error('userId is required in supabase mode (ownership filter).');
+  }
+  return userId ?? 'default';
+}
+
+export async function addChunks({ ids, embeddings, documents, metadatas, userId }) {
+  userId = requireOwner(userId);
   try {
     const collection = await getCollection();
     // Ownership lives in chunk metadata (Chroma has no user columns): every
@@ -67,7 +83,8 @@ export async function addChunks({ ids, embeddings, documents, metadatas, userId 
   }
 }
 
-export async function queryChunks({ embedding, nResults = 6, sourceIds = [], userId = 'default' }) {
+export async function queryChunks({ embedding, nResults = 6, sourceIds = [], userId }) {
+  userId = requireOwner(userId);
   try {
     const collection = await getCollection();
     // Per-user retrieval: chunks added by other users carry a different
