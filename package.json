@@ -4,7 +4,7 @@
   "description": "Socius AI — AI study companion: grounded tutoring, quizzes, and adaptive learning.",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=22.5" },
+  "engines": { "node": "24.x" },
   "scripts": {
     "start": "node --env-file=.env server/index.js",
     "dev": "node --watch --env-file=.env server/index.js",

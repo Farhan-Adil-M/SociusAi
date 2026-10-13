@@ -57,6 +57,16 @@ Open http://localhost:3000 — `GET /api/health` shows whether sqlite, Chroma, a
 
 **Exposure policy:** by default the server binds to `127.0.0.1` — this machine only. The app has **no authentication**: never port-forward it or put it behind a public URL; that requires an approved authentication/rate-limiting design first. On a trusted local network you may opt in by setting `BIND_HOST` in `.env` to your LAN IP (or `0.0.0.0`) and restarting — the startup log then prints the `http://<lan-ip>:<port>` URLs to open from other devices, and anyone on that network can upload, delete data, and spend NIM tokens.
 
+## Deploying to Vercel (cloud demo)
+
+```
+vercel login  →  vercel link --yes  →  vercel deploy --prod --yes
+```
+
+- `api/index.js` mounts the same Express app; `vercel.json` routes `/api/*` and app pages to it (60s max duration for long model calls).
+- Set these env vars in the Vercel dashboard/CLI: `NIM_API_KEY`, `NIM_BASE_URL`, `NIM_CHAT_MODEL`, `NIM_ASSESS_MODEL`, `NIM_EMBED_MODEL`, `RAG_MIN_SIMILARITY`, `RAG_RELATIVE_KEEP`, `MAX_UPLOAD_MB` (well below 4 on serverless, Vercel request-body limit), plus Chroma **Cloud** credentials (`CHROMA_API_KEY`, `CHROMA_TENANT`, `CHROMA_DATABASE`) — the local venv Chroma server cannot run on Vercel.
+- Two honest differences from the laptop: SQLite there is **ephemeral** (`/tmp` resets on cold starts — progress is not durable without a hosted DB), and uploads are capped ≈4 MB. For the full-fidelity demo, `npm start` on this laptop remains the primary environment.
+
 ## Test
 
 ```bash

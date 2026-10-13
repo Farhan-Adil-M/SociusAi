@@ -17,3 +17,6 @@ __pycache__/
 # Logs and OS noise
 *.log
 .DS_Store
+.vercel
+.env*
+.vercel/
