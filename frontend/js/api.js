@@ -80,8 +80,19 @@ async function request(path, { method = 'GET', body, formData, signal } = {}) {
 
   if (!response.ok) {
     const envelope = data && data.error ? data.error : {};
-    const message = envelope.message || HTTP_FALLBACKS[response.status] || 'Request failed.';
-    throw new ApiError(envelope.code || 'INTERNAL', message, response.status, data);
+    let code = envelope.code || 'INTERNAL';
+    let message = envelope.message || HTTP_FALLBACKS[response.status] || 'Request failed.';
+
+    // Vercel (and similar hosts) reject request bodies over their platform cap
+    // (~4.5 MB) with a generic 413 before OUR middleware ever runs — the body
+    // is plain text/HTML, never our JSON envelope. Say so plainly instead of
+    // letting it fall through to the generic fallback message.
+    if (response.status === 413 && !data) {
+      code = 'FILE_TOO_LARGE';
+      message = 'The server rejected this upload because it exceeds the maximum request size for this environment (~4 MB on the cloud demo — use a smaller file). The full-size demo runs on the laptop.';
+    }
+
+    throw new ApiError(code, message, response.status, data);
   }
   return data;
 }

@@ -124,13 +124,22 @@ export function decksRouter({ db }) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'status must be new, known, or review.');
     }
 
+    // Both writes are one transaction: a card mark never lands without the
+    // deck's lastReviewedAt stamp (and vice versa).
     const now = nowIso();
-    const update = db.prepare('UPDATE deck_cards SET status = ?, reviewed_at = ? WHERE deck_id = ? AND idx = ?')
-      .run(status, now, deck.id, idx);
-    if (update.changes === 0) {
-      throw new ApiError(404, 'DECK_NOT_FOUND', `Card ${idx} does not exist in the deck.`);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const update = db.prepare('UPDATE deck_cards SET status = ?, reviewed_at = ? WHERE deck_id = ? AND idx = ?')
+        .run(status, now, deck.id, idx);
+      if (update.changes === 0) {
+        throw new ApiError(404, 'DECK_NOT_FOUND', `Card ${idx} does not exist in the deck.`);
+      }
+      db.prepare('UPDATE decks SET last_reviewed_at = ? WHERE id = ?').run(now, deck.id);
+      db.exec('COMMIT');
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch { /* nothing left to roll back */ }
+      throw err; // express error handler still returns the right envelope
     }
-    db.prepare('UPDATE decks SET last_reviewed_at = ? WHERE id = ?').run(now, deck.id);
     // Observed learning event: marking a card known/reviewed is weak evidence;
     // re-marking it new is not evidence at all, so nothing is recorded.
     if (status !== 'new') {

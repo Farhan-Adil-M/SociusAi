@@ -107,7 +107,9 @@ function citationsForQuestion(hits, citeIndexes) {
 
 // ---------- generation ----------
 
-async function generateQuestionBatch({ topic, difficulty, count, evidence }, chat) {
+// Exported for studyAdvice (tutor "important questions" intent) — the quiz
+// generator and the tutor reuse the exact same batch generation logic.
+export async function generateQuestionBatch({ topic, difficulty, count, evidence }, chat) {
   const systemPrompt = [
     'You write multiple-choice quiz questions strictly from the passages provided.',
     `Topic: ${topic}. Difficulty: ${difficulty}.`,

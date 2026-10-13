@@ -433,7 +433,26 @@ function setGenerating(value) {
     : 'Generate deck';
 }
 
+/** Start the generator's "Search in" select from a clean state. */
+function resetGeneratorSessionSelect() {
+  sessionSelect.replaceChildren();
+  const allMaterial = document.createElement('option');
+  allMaterial.value = '';
+  allMaterial.textContent = 'All material';
+  sessionSelect.appendChild(allMaterial);
+}
+
+/** Error banner for a broken session scope, with a Retry that reloads the list. */
+function showSessionScopeError(messageHtml) {
+  setSetupStatus('error', `${icon('alert', { size: 16 })} <span>${messageHtml}
+    <button type="button" class="btn btn-secondary btn-sm" data-retry-sessions>Retry</button></span>`);
+  setupStatus.querySelector('[data-retry-sessions]')?.addEventListener('click', () => {
+    populateGeneratorSessionSelect();
+  });
+}
+
 async function populateGeneratorSessionSelect() {
+  resetGeneratorSessionSelect();
   try {
     const data = await api.listSessions();
     for (const session of data.sessions || []) {
@@ -442,11 +461,23 @@ async function populateGeneratorSessionSelect() {
       option.textContent = session.title;
       sessionSelect.appendChild(option);
     }
-    if (presetSessionId && [...sessionSelect.options].some((option) => option.value === presetSessionId)) {
-      sessionSelect.value = presetSessionId;
+    const presetListed = presetSessionId && [...sessionSelect.options].some((option) => option.value === presetSessionId);
+    if (presetListed) sessionSelect.value = presetSessionId;
+    if (presetSessionId && !presetListed) {
+      // Reopened for a specific session, but it is not offered (e.g. filtered
+      // out of the default list) — never silently fall back to All material.
+      showSessionScopeError(`Flashcards cannot be scoped to <strong>${escapeHtml(presetSessionId)}</strong>:
+        the session is not in the available list. Check that it exists, then Retry.`);
+    } else {
+      setSetupStatus('', '');
     }
   } catch {
-    // The generator still works with "All material" if sessions fail to load.
+    // Without the session list we cannot scope generation to a preset
+    // session, and "All material" would quietly contradict the page URL.
+    if (presetSessionId) {
+      showSessionScopeError(`Flashcards cannot be scoped to <strong>${escapeHtml(presetSessionId)}</strong>:
+        the session list could not be loaded. Retry to load it and generate.`);
+    }
   }
   refreshScope();
 }
@@ -474,6 +505,13 @@ form.addEventListener('submit', async (event) => {
   const count = Number(countSelect.value);
   const sourceIds = scopeSelect.value ? [scopeSelect.value] : [];
   const sessionId = sessionSelect.value || null;
+
+  // The page was opened for a specific session; never generate outside it.
+  if (presetSessionId && sessionSelect.value !== presetSessionId) {
+    showSessionScopeError(`Flashcards cannot be scoped to <strong>${escapeHtml(presetSessionId)}</strong>:
+      the session list is not loaded correctly, so the deck could not be saved under it. Retry loading the sessions first.`);
+    return;
+  }
 
   setGenerating(true);
   try {

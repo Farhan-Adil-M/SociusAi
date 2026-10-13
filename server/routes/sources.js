@@ -30,6 +30,26 @@ const upload = multer({
   },
 });
 
+// multer rejects an oversized file with a bare MulterError that knows the
+// field name but not the file size, so we turn it into the contract's 413
+// FILE_TOO_LARGE envelope here, with the REAL configured limit in the message.
+function uploadSingleFile(req, res, next) {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        // memoryStorage keeps (a truncated version of) the file on the request
+        // when the limit trips, so the real size is often available to show.
+        const actualMb = req.file?.size != null ? (req.file.size / (1024 * 1024)).toFixed(1) : null;
+        const sizeNote = actualMb != null ? `This file is ${actualMb} MB` : 'This file is too large';
+        return next(new ApiError(413, 'FILE_TOO_LARGE',
+          `${sizeNote} — the upload limit is ${config.maxUploadMb} MB. Use a smaller file, or ask the server owner to raise MAX_UPLOAD_MB.`));
+      }
+      return next(err);
+    }
+    next();
+  });
+}
+
 function sizeLabelFor(type, pageCount, slideCount) {
   if (type === 'webpage') return 'webpage';
   if (pageCount != null) return `${pageCount} pages`;
@@ -141,7 +161,7 @@ export function sourcesRouter({ db, ai, vector }) {
   const store = vector?.addChunks ?? addChunks;
   const remove = vector?.deleteChunks ?? deleteChunks;
 
-  router.post('/upload', upload.single('file'), async (req, res) => {
+  router.post('/upload', uploadSingleFile, async (req, res) => {
     if (!req.file) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Attach one file in the "file" field.');
     }

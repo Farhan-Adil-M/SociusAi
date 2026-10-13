@@ -16,6 +16,9 @@ export function assertConfig() {
   }
 }
 
+const tursoDatabaseUrl = optional('TURSO_DATABASE_URL', '');
+const tursoAuthToken = optional('TURSO_AUTH_TOKEN', '');
+
 export const config = {
   port: Number(optional('PORT', 3000)),
   maxUploadMb: Number(optional('MAX_UPLOAD_MB', 25)),
@@ -45,5 +48,7 @@ export const config = {
   chromaLocalHost: optional('CHROMA_LOCAL_HOST', 'localhost'),
   chromaLocalPort: Number(optional('CHROMA_LOCAL_PORT', 8100)),
 
+  tursoDatabaseUrl,
+  tursoAuthToken,
   dataDir: optional('DATA_DIR', 'data'),
 };

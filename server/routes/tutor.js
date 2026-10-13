@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/errors.js';
 import { answerQuestion } from '../services/tutorService.js';
 import { APPROACH_ORDER } from '../services/events.js';
 import { assertSourcesExist, resolveScope } from '../services/retrieval.js';
+import { classifyIntent, revisionAdvice, progressAdvice, importantQuestions } from '../services/studyAdvice.js';
 import { logActivity } from '../store/sqlite.js';
 
 export function tutorRouter({ db, ai, vector }) {
@@ -28,6 +29,28 @@ export function tutorRouter({ db, ai, vector }) {
     const scope = resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
     if (!scope.session) {
       await assertSourcesExist(db, sourceIds ?? []); // legacy path: plain source filter
+    }
+
+    // ---- study-planning intents (Part 6) ----
+    // Deterministic keyword routing AFTER all validation and scoping. The
+    // 'important-questions' branch passes the SAME server-enforced sourceIds
+    // scope as the normal path. intent 'normal' falls through to the existing
+    // answering flow below, untouched.
+    const intent = classifyIntent(question.trim()).intent;
+    if (intent === 'revise-next') {
+      const result = revisionAdvice(db); // deterministic, no AI call
+      logActivity(db, 'question', null, `[revision] asked what to revise: ${question.trim().slice(0, 80)}`, scope.session?.id ?? null);
+      return res.json({ ...result, sessionId: scope.session?.id ?? null });
+    }
+    if (intent === 'progress') {
+      const result = progressAdvice(db); // deterministic roll-up, no AI call
+      logActivity(db, 'question', null, `[progress] asked how they are doing: ${question.trim().slice(0, 80)}`, scope.session?.id ?? null);
+      return res.json({ ...result, sessionId: scope.session?.id ?? null });
+    }
+    if (intent === 'important-questions') {
+      const result = await importantQuestions(db, { question: question.trim(), sourceIds: scope.sourceIds }, { ai, vector });
+      logActivity(db, 'question', null, `[practice] asked for important questions: ${question.trim().slice(0, 80)}`, scope.session?.id ?? null);
+      return res.json({ ...result, sessionId: scope.session?.id ?? null });
     }
 
     const result = await answerQuestion(

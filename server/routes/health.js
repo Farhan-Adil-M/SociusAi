@@ -58,8 +58,15 @@ export function healthRouter({ db, ai, vector }) {
       }
     }
 
+    // Static fact, not a service probe. The status rollup is computed from the
+    // three service checks BEFORE limits is added, so this can never mark the
+    // system degraded. The frontend reads checks.limits.maxUploadMb to show the
+    // real upload cap instead of a hardcoded number.
+    const status = Object.values(checks).every((c) => c.ok) ? 'ok' : 'degraded';
+    checks.limits = { maxUploadMb: config.maxUploadMb };
+
     const payload = {
-      status: Object.values(checks).every((c) => c.ok) ? 'ok' : 'degraded',
+      status,
       checks,
     };
     cached = { at: Date.now(), payload };

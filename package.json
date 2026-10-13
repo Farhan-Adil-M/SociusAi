@@ -4,16 +4,20 @@
   "description": "Socius AI — AI study companion: grounded tutoring, quizzes, and adaptive learning.",
   "type": "module",
   "private": true,
-  "engines": { "node": "24.x" },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "start": "node --env-file=.env server/index.js",
     "dev": "node --watch --env-file=.env server/index.js",
     "test": "node --test tests/",
     "e2e": "node --env-file=.env scripts/e2e-smoke.mjs",
     "reindex": "node --env-file=.env scripts/reindex.js",
-    "eval": "node --env-file=.env scripts/eval-retrieval.mjs"
+    "eval": "node --env-file=.env scripts/eval-retrieval.mjs",
+    "migrate": "node --env-file=.env scripts/migrate-db.mjs"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "adm-zip": "0.6.1",
     "chromadb": "3.5.0",
     "express": "5.3.0",

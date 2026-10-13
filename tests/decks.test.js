@@ -22,14 +22,15 @@ const json = (res) => res.json();
 
 async function startApp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-decks-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const dbPath = path.join(dir, 'app.db');
+  const db = openDb(dbPath);
   const app = createApp({ db, ai: makeAi(), vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
-  return { base: `http://localhost:${server.address().port}`, db, server, close: () => new Promise((r) => server.close(r)) };
+  return { base: `http://localhost:${server.address().port}`, db, dbPath, server, close: () => new Promise((r) => server.close(r)) };
 }
 
-test('decks persist and review status survives a restart', async (t) => {
+test('decks persist and review status survive a restart across instances', async (t) => {
   const ctx = await startApp();
   t.after(ctx.close);
 
@@ -77,12 +78,28 @@ test('decks persist and review status survives a restart', async (t) => {
   assert.equal(after.cards[0].status, 'known');
   assert.equal(after.cards[1].status, 'review');
 
-  // "Restart": a second app instance over the same SQLite file sees everything.
-  const restarted = await fetch(`${ctx.base}/api/decks?sessionId=${session.id}`).then(json);
-  assert.equal(restarted.decks[0].knownCount, 1);
+  // "Restart": a genuinely separate app instance reopened over the same
+  // SQLite file — no shared in-memory state with the first app.
+  const db2 = openDb(ctx.dbPath);
+  const app2 = createApp({ db: db2, ai: makeAi(), vector: fakeVector() });
+  const server2 = app2.listen(0);
+  await once(server2, 'listening');
+  t.after(() => new Promise((r) => server2.close(r)));
+  const base2 = `http://localhost:${server2.address().port}`;
 
-  const rightAfterRestart = await fetch(`${ctx.base}/api/decks/${deck.id}`).then(json);
+  const restarted = await fetch(`${base2}/api/decks?sessionId=${session.id}`).then(json);
+  assert.equal(restarted.decks.length, 1);
+  assert.equal(restarted.decks[0].id, deck.id);
+  assert.equal(restarted.decks[0].knownCount, 1);
+  assert.equal(restarted.decks[0].reviewCount, 1);
+  assert.ok(restarted.decks[0].lastReviewedAt);
+
+  const rightAfterRestart = await fetch(`${base2}/api/decks/${deck.id}`).then(json);
   assert.equal(rightAfterRestart.cards[0].status, 'known');
+  assert.equal(rightAfterRestart.cards[1].status, 'review');
+  assert.equal(rightAfterRestart.cards[1].idx, 1);
+  assert.ok(rightAfterRestart.cards[1].reviewedAt);
+  assert.ok(rightAfterRestart.deck.lastReviewedAt);
 
   // Deletion is deliberate and only touches derived content.
   const deleted = await fetch(`${ctx.base}/api/decks/${deck.id}`, { method: 'DELETE' });
@@ -142,4 +159,48 @@ test('session scoping is enforced by the backend, not the UI', async (t) => {
   });
   assert.equal(unknownSession.status, 404);
   assert.equal((await unknownSession.json()).error.code, 'SESSION_NOT_FOUND');
+});
+
+test('a failed review update rolls back — no half-applied card mark', async (t) => {
+  const ctx = await startApp();
+  t.after(ctx.close);
+
+  const webpage = await fetch(`${ctx.base}/api/sources/webpage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(WEBPAGE),
+  }).then(json);
+  const generated = await fetch(`${ctx.base}/api/flashcards/generate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic: 'Cell division', count: 3 }),
+  }).then(json);
+  const deckId = generated.deckId;
+
+  // Force the *second* UPDATE (decks.last_reviewed_at) to abort, so the
+  // parked card write must be rolled back or the card row is left corrupted.
+  ctx.db.exec("CREATE TRIGGER force_deck_fail BEFORE UPDATE ON decks BEGIN SELECT RAISE(ABORT, 'forced failure'); END;");
+  t.after(() => ctx.db.exec('DROP TRIGGER IF EXISTS force_deck_fail'));
+
+  const failed = await fetch(`${ctx.base}/api/decks/${deckId}/cards/1`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'known' }),
+  });
+  assert.equal(failed.status >= 400, true);
+  const error = (await failed.json()).error;
+  assert.ok(error.code && error.message); // standard error envelope
+
+  // The card mark must NOT have stuck: the transaction rolled back.
+  const deck = await fetch(`${ctx.base}/api/decks/${deckId}`).then(json);
+  assert.equal(deck.cards[1].status, 'new');
+  assert.equal(deck.cards[1].reviewedAt, null);
+  assert.equal(deck.cards[1].idx, 1);
+  assert.equal(deck.deck.knownCount, 0);
+  assert.equal(deck.deck.lastReviewedAt, null);
+
+  // The trigger was really the cause: with it dropped, the same mark lands.
+  ctx.db.exec('DROP TRIGGER force_deck_fail');
+  const ok = await fetch(`${ctx.base}/api/decks/${deckId}/cards/1`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'known' }),
+  });
+  assert.equal(ok.status, 200);
+  const afterRecovery = await fetch(`${ctx.base}/api/decks/${deckId}`).then(json);
+  assert.equal(afterRecovery.cards[1].status, 'known');
+  assert.equal(afterRecovery.deck.knownCount, 1);
 });

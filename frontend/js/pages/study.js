@@ -3,7 +3,7 @@
 // `sourceIds` filter, and each question is rendered as an exchange block with
 // its citations. Loading, empty and error states are all handled per block.
 
-import { mountShell, mountHealthBanner } from '../components/shell.js';
+import { mountShell, mountHealthBanner, getHealth } from '../components/shell.js';
 import {
   offerSuggestion, checkUploadFile, checkWebpageInput, findDuplicateSource,
 } from '../components/material-import.js';
@@ -26,6 +26,19 @@ const liveRegion = document.querySelector('[data-live]');
 const sourcesHost = document.querySelector('[data-sources]');
 
 wireCitations(transcript);
+
+/* Upload cap honesty: the real MAX_UPLOAD_MB lives on the backend, which does
+   not expose it anywhere else — it comes inside the health payload
+   (checks.limits.maxUploadMb). getHealth() is the ONE health request the page
+   already makes (shell.js caches it for the banner and status pill), so this
+   adds no extra network call. Before it resolves the hint has no number. */
+const uploadHint = document.querySelector('[data-upload-hint]');
+getHealth().then((health) => {
+  const maxMb = health.ok ? health.data?.checks?.limits?.maxUploadMb : null;
+  if (uploadHint && Number(maxMb) > 0) {
+    uploadHint.textContent = `Text-based files only, up to ${maxMb} MB.`;
+  }
+});
 
 let sources = [];
 let sending = false;

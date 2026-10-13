@@ -34,6 +34,10 @@ Stable error codes:
 | `NIM_ERROR` | 502 | AI provider failed or returned unusable output |
 | `NIM_TIMEOUT` | 504 | AI provider did not respond in time |
 | `CHROMA_UNAVAILABLE` | 503 | Vector store unreachable |
+| `SESSION_NOT_FOUND` | 404 | Referenced session ID does not exist |
+| `SESSION_EMPTY` | 400 | The session has no material yet (tutor/quiz/flashcards with a `sessionId`) |
+| `DECK_NOT_FOUND` | 404 | Referenced deck ID does not exist |
+| `ONBOARDING_COMPLETE` | 409 | Onboarding already finished (see v1.4) |
 | `INTERNAL` | 500 | Unexpected server error |
 
 **IDs:** readable strings, `src_…`, `quiz_…`, `card_…` (server-generated).
@@ -203,7 +207,7 @@ Generate flashcards (front/back + topic + citations) from retrieved passages for
 }
 ```
 
-Cards are validated server-side (front/back non-empty, within length bounds); invalid cards are discarded. Card study results are not persisted in v1 (see roadmap note in README).
+Cards are validated server-side (front/back non-empty, within length bounds); invalid cards are discarded. The deck itself is **saved** (see v1.1 "Persistent flashcard decks"): every card's study status (`status` + `reviewedAt`) is persisted server-side and survives restarts, and deck review updates are atomic (both the card mark and the deck's `lastReviewedAt` stamp are one SQLite transaction that rolls back on failure).
 
 **Errors:** 400 `VALIDATION_ERROR`, 404 `SOURCE_NOT_FOUND`, 422 `QUIZ_CONTENT_INVALID`, 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`, 504 `NIM_TIMEOUT`.
 
@@ -426,8 +430,8 @@ Empty session: `400 { error: { code: "SESSION_EMPTY", message: "No material in �
 
 ### `GET /api/decks?sessionId=&category=&q=&sort=recent|alpha|active`
 
-→ `200 { decks: [ { id, topic, sessionId, sessionTitle, category, cardCount, knownCount, reviewCount, createdAt, lastReviewedAt } ] }`
-`category` filters via the parent session (decks under Unsorted have `category: null`). Unsorted decks are excluded from `category` filters unless `sessionId=unsorted` is used.
+→ `200 { decks: [ { id, topic, sessionId, sessionTitle, category, cardCount, knownCount, reviewCount, createdAt, lastReviewedAt } ], unsortedDeckCount }`
+`category` filters via the parent session (decks under Unsorted have `category: null`). Unsorted decks are excluded from `category` filters unless `sessionId=unsorted` is used. `unsortedDeckCount` (like the sessions list's `unsortedSourceCount`) is the number of decks whose `sessionId` is `null`.
 
 ### `GET /api/decks/:deckId`
 
