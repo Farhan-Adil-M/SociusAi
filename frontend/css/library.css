@@ -1,18 +1,10 @@
 /* Study Library + Session detail — a personal learning workspace: typographic
    rows on hairline dividers rather than a grid of identical cards. Also holds
    the shared session dialog and the AI suggestion card (both mounted from
-   components/). */
+   components/). Page-head and toolbar chrome shared with the flashcards page
+   lives in components.css. */
 
 /* ---------------------------------------------------------- page head --- */
-
-.lib-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s5);
-  flex-wrap: wrap;
-}
-.lib-head-actions { display: flex; gap: var(--s3); flex-wrap: wrap; padding-top: var(--s2); }
 
 .lib-import { padding: var(--s5); margin-bottom: var(--s5); }
 .lib-import .hairline { margin: var(--s4) 0; }
@@ -20,20 +12,6 @@
 
 /* ------------------------------------------------------------- toolbar --- */
 
-.lib-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  flex-wrap: wrap;
-  margin-bottom: var(--s5);
-  padding: var(--s3) var(--s4);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-}
-.lib-toolbar-search { flex: 1 1 260px; min-width: 200px; }
-.lib-toolbar-filters { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
-.lib-toolbar-filters .select { width: auto; min-width: 150px; }
 .lib-archived {
   display: inline-flex;
   align-items: center;
@@ -213,7 +191,8 @@ a.lib-row-title:hover { color: var(--blue); text-decoration: underline; }
 .sd-source-title { font-size: var(--fs-sm); font-weight: 600; display: flex; align-items: center; gap: var(--s2); }
 .sd-source-meta { font-size: var(--fs-xs); color: var(--ink-3); }
 
-.study-add-status { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s3); font-size: var(--fs-sm); color: var(--ink-2); }
+/* .study-add-status base rule lives in components.css; the sidebar hint above
+   only shrinks its font size. */
 
 /* ------------------------------------------------------------ responsive --- */
 

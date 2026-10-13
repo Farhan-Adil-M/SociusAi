@@ -10,7 +10,7 @@
 
 import { retrieve, toCitation, hitScore } from './retrieval.js';
 import { wrapPassages } from './prompts.js';
-import { generateQuestionBatch } from './quizService.js';
+import { collectQuestions } from './quizService.js';
 import { needsRevision, suggestNext, difficultyFor } from './learner.js';
 import { config } from '../config.js';
 
@@ -45,7 +45,7 @@ const INTENT_PHRASES = [
 ];
 const EDGE_FILLERS = /^(and|from|in|on|about|for|of|my|the|a|an|to|chapter|chapters)\b\s*|\s+\b(and|from|in|on|about|for|of|my|the|a|an|to|chapter|chapters)$/gi;
 
-export function topicForPracticeQuestions(questionText) {
+function topicForPracticeQuestions(questionText) {
   let remaining = String(questionText ?? '');
   for (const phrase of INTENT_PHRASES) {
     remaining = remaining.replace(new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
@@ -114,8 +114,13 @@ export async function progressAdvice(db) {
   const accuracyPercent = questionsAnswered > 0 ? Math.round((correctAnswers / questionsAnswered) * 100) : 0;
 
   const scored = topicRows.filter((row) => row.total > 0);
-  const best = scored.length > 0 ? [...scored].sort((a, b) => (b.correct / b.total) - (a.correct / a.total))[0] : null;
-  const worst = scored.length > 0 ? [...scored].sort(byWorstMastery)[0] : null;
+  const scoreOf = (row) => row.correct / row.total;
+  const sorted = [...scored].sort(byWorstMastery); // one copy: weakest first
+  const worst = sorted[0] ?? null;
+  // Strongest topic: first of the max-ratio group (stable sort keeps the
+  // original order within ties — identical to the old best-first sort's pick).
+  const bestRatio = Math.max(...sorted.map(scoreOf));
+  const best = sorted.find((row) => scoreOf(row) === bestRatio) ?? null;
   const reviseList = topicRows.filter(needsRevision).sort(byWorstMastery).slice(0, 3);
 
   if (attempts.length === 0 && topicRows.length === 0) {
@@ -161,7 +166,6 @@ export async function progressAdvice(db) {
 
 const PRACTICE_PREFIX = 'Practice questions drawn from your material:';
 const PRACTICE_COUNT = 5;
-const PRACTICE_ATTEMPTS = 2; // matches the quiz generator's bounded retries
 
 // Citations come ONLY from the retrieved hits (order of first reference), not
 // from anything the model said. Mapped per question like quizService does.
@@ -169,6 +173,7 @@ function buildCitations(hits, questions) {
   const seen = new Set();
   const out = [];
   const push = (hit) => {
+    if (out.length >= 6) return;
     const cite = toCitation(hit);
     const key = `${cite.sourceId}|${cite.excerpt}`;
     if (seen.has(key)) return;
@@ -176,10 +181,8 @@ function buildCitations(hits, questions) {
     out.push(cite);
   };
   for (const q of questions) {
-    if (out.length >= 6) break;
     const cited = q.cite.slice(0, 3).map((n) => hits[n - 1]).filter(Boolean);
     for (const hit of (cited.length > 0 ? cited : hits.slice(0, 2))) {
-      if (out.length >= 6) break;
       push(hit);
     }
   }
@@ -218,19 +221,14 @@ export async function importantQuestions(db, { question, sourceIds = [] }, { ai,
   const evidence = wrapPassages(hits);
   const topic = topicForPracticeQuestions(question);
 
-  const accepted = [];
-  for (let attempt = 0; attempt < PRACTICE_ATTEMPTS && accepted.length < PRACTICE_COUNT; attempt++) {
-    // generateQuestionBatch already parses, validates and normalizes the loose
-    // model JSON for every question — reuse it as-is. Its chat call may throw
-    // (e.g. provider down) and that failure is allowed to propagate: never
-    // swallow it into a fake answer.
-    const batch = await generateQuestionBatch({ topic, difficulty: 'medium', count: PRACTICE_COUNT, evidence }, ai?.chatCompletion);
-    for (const q of batch) {
-      if (accepted.length >= PRACTICE_COUNT) break;
-      if (accepted.some((a) => a.text.toLowerCase() === q.text.toLowerCase())) continue;
-      accepted.push(q);
-    }
-  }
+  // generateQuestionBatch already parses, validates and normalizes the loose
+  // model JSON for every question — collectQuestions reuses it as-is with the
+  // exact same bounded retries and lowercase dedupe as the quiz generator.
+  // Its chat call may throw (e.g. provider down) and that failure is allowed
+  // to propagate: never swallow it into a fake answer.
+  const accepted = await collectQuestions(
+    { chat: ai?.chatCompletion, topic, difficulty: 'medium', evidence, count: PRACTICE_COUNT },
+  );
 
   if (accepted.length === 0) {
     return {

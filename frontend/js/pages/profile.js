@@ -79,7 +79,7 @@ function formatDay(value) {
 }
 
 /** Simple "not told yet" line beneath an unchanged field. */
-function notYet(name) {
+function notYet() {
   const fresh = profile && profile.state === 'new';
   return fresh
     ? 'Nothing saved yet — take the intro above, or add it here.'
@@ -89,24 +89,16 @@ function notYet(name) {
 /* -------------------------------------------------------- field chrome */
 
 function fieldHead(name, title, hint) {
-  if (editing[name]) {
-    return `
-      <div class="pf-field-head">
-        <div>
-          <h3 class="pf-field-title">${escapeHtml(title)}</h3>
-          ${hint ? `<p class="field-hint">${escapeHtml(hint)}</p>` : ''}
-        </div>
-      </div>`;
-  }
   return `
     <div class="pf-field-head">
       <div>
         <h3 class="pf-field-title">${escapeHtml(title)}</h3>
         ${hint ? `<p class="field-hint">${escapeHtml(hint)}</p>` : ''}
       </div>
+      ${editing[name] ? '' : `
       <button type="button" class="btn btn-secondary btn-sm" data-toggle="${name}">
         ${icon('pencil', { size: 13 })} Edit
-      </button>
+      </button>`}
     </div>`;
 }
 
@@ -253,7 +245,7 @@ function renderInterests() {
       </form>
       ${saveRow(name)}`;
   } else if (list.length === 0) {
-    body = `<p class="pf-none">${notYet(name)}</p>`;
+    body = `<p class="pf-none">${notYet()}</p>`;
   } else {
     body = `
       <div class="pf-chips">
@@ -293,7 +285,7 @@ function renderGoals() {
       </div>
       ${saveRow(name)}`;
   } else if (list.length === 0) {
-    body = `<p class="pf-none">${notYet(name)}</p>`;
+    body = `<p class="pf-none">${notYet()}</p>`;
   } else {
     body = `
       <div class="pf-list">
@@ -328,7 +320,7 @@ function renderPurpose() {
       </div>
       ${saveRow(name)}`;
   } else if (!value) {
-    body = `<p class="pf-none">${notYet(name)}</p>`;
+    body = `<p class="pf-none">${notYet()}</p>`;
   } else {
     body = `<p class="pf-goal-text">${escapeHtml(enumLabel(PURPOSE_LABELS, value))}</p>`;
   }
@@ -358,7 +350,7 @@ function renderStyle() {
       </div>
       ${saveRow(name)}`;
   } else if (!value) {
-    body = `<p class="pf-none">${notYet(name)}</p>`;
+    body = `<p class="pf-none">${notYet()}</p>`;
   } else {
     body = `<p class="pf-goal-text">${escapeHtml(enumLabel(STYLE_LABELS, value))} ${sourceBadge(source)}</p>`;
   }
@@ -403,7 +395,7 @@ function renderSubjects() {
       </div>
       ${saveRow(name)}`;
   } else if (list.length === 0) {
-    body = `<p class="pf-none">${notYet(name)}</p>`;
+    body = `<p class="pf-none">${notYet()}</p>`;
   } else {
     body = `
       <div class="pf-list">

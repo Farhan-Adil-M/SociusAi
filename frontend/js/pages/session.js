@@ -10,7 +10,7 @@ import { mountImportPanel } from '../components/material-import.js';
 import { api } from '../api.js';
 import {
   icon, escapeHtml, showEmpty, showError, formatRelative,
-  sourceIcon, errorMessage,
+  sourceIcon,
 } from '../ui.js';
 
 mountShell('library');

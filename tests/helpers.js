@@ -59,3 +59,46 @@ export function makeAi(overrides = {}) {
     ...overrides,
   };
 }
+
+// --- shared HTTP test harness ----------------------------------------------
+// Canonical harness used by the HTTP suites (11 files contained a copy of
+// startApp; the shared one keeps the seam they all already rely on:
+// createApp({ db, ai, vector }) with per-test overrides).
+
+import AdmZip from 'adm-zip';
+import { once } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { openDb } from '../server/store/sqlite.js';
+import { createApp } from '../server/app.js';
+
+/** Minimal in-memory pptx (text-only slides) for upload/extract tests. */
+export function buildPptx(pageTexts = ['Recursion uses a base case to stop.', 'A recursive call moves toward the base case.']) {
+  const zip = new AdmZip();
+  zip.addFile('[Content_Types].xml', Buffer.from('<Types/>'));
+  pageTexts.forEach((text, i) => zip.addFile(`ppt/slides/slide${i + 1}.xml`,
+    Buffer.from(`<p:sld><a:t>${text}</a:t></p:sld>`)));
+  return zip.toBuffer();
+}
+
+/**
+ * startApp({ ai, vector, db }) — spin a test app against a throwaway sqlite
+ * file and a real HTTP port. Pass `{ db }` to inject a custom/pre-built
+ * database handle (e.g. the fault-injection wrappers); otherwise one is
+ * created from a fresh temp dir. Returns `close()` for teardown.
+ */
+export async function startApp({ ai = makeAi(), vector = fakeVector(), db } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-test-'));
+  const appDb = db ?? await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db: appDb, ai, vector });
+  const server = app.listen(0);
+  await once(server, 'listening');
+  return {
+    base: `http://localhost:${server.address().port}`,
+    db: appDb,
+    ai,
+    vector,
+    close: () => new Promise((r) => server.close(r)),
+  };
+}

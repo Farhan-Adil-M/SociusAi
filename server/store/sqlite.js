@@ -27,6 +27,17 @@ export function newId(prefix) {
   return `${prefix}_${randomBytes(6).toString('hex')}`; // 12 unpredictable hex chars
 }
 
+/** Defensive parse of a stored JSON object column: never throws, non-object
+ *  → `fallback`. Corrupt rows must not crash readers of saved data. */
+export function parseJsonObject(text, fallback = {}) {
+  try {
+    const value = JSON.parse(text ?? '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function logActivity(db, type, topic, detail, sessionId = null) {
   await db.run('INSERT INTO activity (type, topic, detail, at, session_id) VALUES (?, ?, ?, ?, ?)',
     type, topic ?? null, detail, nowIso(), sessionId);

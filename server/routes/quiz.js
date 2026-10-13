@@ -5,7 +5,7 @@ import express from 'express';
 import { ApiError } from '../middleware/errors.js';
 import { chooseDifficulty, applyAttempt } from '../services/learner.js';
 import { generateQuiz, gradeAnswers } from '../services/quizService.js';
-import { resolveScope, assertSourcesExist } from '../services/retrieval.js';
+import { resolveRequestScope, validateSourceIds, validateTopic } from '../services/retrieval.js';
 import { recordEvent, maybeRecordRecovery } from '../services/events.js';
 import { logActivity, nowIso } from '../store/sqlite.js';
 
@@ -16,23 +16,16 @@ export function quizRouter({ db, ai, vector }) {
 
   router.post('/generate', async (req, res) => {
     const { topic, questionCount, difficulty, sourceIds, sessionId } = req.body ?? {};
-    if (typeof topic !== 'string' || topic.trim().length < 2 || topic.trim().length > 80) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Topic must be between 2 and 80 characters.');
-    }
+    validateTopic(topic);
     if (questionCount !== undefined && (!Number.isInteger(questionCount) || questionCount < 3 || questionCount > 10)) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'questionCount must be a whole number between 3 and 10.');
     }
     if (difficulty !== undefined && !DIFFICULTIES.has(difficulty)) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'difficulty must be easy, medium, or hard.');
     }
-    if (sourceIds !== undefined && (!Array.isArray(sourceIds) || sourceIds.some((s) => typeof s !== 'string'))) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'sourceIds must be an array of source id strings.');
-    }
+    validateSourceIds(sourceIds);
 
-    const scope = await resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
-    if (!scope.session) {
-      await assertSourcesExist(db, sourceIds ?? []); // legacy path: plain source filter
-    }
+    const scope = await resolveRequestScope(db, { sessionId, sourceIds: sourceIds ?? [] });
 
     // No difficulty given → the learner model chooses for this topic.
     const stats = await db.get('SELECT * FROM learner_topics WHERE topic = ?', topic.trim().toLowerCase());
@@ -71,8 +64,7 @@ export function quizRouter({ db, ai, vector }) {
     const { correct, total, perQuestion } = gradeAnswers(questions, req.body?.answers ?? []);
     const percent = Math.round((correct / total) * 100);
 
-    // Deterministic learner-model update, once per quiz.
-    const topicKey = quiz.topic.toLowerCase();
+    const topicKey = quiz.topic.toLowerCase().trim();
     const topicStats = await db.get('SELECT * FROM learner_topics WHERE topic = ?', topicKey);
     const update = applyAttempt(topicKey, topicStats, { correct, total });
 
@@ -92,20 +84,20 @@ export function quizRouter({ db, ai, vector }) {
     for (const item of perQuestion) {
       await recordEvent(db, {
         kind: item.correct ? 'quiz_item_correct' : 'quiz_item_incorrect',
-        topic: quiz.topic.toLowerCase().trim(),
+        topic: topicKey,
         detail: { index: item.index, correct: item.correct },
       });
     }
     await recordEvent(db, {
       kind: 'quiz_result',
-      topic: quiz.topic.toLowerCase().trim(),
+      topic: topicKey,
       detail: { quizId: quiz.id, correct, total, masteryBefore: update.before, masteryAfter, percent },
     });
     // Recovery check (M5): mastery improved while an approach change is still
     // open → credit that approach. 'before' null means the very first attempt,
     // so there is nothing to recover from.
     if (update.before !== null) {
-      await maybeRecordRecovery(db, { topic: quiz.topic.toLowerCase().trim(), masteryBefore: update.before, masteryAfter });
+      await maybeRecordRecovery(db, { topic: topicKey, masteryBefore: update.before, masteryAfter });
     }
 
     const result = {
@@ -114,7 +106,7 @@ export function quizRouter({ db, ai, vector }) {
       masteryUpdate: {
         topic: update.topic,
         before: update.before,
-        after: Number(update.mastery.toFixed(4)),
+        after: masteryAfter,
         ...(update.delta !== null ? { delta: update.delta } : {}),
       },
       recommendedDifficulty: update.difficulty,

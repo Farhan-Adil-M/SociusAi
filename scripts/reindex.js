@@ -6,7 +6,7 @@ import { assertConfig, config } from '../server/config.js';
 import { openDb, getMeta, setMeta } from '../server/store/sqlite.js';
 import { chunkSegments } from '../server/services/chunker.js';
 import { embedTexts } from '../server/services/embeddings.js';
-import { addChunks, resetCollection } from '../server/store/vectorStore.js';
+import { resolveVectorStore } from '../server/store/vectorProvider.js';
 
 assertConfig();
 const db = await openDb();
@@ -21,7 +21,10 @@ if (storedDim && storedDim !== '2048') {
 }
 
 console.log(`Rebuilding vector index with embedding model: ${config.nimEmbedModel}`);
-await resetCollection();
+// Same store the app resolves with the configured VECTOR_STORE setting — the
+// reindex script must never write to a different backend than the server reads.
+const vector = resolveVectorStore(db);
+await vector.resetCollection();
 console.log('Old collection removed.');
 
 const sources = await db.all('SELECT * FROM sources');
@@ -35,7 +38,7 @@ for (const source of sources) {
   for (let i = 0; i < chunks.length; i += 32) {
     const batch = chunks.slice(i, i + 32);
     const embeddings = await embedTexts(batch.map((c) => c.text));
-    await addChunks({
+    await vector.addChunks({
       ids: batch.map((c) => `${source.id}_${c.chunkIndex}`),
       embeddings,
       documents: batch.map((c) => c.text),

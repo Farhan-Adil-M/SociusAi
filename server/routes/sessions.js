@@ -3,11 +3,10 @@
 // and is reported every time a session list is requested.
 
 import express from 'express';
+import { CATEGORIES } from '../constants.js';
 import { ApiError } from '../middleware/errors.js';
 import { newId, nowIso, logActivity } from '../store/sqlite.js';
 import { sourceRowToApi } from './sources.js';
-
-export const CATEGORIES = new Set(['subject', 'research', 'self-study', 'exam-prep', 'general']);
 
 export async function getSessionOr404(db, id) {
   const row = await db.get('SELECT * FROM study_sessions WHERE id = ?', id);

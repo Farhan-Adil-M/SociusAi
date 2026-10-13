@@ -14,7 +14,7 @@ Full API specification: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — the s
 
 ## Requirements
 
-- Node.js ≥ 22.5 (uses built-in `node:sqlite`, `node:test`, `--env-file`)
+- Node 24.x (developed and verified on 24–26; serverless tests target 24.x — on 26 the pdfjs polyfill in `api/polyfill.js` is a no-op). Uses built-in `node:sqlite`, `node:test`, `--env-file`.
 - An NVIDIA NIM API key ([build.nvidia.com](https://build.nvidia.com))
 - A ChromaDB: either **Chroma Cloud** (preferred) or the **local server** set up once below
 
@@ -81,13 +81,13 @@ vercel login  →  vercel link --yes  →  vercel deploy --prod --yes
 - **Upload size on the cloud demo**: Vercel enforces a platform request-body cap (~4.5 MB) BEFORE our code runs — even if `MAX_UPLOAD_MB` were raised, the platform rejects oversized multipart bodies with its own generic 413 (plain text, not our JSON envelope). The frontend now recognises that non-JSON 413 and renders a clear message telling the user to use a smaller file; larger uploads simply do not work on the cloud demo. If large PDFs ever need to work in the cloud, the future path is a direct-to-object-storage upload (browser → presigned URL), which needs object-storage credentials the project does not have — documented blocker, not a currently working feature.
 - **Vector store**: Chroma Cloud credentials (`CHROMA_API_KEY`, `CHROMA_TENANT`, `CHROMA_DATABASE`) are used when present — the local venv Chroma server cannot run on Vercel. Without them the app automatically falls back to a SQLite-backed vector store (`server/store/sqlite-vector.js`): the same chunks and embeddings, searched with cosine similarity in JavaScript (distance = 1 − cosine, so every evidence rule behaves identically). Force a choice with `VECTOR_STORE=chroma|sqlite`.
 - **Demo seeding**: with the fallback store, every cold start begins empty, so `api/index.js` seeds the committed demo corpus (`data/demo-seed.json`) once per instance — embeddings are computed live via NIM, so the deployment always opens with a populated, answerable library (source appears in the library as "origin: seed").
-- Two honest differences from the laptop: SQLite there is **ephemeral** (`/tmp` resets on cold starts — uploaded sources, sessions, and seeded vectors are not durable without a hosted DB), and uploads are capped ≈4 MB. For the full-fidelity demo, `npm start` on this laptop remains the primary environment.
+- Two honest differences from the laptop: SQLite there is **ephemeral** (`/tmp` resets on cold starts — uploaded sources, sessions, and seeded vectors are not durable without a hosted DB), and uploads are capped at ~4.5 MB. For the full-fidelity demo, `npm start` on this laptop remains the primary environment.
 - **Observed limitation (2026-10-13):** Vercel can route consecutive requests to different warm execution environments, each with its own private `/tmp`. Short flows (upload → ask → quiz) passed live repeatedly; longer multi-step flows eventually hit a "not found" because a session/source lives on another environment. There is no platform setting to pin instances — the real fix is a hosted database (e.g. Turso/libSQL), which needs your approval for the new dependency; Chroma Cloud alone does not fix it (sessions/sources live in SQLite).
 
 ## Test
 
 ```bash
-npm test             # 64 offline tests: chunking, extraction, learner model, grading, sessions, decks, retrieval eval, full HTTP API loop
+npm test             # 152 offline tests, ~2s (152/152 as of 2026-10-13): chunking, extraction, learner model, grading, sessions, decks, retrieval eval, full HTTP API loop
 npm run eval         # live retrieval evaluation against the running server (fixed eval set, prints an honest report)
 npm run e2e          # real-services smoke: upload → scoped tutor → quiz → grade → organised session → saved deck (needs server + Chroma running)
 ```

@@ -10,7 +10,10 @@ import { populateScopeSelect } from '../components/scope-select.js';
 import { api } from '../api.js';
 import {
   icon, escapeHtml, renderCitations, wireCitations, errorMessage,
+  setTopicError, topicCheck, setGenerating,
 } from '../ui.js';
+
+const GENERATING_LABELS = { ready: 'Start quiz', busy: 'Writing questions…' };
 
 mountShell('quiz');
 mountHealthBanner(document.querySelector('[data-health]'));
@@ -71,37 +74,23 @@ const state = {
 
 /* ------------------------------------------------------------ generation */
 
-function setTopicError(message) {
-  topicError.textContent = message || '';
-  topicError.hidden = !message;
-  if (message) topicInput.setAttribute('aria-invalid', 'true');
-  else topicInput.removeAttribute('aria-invalid');
-}
-
 function setSetupStatus(kind, message) {
   setupStatus.innerHTML = message ? `<div class="banner banner-${kind}">${escapeHtml(message)}</div>` : '';
-}
-
-function setGenerating(value) {
-  generateButton.disabled = value;
-  generateButton.innerHTML = value
-    ? '<span class="spinner" aria-hidden="true"></span> Writing questions…'
-    : 'Start quiz';
 }
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const topic = topicInput.value.trim();
 
-  if (topic.length < 2) { setTopicError('Enter a topic — at least 2 characters.'); topicInput.focus(); return; }
-  if (topic.length > 80) { setTopicError('Keep the topic under 80 characters.'); topicInput.focus(); return; }
-  setTopicError('');
+  const problem = topicCheck(topicInput);
+  if (problem) { setTopicError(topicInput, topicError, problem); topicInput.focus(); return; }
+  setTopicError(topicInput, topicError, '');
   setSetupStatus('', '');
 
   const difficulty = form.querySelector('input[name="difficulty"]:checked')?.value || '';
   const sourceIds = scopeSelect.value ? [scopeSelect.value] : [];
 
-  setGenerating(true);
+  setGenerating(generateButton, GENERATING_LABELS, true);
   try {
     const data = await api.generateQuiz({
       topic,
@@ -130,7 +119,7 @@ form.addEventListener('submit', async (event) => {
       setSetupStatus('error', errorMessage(error));
     }
   } finally {
-    setGenerating(false);
+    setGenerating(generateButton, GENERATING_LABELS, false);
   }
 });
 
@@ -213,11 +202,11 @@ function renderQuestion() {
   }
 
   stage.innerHTML = `
-    <div class="qz-session">
-      <div class="qz-session-head">
+    <div class="session-card">
+      <div class="session-card-head">
         <div>
           <p class="qz-topic-name">${escapeHtml(state.quiz.topic)}</p>
-          <div class="qz-session-meta">
+          <div class="session-card-meta">
             <span class="badge badge-blue">${escapeHtml(state.quiz.difficulty || 'mixed')}</span>
             <span>Answer key is revealed only after you submit</span>
           </div>
@@ -321,7 +310,7 @@ function renderResults() {
   }).join('');
 
   stage.innerHTML = `
-    <div class="qz-session">
+    <div class="session-card">
       <div class="qz-result-head">
         <div class="qz-score">
           <span class="qz-score-value">${score.percent}%</span>

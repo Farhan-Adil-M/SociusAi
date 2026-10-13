@@ -77,8 +77,6 @@ async function answerContextEvents(db, { question, matchedTopic, previous, expli
     if (explicit === 'different') {
       await recordEvent(db, { kind: 'explain_again', topic: matchedTopic, detail: { requested: true } });
     }
-  } catch { /* observability must not break answering */ }
-  try {
     // A change is logged when the approach differs from the last one recorded
     // for this topic (a saved style applying for the first time is a change:
     // from=null), or when the student explicitly requested one.
@@ -99,7 +97,7 @@ export async function answerQuestion({ question, sourceIds = [], db, approach },
   const context = await buildLearnerContext(db, { question });
   const matchedTopic = context?.topics?.[0] ?? null;
   const previous = await lastApproach(db, matchedTopic);
-  const preferred = context?.style && APPROACH_ORDER.includes(context.style) ? context.style : null;
+  const preferred = context?.style ?? null; // chooseApproach re-validates: not a saved style → ignored
   const explicit = typeof approach === 'string' && REQUESTABLE_APPROACHES.has(approach.trim()) ? approach.trim() : null;
   const approachGiven = explicit !== null;
   const approachUsed = chooseApproach({ explicit, previous, preferred });

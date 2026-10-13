@@ -131,6 +131,27 @@ export async function generateQuestionBatch({ topic, difficulty, count, evidence
     .filter(Boolean);
 }
 
+/**
+ * Run batch generation with bounded retries until `count` valid, pairwise
+ * distinct (case-insensitive) questions are collected (or attempts run out).
+ * Shared by generateQuiz and studyAdvice.importantQuestions so retry and
+ * de-duplication semantics stay identical in both paths. May throw — the chat
+ * call's failure is never swallowed into a fake result.
+ */
+export async function collectQuestions({ chat, topic, difficulty, evidence, count }) {
+  const accepted = [];
+  for (let attempt = 0; attempt < MAX_ATTEMPTS && accepted.length < count; attempt++) {
+    const batch = await generateQuestionBatch({ topic, difficulty, count, evidence }, chat);
+    for (const q of batch) {
+      if (accepted.length >= count) break;
+      // De-duplicate by question text within the collection.
+      if (accepted.some((a) => a.text.toLowerCase() === q.text.toLowerCase())) continue;
+      accepted.push(q);
+    }
+  }
+  return accepted;
+}
+
 export async function generateQuiz({ topic, questionCount = 5, difficulty, sourceIds = [] }, { db, ai, vector }) {
   const chat = ai?.chatCompletion ?? chatCompletion;
   const hits = await retrieve(topic, { sourceIds, k: 8, minScore: 0, ai, vector });
@@ -143,16 +164,7 @@ export async function generateQuiz({ topic, questionCount = 5, difficulty, sourc
 
     const evidence = wrapPassages(hits);
 
-    const accepted = [];
-    for (let attempt = 0; attempt < MAX_ATTEMPTS && accepted.length < questionCount; attempt++) {
-      const batch = await generateQuestionBatch({ topic, difficulty, count: questionCount, evidence }, chat);
-      for (const q of batch) {
-        if (accepted.length >= questionCount) break;
-        // De-duplicate by question text within the quiz.
-        if (accepted.some((a) => a.text.toLowerCase() === q.text.toLowerCase())) continue;
-        accepted.push(q);
-      }
-    }
+    const accepted = await collectQuestions({ chat, topic, difficulty, evidence, count: questionCount });
 
     if (accepted.length === 0) {
       throw new ApiError(422, 'QUIZ_CONTENT_INVALID',

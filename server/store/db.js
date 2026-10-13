@@ -1,3 +1,7 @@
+    // Local-only remains-usable shim for the tests/fixtures + admin scripts
+    // that seed fixtures via sync statements. The hosted engine throws on
+    // prepare() on purpose (see below) so no un-converted call site can ever
+    // run against production storage.
 // Uniform ASYNC database facade with two interchangeable engines:
 //   node:sqlite (local files — the established engine; FKs on by default)
 //   @libsql/client (local file: URLs for tests, or hosted Turso in production)
@@ -147,6 +151,11 @@ export const CURRENT_SCHEMA_VERSION = 6;
 // One surgical mirror of stores/sqlite.js's migrate() chain (v2..v6), written
 // against engine methods so BOTH engines run the identical chain.
 
+async function readSchemaVersion(engine) {
+  const row = await engine.get("SELECT value FROM app_meta WHERE key = 'schema_version'");
+  return row ? Number(row.value) : 1;
+}
+
 async function addColumnIfMissing(engine, table, column, ddl) {
   const present = new Set((await engine.all(`PRAGMA table_info(${table})`)).map((c) => c.name));
   if (!present.has(column)) await engine.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
@@ -154,8 +163,7 @@ async function addColumnIfMissing(engine, table, column, ddl) {
 
 export async function runMigrations(engine, { dbPath } = {}) {
   await engine.exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);');
-  const vRow = await engine.get("SELECT value FROM app_meta WHERE key = 'schema_version'");
-  const version = vRow ? Number(vRow.value) : 1;
+  const version = await readSchemaVersion(engine);
 
   // v2 legacy safety-net copy (local node engine only — hosted dbs get a real
   // backup story from the provider).
@@ -340,8 +348,7 @@ export async function openAppDb({ dbPath, migrate = true, allowRemoteMigrate = f
     if (migrate || allowRemoteMigrate) {
       if (migrate && !allowRemoteMigrate) {
         await engine.exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);');
-        const row = await engine.get("SELECT value FROM app_meta WHERE key = 'schema_version'");
-        const version = row ? Number(row.value) : 1;
+        const version = await readSchemaVersion(engine);
         if (version < CURRENT_SCHEMA_VERSION) {
           engine.close?.();
           throw new Error(

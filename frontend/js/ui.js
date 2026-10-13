@@ -16,7 +16,6 @@ export function escapeHtml(value) {
 /* ------------------------------------------------------------------- icons */
 
 const ICON_PATHS = {
-  dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
   book: '<path d="M2 5.5A2.5 2.5 0 0 1 4.5 3H10a2 2 0 0 1 2 2v14a1.5 1.5 0 0 0-1.5-1.5h-6A2.5 2.5 0 0 1 2 15z"/><path d="M22 5.5A2.5 2.5 0 0 0 19.5 3H14a2 2 0 0 0-2 2v14a1.5 1.5 0 0 1 1.5-1.5h6A2.5 2.5 0 0 0 22 15z"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 16l9 5 9-5"/>',
   clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3.6A1 1 0 0 1 10 2.6h4a1 1 0 0 1 1 1v.9"/><path d="M9 13.5l2 2 4-4"/>',
@@ -31,7 +30,7 @@ const ICON_PATHS = {
   chevronRight: '<path d="M9 6l6 6-6 6"/>',
   eye: '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="M4 4l16 16"/><path d="M9.9 5.7A9.9 9.9 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a17.6 17.6 0 0 1-3.3 4.1"/><path d="M6.3 7.9A17.4 17.4 0 0 0 2 12s3.6 6.5 10 6.5a9.8 9.8 0 0 0 4-.8"/><path d="M9.9 10.2A3 3 0 0 0 14 14"/>',
-  send: '<path d="M21 3L10.5 13.5"/><path d="M21 3l-6.8 18-3.7-7.5L3 10z"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
   file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5"/>',
   slides: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8"/><path d="M12 16v4"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/>',
@@ -51,7 +50,6 @@ const ICON_PATHS = {
   folder: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2.5h7A1.5 1.5 0 0 1 19 9v8.5A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z"/>',
   pencil: '<path d="M4 20l4.5-1L19.5 8a2.1 2.1 0 0 0-3-3L5.5 16z"/><path d="M14 6.5l3.5 3.5"/>',
   archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v10.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V8"/><path d="M10 12h4"/>',
-  trash: '<path d="M4 7h16"/><path d="M9 7V4.8A.8.8 0 0 1 9.8 4h4.4a.8.8 0 0 1 .8.8V7"/><path d="M6 7l1 12.2a1.5 1.5 0 0 0 1.5 1.3h7a1.5 1.5 0 0 0 1.5-1.3L18 7"/>',
 };
 
 const TYPE_ICONS = { pdf: 'file', pptx: 'slides', webpage: 'globe' };
@@ -211,4 +209,34 @@ export function wireCitations(root) {
     const panel = document.getElementById(button.getAttribute('aria-controls'));
     if (panel) panel.hidden = open;
   });
+}
+
+/* -------------------------------------------------- topic generator forms */
+
+// Shared plumbing for the quiz and flashcards generator forms. The two pages
+// keep their own setSetupStatus: quiz escapes plain-text messages, flashcards
+// embeds markup (icons and links), so they cannot be one function.
+
+/** Clear or fill a generator topic's inline error field. */
+export function setTopicError(input, errorEl, message) {
+  errorEl.textContent = message || '';
+  errorEl.hidden = !message;
+  if (message) input.setAttribute('aria-invalid', 'true');
+  else input.removeAttribute('aria-invalid');
+}
+
+/** The topic validation both pages share: message text, or '' when 2–80 chars. */
+export function topicCheck(input) {
+  const topic = input.value.trim();
+  if (topic.length < 2) return 'Enter a topic — at least 2 characters.';
+  if (topic.length > 80) return 'Keep the topic under 80 characters.';
+  return '';
+}
+
+/** Busy/ready flip for a generator's submit button. */
+export function setGenerating(button, labels, busy) {
+  button.disabled = busy;
+  button.innerHTML = busy
+    ? `<span class="spinner" aria-hidden="true"></span> ${escapeHtml(labels.busy)}`
+    : escapeHtml(labels.ready);
 }

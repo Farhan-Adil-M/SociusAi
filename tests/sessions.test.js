@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { once } from 'node:events';
-import { openDb } from '../server/store/sqlite.js';
+import { newId, openDb } from '../server/store/sqlite.js';
 import { createApp } from '../server/app.js';
 import { fakeVector, makeAi, QUIZ_JSON, FLASHCARD_JSON, TUTOR_ANSWER } from './helpers.js';
 
@@ -47,6 +47,19 @@ function buildV1FixtureDb(filePath) {
   db.prepare("INSERT INTO learner_topics VALUES ('photosynthesis', 1, 3, 'medium', '2026-10-12T10:00:00.000Z', '2026-10-12T10:00:00.000Z')").run();
   db.close();
 }
+
+// Core ID generation (absorbed from id-format.test.js): server-minted,
+// format-stable, unpredictable (3.7).
+test('newId keeps the prefix + hex format and is unpredictably random', () => {
+  const id = newId('src');
+  assert.match(id, /^src_[(\d)a-f]{12}$/);
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) {
+    const other = newId('test');
+    assert.ok(!seen.has(other), 'ids collide — randomBytes must not repeat in practice');
+    seen.add(other);
+  }
+});
 
 test('migration upgrades a real v1 database without losing rows', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-mig-'));

@@ -123,3 +123,31 @@ export async function resolveScope(db, { sessionId, sourceIds = [] } = {}) {
 
   return { sourceIds: owned, session };
 }
+
+// ---- shared request validation (used by tutor/quiz/flashcards routes) ----
+
+/** sourceIds, when given, must be an array of strings. */
+export function validateSourceIds(sourceIds) {
+  if (sourceIds !== undefined && (!Array.isArray(sourceIds) || sourceIds.some((s) => typeof s !== 'string'))) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'sourceIds must be an array of source id strings.');
+  }
+}
+
+/** A study topic must be a 2–80 character string. */
+export function validateTopic(topic) {
+  if (typeof topic !== 'string' || topic.trim().length < 2 || topic.trim().length > 80) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Topic must be between 2 and 80 characters.');
+  }
+}
+
+/**
+ * The scope every content route uses: resolve the session scope, then (only on
+ * the legacy path with no session) verify the plain sourceIds actually exist.
+ */
+export async function resolveRequestScope(db, { sessionId, sourceIds = [] } = {}) {
+  const scope = await resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+  if (!scope.session) {
+    await assertSourcesExist(db, sourceIds ?? []); // legacy path: plain source filter
+  }
+  return scope;
+}

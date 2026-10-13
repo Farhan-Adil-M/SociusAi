@@ -73,6 +73,20 @@ export function findDuplicateSource(sources, { fileName = '', url = '' } = {}) {
   return null;
 }
 
+/**
+ * Info-only "you already added this" hint rendered into `host` (the aria-live
+ * element next to the import status). Never blocks: two versions of the same
+ * notes must still both import. Shared by the import panel and the study
+ * page's add panel.
+ */
+export function showDuplicateHint(host, matched) {
+  if (!matched) { host.innerHTML = ''; return; }
+  host.innerHTML = `
+    <div class="banner banner-info">${icon('info', { size: 16 })}
+      <span>You already added <strong>«${escapeHtml(matched.title)}»</strong> (${escapeHtml(formatDate(matched.createdAt))}) — adding it again creates a second copy of the same text.</span>
+    </div>`;
+}
+
 /* ------------------------------------------------------------- status --- */
 
 function renderNotice(host, kind, html) {
@@ -114,15 +128,7 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
   // Replace the 25 MB default with the backend's real limit once health knows it.
   setUploadLimitHint(host.querySelector('[data-imp-limit]'));
 
-  /** Info-only hint when the chosen material already exists. Never blocks. */
-  function showDuplicateHint(matched) {
-    if (!matched) { dupHost.innerHTML = ''; return; }
-    dupHost.innerHTML = `
-      <div class="banner banner-info">${icon('info', { size: 16 })}
-        <span>You already added <strong>«${escapeHtml(matched.title)}»</strong> (${escapeHtml(formatDate(matched.createdAt))}) — adding it again creates a second copy of the same text.</span>
-      </div>`;
-  }
-
+  // Duplicate hint: the shared helper targets this panel's aria-live element.
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files && fileInput.files[0];
     if (!file) return;
@@ -133,7 +139,7 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
       return;
     }
     dupHost.innerHTML = '';
-    showDuplicateHint(findDuplicateSource(knownSources(), { fileName: file.name }));
+    showDuplicateHint(dupHost, findDuplicateSource(knownSources(), { fileName: file.name }));
     statusHost.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Extracting and indexing ${escapeHtml(file.name)}…</div>`;
     fileInput.value = '';
     try {
@@ -153,7 +159,7 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
     const problem = checkWebpageInput(url, text);
     if (problem) { renderNotice(statusHost, 'error', escapeHtml(problem)); return; }
     dupHost.innerHTML = '';
-    showDuplicateHint(findDuplicateSource(knownSources(), { url }));
+    showDuplicateHint(dupHost, findDuplicateSource(knownSources(), { url }));
     statusHost.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Indexing the page…</div>`;
     try {
       const data = await api.addWebpage({ url, text });

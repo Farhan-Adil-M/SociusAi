@@ -140,15 +140,7 @@
 }
 .exchange--answer .exchange-who::before { background: var(--blue); }
 
-.exchange-q p {
-  font-size: var(--fs-md);
-  font-weight: 500;
-  color: var(--ink);
-  line-height: 1.5;
-}
-
 .exchange--answer { background: var(--canvas); border-radius: var(--r-lg); padding: var(--s4) clamp(16px, 2.5vw, 26px); }
-.exchange--answer .exchange-who::before { background: var(--blue); }
 
 .exchange-a-body {
   font-family: var(--font-serif);
@@ -159,14 +151,8 @@
 }
 .exchange-a-body p + p { margin-top: var(--s3); }
 
-.exchange-citations { margin-top: var(--s4); }
-.exchange-citations-label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--ink-3);
-  margin-bottom: var(--s2);
-}
+/* .exchange-citations / .exchange-citations-label live in components.css —
+   they are shared with the quiz and flashcards pages. */
 
 .exchange-pending {
   display: flex;

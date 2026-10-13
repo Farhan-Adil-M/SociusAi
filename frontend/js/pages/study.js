@@ -3,14 +3,15 @@
 // `sourceIds` filter, and each question is rendered as an exchange block with
 // its citations. Loading, empty and error states are all handled per block.
 
-import { mountShell, mountHealthBanner, getHealth } from '../components/shell.js';
+import { mountShell, mountHealthBanner } from '../components/shell.js';
 import {
   offerSuggestion, checkUploadFile, checkWebpageInput, findDuplicateSource,
+  showDuplicateHint, setUploadLimitHint,
 } from '../components/material-import.js';
 import { api } from '../api.js';
 import {
   icon, escapeHtml, renderCitations, wireCitations,
-  showEmpty, showError, errorMessage, formatDate,
+  showEmpty, showError, errorMessage,
 } from '../ui.js';
 
 mountShell('study');
@@ -27,18 +28,17 @@ const sourcesHost = document.querySelector('[data-sources]');
 
 wireCitations(transcript);
 
-/* Upload cap honesty: the real MAX_UPLOAD_MB lives on the backend, which does
-   not expose it anywhere else — it comes inside the health payload
-   (checks.limits.maxUploadMb). getHealth() is the ONE health request the page
-   already makes (shell.js caches it for the banner and status pill), so this
-   adds no extra network call. Before it resolves the hint has no number. */
-const uploadHint = document.querySelector('[data-upload-hint]');
-getHealth().then((health) => {
-  const maxMb = health.ok ? health.data?.checks?.limits?.maxUploadMb : null;
-  if (uploadHint && Number(maxMb) > 0) {
-    uploadHint.textContent = `Text-based files only, up to ${maxMb} MB.`;
-  }
-});
+/* Upload cap honesty: the hint is filled with the backend's real
+   MAX_UPLOAD_MB in material-import.js' setUploadLimitHint — it comes inside
+   the health payload (checks.limits.maxUploadMb). getHealth() is cached by
+   shell.js for the banner and status pill, so this adds no extra network
+   call. Before it resolves the hint has no number. */
+setUploadLimitHint(document.querySelector('[data-upload-hint]'));
+
+/* The two repeated onboarding notes share one copy each (3 call sites) —
+   they contain a Profile link, so they are HTML strings, not plain text. */
+const ONBOARD_DONE_NOTE = 'Setup already finished. Manage it on the <a href="profile.html">Profile</a> page.';
+const ONBOARD_ACTIVE_NOTE = 'Teaching you your way — tweak it in the <a href="profile.html">Profile</a> page.';
 
 let sources = [];
 let sending = false;
@@ -408,7 +408,7 @@ function showAddStatus(kind, message) {
 }
 
 /* Informational "you already added this" hint, shared with the session page's
-   import panel (same single copy of the check in material-import.js). It is
+   import panel (single copy of the renderer in material-import.js). It is
    exact-match only and NEVER blocks: two versions of the same notes must
    still both import. */
 const dupHost = document.createElement('div');
@@ -416,25 +416,17 @@ dupHost.setAttribute('data-dup-hint', '');
 dupHost.setAttribute('aria-live', 'polite');
 addStatus.insertAdjacentElement('beforebegin', dupHost);
 
-function showDuplicateHint(matched) {
-  if (!matched) { dupHost.innerHTML = ''; return; }
-  dupHost.innerHTML = `
-    <div class="banner banner-info">${icon('info', { size: 16 })}
-      <span>You already added <strong>«${escapeHtml(matched.title)}»</strong> (${escapeHtml(formatDate(matched.createdAt))}) — adding it again creates a second copy of the same text.</span>
-    </div>`;
-}
-
 fileInput.addEventListener('change', async () => {
   const file = fileInput.files && fileInput.files[0];
   if (!file) return;
   const problem = checkUploadFile(file);
   if (problem) { showAddStatus('error', problem); fileInput.value = ''; return; }
-  showDuplicateHint(findDuplicateSource(sources, { fileName: file.name }));
+  showDuplicateHint(dupHost, findDuplicateSource(sources, { fileName: file.name }));
   addStatus.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Extracting and indexing ${escapeHtml(file.name)}…</div>`;
   try {
     const data = await api.uploadSource(file);
     fileInput.value = '';
-    showDuplicateHint(null);
+    showDuplicateHint(dupHost, null);
     await afterImport(data.source);
   } catch (error) {
     showAddStatus('error', errorMessage(error));
@@ -467,13 +459,13 @@ webpageForm.addEventListener('submit', async (event) => {
 
   const problem = checkWebpageInput(url, text);
   if (problem) { showAddStatus('error', problem); return; }
-  showDuplicateHint(findDuplicateSource(sources, { url }));
+  showDuplicateHint(dupHost, findDuplicateSource(sources, { url }));
 
   addStatus.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Indexing the page…</div>`;
   try {
     const data = await api.addWebpage({ url, text });
     webpageForm.reset();
-    showDuplicateHint(null);
+    showDuplicateHint(dupHost, null);
     await afterImport(data.source);
   } catch (error) {
     showAddStatus('error', errorMessage(error));
@@ -638,7 +630,7 @@ async function sendOnboardTurn(message, { echoUser = true } = {}) {
   } catch (error) {
     chat.querySelector('.exchange-pending')?.remove();
     if (error.code === 'ONBOARDING_COMPLETE') {
-      showOnboardNote('Setup already finished. Manage it on the <a href="profile.html">Profile</a> page.');
+      showOnboardNote(ONBOARD_DONE_NOTE);
       return;
     }
     // 502/504/NIM and friends: banner inside the panel with a Retry action.
@@ -667,7 +659,7 @@ async function skipOnboardingFlow() {
   } catch (error) {
     setOnboardBusy(false);
     if (error.code === 'ONBOARDING_COMPLETE') {
-      showOnboardNote('Setup already finished. Manage it on the <a href="profile.html">Profile</a> page.');
+      showOnboardNote(ONBOARD_DONE_NOTE);
       return;
     }
     showOnboardError(errorMessage(error));
@@ -695,7 +687,7 @@ onboardPanel.addEventListener('click', (event) => {
   }
   if (event.target.closest('[data-onboard-start]')) { openOnboarding('new'); return; }
   if (event.target.closest('[data-onboard-continue]')) {
-    showOnboardNote('Teaching you your way — tweak it in the <a href="profile.html">Profile</a> page.');
+    showOnboardNote(ONBOARD_ACTIVE_NOTE);
     return;
   }
   if (event.target.closest('[data-onboard-skip]')) { skipOnboardingFlow(); return; }
@@ -721,7 +713,7 @@ async function initOnboarding() {
     if (urlOpen) {
       showOnboardNote('Your profile is already set up — edit it on the <a href="profile.html">Profile</a> page.');
     } else {
-      showOnboardNote('Teaching you your way — tweak it in the <a href="profile.html">Profile</a> page.');
+      showOnboardNote(ONBOARD_ACTIVE_NOTE);
     }
   } else if (profileState === 'skipped') {
     if (urlOpen) {

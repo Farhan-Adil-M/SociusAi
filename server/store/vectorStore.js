@@ -34,7 +34,7 @@ function makeClient() {
   });
 }
 
-export function getCollection() {
+function getCollection() {
   if (!collectionPromise) {
     collectionPromise = makeClient().getOrCreateCollection({
       name: config.chromaCollection,
@@ -121,7 +121,7 @@ export async function resetCollection() {
   collectionPromise = null;
 }
 
-export function chromaError(err) {
+function chromaError(err) {
   if (err instanceof ApiError) return err;
   console.error('[chroma]', err?.message ?? err);
   return new ApiError(503, 'CHROMA_UNAVAILABLE',

@@ -13,11 +13,9 @@ import { sourcesRouter } from './routes/sources.js';
 import { tutorRouter } from './routes/tutor.js';
 import { quizRouter } from './routes/quiz.js';
 import { learnerRouter } from './routes/learner.js';
-import { flashcardsRouter } from './routes/flashcards.js';
+import { decksRouter, flashcardsRouter } from './routes/decks.js';
 import { sessionsRouter } from './routes/sessions.js';
-import { decksRouter } from './routes/decks.js';
-import { profileRouter } from './routes/profile.js';
-import { onboardingRouter } from './routes/onboarding.js';
+import { profileRouter, onboardingRouter } from './routes/profile.js';
 import { resolveVectorStore } from './store/vectorProvider.js';
 
 const FRONTEND_DIR = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../frontend');

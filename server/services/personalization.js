@@ -7,22 +7,16 @@
 // it (the caller records events separately in tutorService).
 
 import { APPROACH_ORDER, questionTokens, summarizeApproaches } from './events.js';
+import { parseJsonObject } from '../store/sqlite.js';
 
 // Same normalisation as events.js question tokens (consistent repeat detection).
 export function tokenize(text) {
   return questionTokens(text);
 }
 
-// Defensive parse of the profile fields_json blob: a corrupt value must never
+// Defensive parse of the profile fields_json blob happens with the shared
+// parseJsonObject helper (store/sqlite.js) — a corrupt value must never
 // crash the tutor. The router owns validation; this only reads saved data.
-function parseFields(json) {
-  try {
-    const value = JSON.parse(json ?? '{}');
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  } catch {
-    return {};
-  }
-}
 
 function asString(value, maxLen) {
   return typeof value === 'string' && value.trim() !== '' ? value.trim().slice(0, maxLen) : null;
@@ -168,7 +162,7 @@ export async function buildLearnerContext(db, { question = '', sessionId = null 
   const topics = await resolveRelevantTopics(db, question, sessionId);
 
   const row = await db.get("SELECT * FROM learner_profile WHERE id = 'default'") ?? null;
-  const fields = row ? parseFields(row.fields_json) : {};
+  const fields = row ? parseJsonObject(row.fields_json) : {};
 
   const goal = Array.isArray(fields.goals) && fields.goals.length > 0 ? asString(fields.goals[0]?.label, 120) : null;
   const style = APPROACH_ORDER.includes(fields.preferences?.explanationStyle?.value)

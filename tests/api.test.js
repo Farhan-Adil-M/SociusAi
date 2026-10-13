@@ -5,31 +5,15 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import AdmZip from 'adm-zip';
-import { openDb } from '../server/store/sqlite.js';
-import { createApp } from '../server/app.js';
-import { fakeVector, makeAi, TUTOR_ANSWER } from './helpers.js';
 
-function buildPptxBuffer() {
-  const zip = new AdmZip();
-  zip.addFile('[Content_Types].xml', Buffer.from('<Types/>'));
-  zip.addFile('ppt/slides/slide1.xml', Buffer.from('<p:sld><a:t>Recursion uses a base case to stop.</a:t></p:sld>'));
-  zip.addFile('ppt/slides/slide2.xml', Buffer.from('<p:sld><a:t>A recursive call moves toward the base case.</a:t></p:sld>'));
-  return zip.toBuffer();
-}
+// The upload-size-limit tests (absorbed from upload-limits.test.js) need a
+// non-default MAX_UPLOAD_MB. config.js reads process.env ONCE at import, so
+// the override is set here BEFORE the dynamic imports below; `node --test`
+// runs this file in its own process, so it cannot leak into other test files.
+process.env.MAX_UPLOAD_MB = '1';
 
-async function startApp({ ai = makeAi(), vector = fakeVector() } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-test-'));
-  const db = await openDb(path.join(dir, 'app.db'));
-  const app = await createApp({ db, ai, vector });
-  const server = app.listen(0);
-  await once(server, 'listening');
-  return { base: `http://localhost:${server.address().port}`, db, ai, vector, close: () => new Promise((r) => server.close(r)) };
-}
+const { config } = await import('../server/config.js');
+const { startApp, buildPptx, fakeVector, TUTOR_ANSWER } = await import('./helpers.js');
 
 const WEBPAGE = {
   url: 'https://learn.example/cells',
@@ -175,7 +159,7 @@ test('pptx upload extracts slides with locations', async (t) => {
   const ctx = await startApp();
   t.after(ctx.close);
   const fd = new FormData();
-  fd.append('file', new Blob([buildPptxBuffer()]), 'recursion-slides.pptx');
+  fd.append('file', new Blob([buildPptx()]), 'recursion-slides.pptx');
   const res = await fetch(`${ctx.base}/api/sources/upload`, { method: 'POST', body: fd });
   assert.equal(res.status, 201);
   const { source } = await res.json();
@@ -252,4 +236,35 @@ test('health degrades gracefully when Chroma is unreachable', async (t) => {
   assert.equal(body.checks.chroma.ok, false);
   assert.ok(body.checks.chroma.message.length > 0);
   assert.equal(body.checks.sqlite.ok, true); // the rest still works
+});
+
+// --- upload-size limits (absorbed from upload-limits.test.js) -----------------
+// MAX_UPLOAD_MB = '1' is set in this process before config.js loads (top of file).
+
+test('health exposes the configured upload limit without degrading status', async (t) => {
+  const ctx = await startApp();
+  t.after(ctx.close);
+
+  const res = await fetch(`${ctx.base}/api/health`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+
+  assert.equal(body.checks.limits.maxUploadMb, config.maxUploadMb);
+  // The limits block is a fact, not a probe — it must not tip the rollup.
+  assert.equal(body.status, 'ok');
+});
+
+test('oversized upload returns 413 FILE_TOO_LARGE with the real limit', async (t) => {
+  const ctx = await startApp();
+  t.after(ctx.close);
+
+  const limitBytes = config.maxUploadMb * 1024 * 1024;
+  const form = new FormData();
+  form.set('file', new Blob([Buffer.alloc(limitBytes + 1000)]), 'big.pdf');
+  const res = await fetch(`${ctx.base}/api/sources/upload`, { method: 'POST', body: form });
+
+  assert.equal(res.status, 413);
+  const body = await res.json();
+  assert.equal(body.error.code, 'FILE_TOO_LARGE');
+  assert.ok(body.error.message.includes('the upload limit is 1 MB'), body.error.message);
 });

@@ -5,7 +5,7 @@
 
 // Compact provenance label built from the TRUSTED stored metadata — the label
 // itself never comes from the document text.
-export function passageLabel(hit) {
+function passageLabel(hit) {
   const meta = hit.metadata ?? {};
   const where = meta.page != null ? `page ${meta.page}`
     : meta.slide != null ? `slide ${meta.slide}`

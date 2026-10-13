@@ -7,6 +7,7 @@
 import { chatCompletion } from './nimChat.js';
 import { parseJsonLoose } from './quizService.js';
 import { UNTRUSTED_RULE } from './prompts.js';
+import { CATEGORIES } from '../constants.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
 import { newId, nowIso, logActivity } from '../store/sqlite.js';
@@ -60,8 +61,6 @@ export function normalizeSuggestion(raw, sessions) {
 
   return { matchSessionId, newSession, confidence, reason };
 }
-
-export const CATEGORIES = new Set(['subject', 'research', 'self-study', 'exam-prep', 'general']);
 
 export async function suggestOrganization(db, { sourceId, description }, { chat } = {}) {
   const chatFn = chat ?? chatCompletion;

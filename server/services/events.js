@@ -5,7 +5,7 @@
 // the three functions that take `db`.
 
 import { ApiError } from '../middleware/errors.js';
-import { nowIso } from '../store/sqlite.js';
+import { nowIso, parseJsonObject } from '../store/sqlite.js';
 
 // Quiz answers are stronger evidence than flashcard reviews (deliberate).
 export const EVENT_WEIGHTS = {
@@ -24,13 +24,9 @@ export const EVENT_WEIGHTS = {
 // are tutor request values, not stored styles, so they are not in the order.
 export const APPROACH_ORDER = ['step-by-step', 'examples-first', 'visual', 'concise', 'guided-questions'];
 
-function parseDetail(json) {
-  try {
-    const value = JSON.parse(json ?? '{}');
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  } catch {
-    return {};
-  }
+/** Event topic key: lowercased/trimmed, or null when there is no usable topic. */
+function cleanTopic(topic) {
+  return typeof topic === 'string' && topic.trim() !== '' ? topic.trim().toLowerCase() : null;
 }
 
 export async function recordEvent(db, { kind, topic = null, detail = {} }) {
@@ -38,10 +34,9 @@ export async function recordEvent(db, { kind, topic = null, detail = {} }) {
   if (weight === undefined) {
     throw new ApiError(400, 'VALIDATION_ERROR', `Unknown event kind "${kind}".`);
   }
-  const cleanTopic = typeof topic === 'string' && topic.trim() !== '' ? topic.trim().toLowerCase() : null;
   const at = nowIso();
   await db.run('INSERT INTO learning_events (kind, topic, detail_json, weight, at) VALUES (?, ?, ?, ?, ?)',
-    kind, cleanTopic, JSON.stringify(detail ?? {}), weight, at);
+    kind, cleanTopic(topic), JSON.stringify(detail ?? {}), weight, at);
   return { kind, weight, at };
 }
 
@@ -83,13 +78,14 @@ export function isRepeatedQuestion(current, recent = []) {
 
 // The most recently requested approach for a topic, or null.
 export async function lastApproach(db, topic) {
-  if (typeof topic !== 'string' || topic.trim() === '') return null;
+  const key = cleanTopic(topic);
+  if (key === null) return null;
   const row = await db.get(
     "SELECT detail_json FROM learning_events WHERE kind = 'approach_change' AND topic = ? ORDER BY id DESC LIMIT 1",
-    topic.trim().toLowerCase(),
+    key,
   );
   if (!row) return null;
-  const approach = parseDetail(row.detail_json).to;
+  const approach = parseJsonObject(row.detail_json).to;
   return typeof approach === 'string' ? approach : null;
 }
 
@@ -129,9 +125,9 @@ export function chooseApproach({ explicit = null, previous = null, preferred = n
 // An approach that ever helped is never also listed as unhelpful.
 
 export function summarizeApproaches(events, topic) {
-  const cleanTopic = typeof topic === 'string' ? topic.trim().toLowerCase() : '';
+  const topicKey = cleanTopic(topic) ?? '';
   const rows = (Array.isArray(events) ? events : [])
-    .filter((row) => row && (cleanTopic === '' || row.topic === null || row.topic === cleanTopic))
+    .filter((row) => row && (topicKey === '' || row.topic === null || row.topic === topicKey))
     .slice()
     .sort((a, b) => a.id - b.id);
 
@@ -152,7 +148,7 @@ export function summarizeApproaches(events, topic) {
   };
 
   for (const row of rows) {
-    const detail = parseDetail(row.detail_json);
+    const detail = parseJsonObject(row.detail_json);
     if (row.kind === 'approach_change') {
       closeSegment();
       current = typeof detail.to === 'string' ? detail.to : null;
@@ -187,28 +183,28 @@ export function summarizeApproaches(events, topic) {
 // event, or null when there is nothing open or no improvement happened.
 // A second call after success finds the recorded recovery and returns null.
 export async function maybeRecordRecovery(db, { topic, masteryBefore, masteryAfter }) {
-  if (typeof topic !== 'string' || topic.trim() === '') return null;
-  const cleanTopic = topic.trim().toLowerCase();
+  const key = cleanTopic(topic);
+  if (key === null) return null;
 
   const lastChange = await db.get(
     "SELECT id, detail_json FROM learning_events WHERE kind = 'approach_change' AND topic = ? ORDER BY id DESC LIMIT 1",
-    cleanTopic,
+    key,
   );
   if (!lastChange) return null;
 
   const laterRecovery = await db.get(
     "SELECT id FROM learning_events WHERE kind = 'recovery_success' AND topic = ? AND id > ? LIMIT 1",
-    cleanTopic, lastChange.id,
+    key, lastChange.id,
   );
   if (laterRecovery) return null; // this approach change already has its outcome
 
-  const approach = parseDetail(lastChange.detail_json).to;
+  const approach = parseJsonObject(lastChange.detail_json).to;
   if (typeof approach !== 'string' || approach === '') return null;
   if (!(masteryAfter > masteryBefore)) return null;
 
   return recordEvent(db, {
     kind: 'recovery_success',
-    topic: cleanTopic,
+    topic: key,
     detail: { approach, before: masteryBefore, after: masteryAfter },
   });
 }

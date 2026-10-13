@@ -1,13 +1,23 @@
 // Persistent flashcard decks: browse, open, practise with saved review status.
 // Generation still lives in flashcardService; this route saves and serves decks.
+// The POST /generate endpoint (flashcard deck creation) also lives here —
+// (The former routes/flashcards.js file was merged into this module; the app.js
+// import switch.
 
 import express from 'express';
 import { ApiError } from '../middleware/errors.js';
 import { recordEvent } from '../services/events.js';
-import { CATEGORIES } from './sessions.js';
+import { CATEGORIES } from '../constants.js';
+import { generateFlashcards } from '../services/flashcardService.js';
+import { resolveRequestScope, validateSourceIds, validateTopic } from '../services/retrieval.js';
 import { nowIso } from '../store/sqlite.js';
 
 const CARD_STATUSES = new Set(['new', 'known', 'review']);
+
+/** Stored string list (defensive: corrupt/null → empty). */
+function parseStringList(json) {
+  try { return JSON.parse(json) || []; } catch { return []; }
+}
 
 function deckRowToApi(row, extra = {}) {
   return {
@@ -105,7 +115,7 @@ export function decksRouter({ db }) {
         category: row.session_category ?? null,
         knownCount: cards.filter((c) => c.status === 'known').length,
         reviewCount: cards.filter((c) => c.status === 'review').length,
-        sourceIds: (() => { try { return JSON.parse(row.source_ids_json) || []; } catch { return []; } })(),
+        sourceIds: parseStringList(row.source_ids_json),
       }),
       cards,
     });
@@ -153,6 +163,33 @@ export function decksRouter({ db }) {
     if (!deck) throw new ApiError(404, 'DECK_NOT_FOUND', 'That deck does not exist. Generate a new one.');
     await db.run('DELETE FROM decks WHERE id = ?', deck.id); // cards cascade
     res.status(204).end();
+  });
+
+  return router;
+}
+
+// POST /api/flashcards/generate — generates AND persists a deck.
+// Session scope is enforced server-side via resolveRequestScope (sessionId
+// present) or the legacy sourceIds filter. The deck is saved and returned
+// with its id. Mounted by app.js under /api/flashcards.
+export function flashcardsRouter({ db, ai, vector }) {
+  const router = express.Router();
+
+  router.post('/generate', async (req, res) => {
+    const { topic, count, sourceIds, sessionId } = req.body ?? {};
+    validateTopic(topic);
+    if (count !== undefined && (!Number.isInteger(count) || count < 3 || count > 12)) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'count must be a whole number between 3 and 12.');
+    }
+    validateSourceIds(sourceIds);
+
+    const scope = await resolveRequestScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+
+    const result = await generateFlashcards(
+      { topic: topic.trim(), count: count ?? 8, sourceIds: scope.sourceIds, sessionId: scope.session?.id ?? null },
+      { ai, vector, db },
+    );
+    res.status(201).json(result);
   });
 
   return router;

@@ -2,7 +2,8 @@
 // mastery = correct / total per topic. No machine learning — a beginner can
 // check every number by hand. Pure functions; persistence lives elsewhere.
 
-export const THRESHOLDS = {
+/** Grading bands (internal; mastery ranges → next difficulty + revision line). */
+const THRESHOLDS = {
   easyBelow: 0.5, // mastery < 0.5 → next questions are easy
   mediumBelow: 0.8, // 0.5 ≤ mastery < 0.8 → medium, else hard
   revisionBelow: 0.6, // needs revision when mastery < 0.6 …
@@ -41,10 +42,6 @@ export function applyAttempt(topic, stats, attempt) {
 export function chooseDifficulty(stats) {
   if (!stats || stats.total === 0) return 'medium';
   return difficultyFor(stats.correct / stats.total);
-}
-
-export function needsRevisionFromStats(stats) {
-  return needsRevision(stats);
 }
 
 // Which topic should the student tackle next?

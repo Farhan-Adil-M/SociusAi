@@ -29,9 +29,6 @@
 .btn-secondary { background: var(--paper); color: var(--ink); border-color: var(--line-strong); }
 .btn-secondary:hover:not(:disabled) { background: var(--canvas); color: var(--ink); }
 
-.btn-accent { background: var(--pink); color: #fff; }
-.btn-accent:hover:not(:disabled) { background: #A8265C; color: #fff; }
-
 .btn-quiet { color: var(--ink-2); }
 .btn-quiet:hover:not(:disabled) { background: var(--canvas-2); color: var(--ink); }
 
@@ -166,6 +163,35 @@
 
 .hairline { height: 1px; background: var(--line); border: 0; margin: 0; }
 
+/* ---------- Session cards (quiz run, flashcard practice) ---------- */
+/* One header card wrapping a quiz run or a flashcard practice session. The
+   two pages' templates emit these shared names (quiz.css / flashcards.css
+   keep only their page-specific pieces, e.g. options, controls). */
+.session-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.session-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--line);
+}
+.session-card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s1);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
 /* ---------- Badges, chips, status ---------- */
 .badge {
   display: inline-flex;
@@ -283,14 +309,6 @@
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.skeleton {
-  background: linear-gradient(90deg, var(--canvas-2) 25%, #E3E7EC 37%, var(--canvas-2) 63%);
-  background-size: 400% 100%;
-  animation: shimmer 1.3s ease infinite;
-  border-radius: var(--r-sm);
-}
-@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
-
 .loading-row {
   display: flex;
   align-items: center;
@@ -368,6 +386,17 @@
   letter-spacing: 0.04em;
 }
 
+/* Citation wrapper used by study answers, quiz results and flashcard backs:
+   "Source passages" heading above a citation chip list. */
+.exchange-citations { margin-top: var(--s4); }
+.exchange-citations-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  margin-bottom: var(--s2);
+}
+
 /* ---------- List rows ---------- */
 .row-list { display: flex; flex-direction: column; }
 .row-item {
@@ -399,13 +428,40 @@
 }
 .row-meta { font-size: var(--fs-xs); color: var(--ink-3); }
 
+/* ---------- Import status + library/toolbar chrome ---------- */
+/* Shared page chrome also used by the flashcards page: the page head /
+   toolbar classes come from here so both pages load one identical set. */
+.study-add-status { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s3); font-size: var(--fs-sm); color: var(--ink-2); }
+
+.lib-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s5);
+  flex-wrap: wrap;
+}
+.lib-head-actions { display: flex; gap: var(--s3); flex-wrap: wrap; padding-top: var(--s2); }
+
+.lib-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-bottom: var(--s5);
+  padding: var(--s3) var(--s4);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+.lib-toolbar-search { flex: 1 1 260px; min-width: 200px; }
+.lib-toolbar-filters { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.lib-toolbar-filters .select { width: auto; min-width: 150px; }
+
 /* ---------- Misc layout helpers ---------- */
 .stack { display: flex; flex-direction: column; }
 .stack-1 { gap: var(--s1); }
 .stack-2 { gap: var(--s2); }
 .stack-3 { gap: var(--s3); }
 .stack-4 { gap: var(--s4); }
-.stack-5 { gap: var(--s5); }
-.stack-6 { gap: var(--s6); }
 .inline { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
 .spacer { flex: 1; }

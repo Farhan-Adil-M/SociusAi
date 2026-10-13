@@ -15,8 +15,9 @@ import { UNTRUSTED_RULE } from './prompts.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
 import { nowIso } from '../store/sqlite.js';
-// Shared v1.4 enums live with the profile validator that enforces them.
-import { PURPOSES, EXPLANATION_STYLES } from '../routes/profile.js';
+// Shared v1.4 enums come from constants.js — the single source of truth
+// (routes never get imported from services).
+import { PURPOSES, EXPLANATION_STYLES } from '../constants.js';
 
 const MAX_ATTEMPTS = 2;      // bounded retries when the model returns unusable JSON
 const MAX_TOKENS = 1000;

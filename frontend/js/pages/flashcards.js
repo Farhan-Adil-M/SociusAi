@@ -18,6 +18,7 @@ import { api } from '../api.js';
 import {
   icon, escapeHtml, renderCitations, wireCitations,
   showEmpty, showError, formatRelative, errorMessage,
+  setTopicError, topicCheck, setGenerating,
 } from '../ui.js';
 
 mountShell('flashcards');
@@ -45,6 +46,8 @@ const openDeckId = (params.get('deck') || '').trim();
 const presetSessionId = (params.get('session') || '').trim();
 const presetTopic = (params.get('topic') || '').trim(); // dashboard deep-link
 
+const GENERATING_LABELS = { ready: 'Generate deck', busy: 'Generating cards…' };
+
 const libState = { q: '', sessionId: '', sort: 'recent' };
 
 /* ------------------------------------------------------------- library --- */
@@ -62,13 +65,13 @@ async function loadLibrary() {
   }
 }
 
-function deckRow(deck, { showSession }) {
+function deckRow(deck) {
   const reviewed = deck.lastReviewedAt ? `reviewed ${formatRelative(deck.lastReviewedAt)}` : 'not reviewed yet';
   return `
     <a class="row-item fc-deck" href="flashcards.html?deck=${encodeURIComponent(deck.id)}">
       <span class="row-icon">${icon('layers', { size: 15 })}</span>
       <span class="fc-deck-main">
-        <span class="fc-deck-title">${escapeHtml(deck.topic)}${showSession && deck.sessionTitle ? ` <span class="row-meta">in ${escapeHtml(deck.sessionTitle)}</span>` : ''}</span>
+        <span class="fc-deck-title">${escapeHtml(deck.topic)}</span>
         <span class="fc-deck-meta">
           <span>${deck.cardCount} cards · created ${escapeHtml(formatRelative(deck.createdAt))}</span>
           <span>${escapeHtml(reviewed)}</span>
@@ -119,12 +122,12 @@ function renderGroups(decks) {
   groupsHost.innerHTML = ordered.map(([sessionId, list]) => {
     if (sessionId === null) {
       return `<section class="fc-group">${groupHead('Unsorted', `${list.length} ${list.length === 1 ? 'deck' : 'decks'} not in a session`)}
-        <div class="row-list">${list.map((deck) => deckRow(deck, { showSession: false })).join('')}</div></section>`;
+        <div class="row-list">${list.map((deck) => deckRow(deck)).join('')}</div></section>`;
     }
     const title = list[0].sessionTitle || 'Session';
     const category = list[0].category || '';
     return `<section class="fc-group">${groupHead(title, `${category ? `${category} · ` : ''}${list.length} ${list.length === 1 ? 'deck' : 'decks'}`, `session.html?id=${encodeURIComponent(sessionId)}`)}
-      <div class="row-list">${list.map((deck) => deckRow(deck, { showSession: false })).join('')}</div></section>`;
+      <div class="row-list">${list.map((deck) => deckRow(deck)).join('')}</div></section>`;
   }).join('');
 }
 
@@ -240,11 +243,11 @@ function renderCard() {
     : '';
 
   stage.innerHTML = `
-    <div class="fc-session">
-      <div class="fc-session-head">
+    <div class="session-card">
+      <div class="session-card-head">
         <div>
           <p class="fc-session-title">${escapeHtml(practice.deck.topic)}</p>
-          <div class="fc-session-meta">
+          <div class="session-card-meta">
             <a class="fc-crumb" href="flashcards.html">Library</a>
             ${practice.deck.sessionTitle ? `<span>· in ${escapeHtml(practice.deck.sessionTitle)}</span>` : '<span>· Unsorted</span>'}
             <span class="badge badge-green">${tallies.known} known</span>
@@ -301,7 +304,7 @@ function renderCard() {
 function renderSummary() {
   const tallies = counts();
   stage.innerHTML = `
-    <div class="fc-session">
+    <div class="session-card">
       <div class="fc-summary">
         <span class="state-icon">${icon('checkCircle', { size: 20 })}</span>
         <h2>Deck complete</h2>
@@ -415,22 +418,8 @@ stage.addEventListener('click', (event) => {
 
 /* ---------------------------------------------------------- generator --- */
 
-function setTopicError(message) {
-  topicError.textContent = message || '';
-  topicError.hidden = !message;
-  if (message) topicInput.setAttribute('aria-invalid', 'true');
-  else topicInput.removeAttribute('aria-invalid');
-}
-
 function setSetupStatus(kind, html) {
   setupStatus.innerHTML = html ? `<div class="banner banner-${kind}">${html}</div>` : '';
-}
-
-function setGenerating(value) {
-  generateButton.disabled = value;
-  generateButton.innerHTML = value
-    ? '<span class="spinner" aria-hidden="true"></span> Generating cards…'
-    : 'Generate deck';
 }
 
 /** Start the generator's "Search in" select from a clean state. */
@@ -495,13 +484,13 @@ sessionSelect.addEventListener('change', refreshScope);
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const topic = topicInput.value.trim();
 
-  if (topic.length < 2) { setTopicError('Enter a topic — at least 2 characters.'); topicInput.focus(); return; }
-  if (topic.length > 80) { setTopicError('Keep the topic under 80 characters.'); topicInput.focus(); return; }
-  setTopicError('');
+  const problem = topicCheck(topicInput);
+  if (problem) { setTopicError(topicInput, topicError, problem); topicInput.focus(); return; }
+  setTopicError(topicInput, topicError, '');
   setSetupStatus('', '');
 
+  const topic = topicInput.value.trim();
   const count = Number(countSelect.value);
   const sourceIds = scopeSelect.value ? [scopeSelect.value] : [];
   const sessionId = sessionSelect.value || null;
@@ -513,7 +502,7 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
-  setGenerating(true);
+  setGenerating(generateButton, GENERATING_LABELS, true);
   try {
     const data = await api.generateFlashcards({ topic, count, sourceIds, sessionId });
     live.textContent = `Deck ready: ${data.cards.length} cards, saved to your library.`;
@@ -533,7 +522,7 @@ form.addEventListener('submit', async (event) => {
       setSetupStatus('error', `${icon('alert', { size: 16 })} <span>${escapeHtml(errorMessage(error))}</span>`);
     }
   } finally {
-    setGenerating(false);
+    setGenerating(generateButton, GENERATING_LABELS, false);
   }
 });
 

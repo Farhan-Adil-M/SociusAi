@@ -1,4 +1,4 @@
-# Socius AI — API Contract (v1)
+# Socius AI — API Contract (v1 → v1.5)
 
 Shared specification between backend (`server/`, owned by OpenCode) and frontend (`frontend/`, owned by Freebuff).
 **This file is owned by the backend agent.** Propose changes in chat before editing; both sides must follow it.
@@ -456,7 +456,7 @@ As before, plus: optional `sessionId`; response gains `deckId`, `sessionId`. The
 
 Additive, backend-only; no existing request/response shapes changed.
 
-**Evidence floor for the tutor.** Retrieved chunks scoring below `RAG_MIN_SIMILARITY` (default 0.2, env-tunable) are removed before generation. When nothing survives, the tutor abstains exactly as before (`needsContent: true`, empty citations) instead of answering from unrelated passages.
+**Evidence floor for the tutor.** Retrieved chunks scoring below `RAG_MIN_SIMILARITY` (default 0.1, env-tunable) are removed before generation. When nothing survives, the tutor abstains exactly as before (`needsContent: true`, empty citations) instead of answering from unrelated passages.
 
 **Generation breadth.** Quiz and flashcard generation retrieve without the floor (a topic query on a small corpus scores lower than a full question), but the response gains `"weakEvidence": true` whenever every retrieved passage scored below the floor — the frontend should surface a "material is thin" notice rather than pretending the deck is strongly grounded.
 
@@ -479,7 +479,7 @@ Additive, backend-only; no request/response shapes changed except one additive h
 
 **Cold-start demo seeding (fallback only).** When the fallback store is empty, the serverless entry seeds `data/demo-seed.json` (three committed biology pages) — chunked and embedded live via NIM at boot, recorded as a normal source (`origin: 'seed'`, id `src_seed_demo`) so it appears in the library, is organizable, and is citable. Idempotent (no-op once the store holds anything); a NIM failure during seeding is logged and the app still boots.
 
-**Schema v4/v5 (both additive).** v4: `sources.license`, `sources.origin`, tables `dataset_items`, `dataset_runs` (dataset-ingestion pilot, CLI-only — no API yet). v5: `vector_chunks`.
+**Schema v4/v5 (both additive).** v4: `sources.license`, `sources.origin`, tables `dataset_items`, `dataset_runs` (dataset ingestion currently has schema + licence plumbing only — there is **no ingestion CLI yet** and no API). v5: `vector_chunks`.
 
 **`GET /api/health`**: `checks.chroma` gains `backend` (`"chroma"` | `"sqlite"`) so the UI can show which store is live. `checks.chroma.ok` is `true` whenever the active backend answers — a healthy fallback is a healthy vector store.
 
@@ -588,4 +588,4 @@ After a **successful session-scoped tutor answer** (`sessionId` given, `needsCon
 
 ## `GET /api/health` — engine metadata
 
-`checks.sqlite.backend` (`"node"` | `"libsql"`) names the active structured-database engine. `checks.limits.maxUploadMb` (v1.4-era addition) stays.
+`checks.sqlite.backend` (`"node"` | `"libsql"`) names the active structured-database engine. `checks.limits.maxUploadMb` (the configured upload cap in MB — documented here in this v1.5 section; it was specced alongside serverless work, not as a v1.4 addition) stays.

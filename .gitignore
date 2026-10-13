@@ -2,7 +2,8 @@
 node_modules/
 
 # Secrets and local config
-.env
+.env*
+!.env.example
 
 # Runtime data (keep the committed demo seed — the Vercel build needs it)
 data/*
@@ -18,6 +19,4 @@ __pycache__/
 # Logs and OS noise
 *.log
 .DS_Store
-.vercel
-.env*
 .vercel/
