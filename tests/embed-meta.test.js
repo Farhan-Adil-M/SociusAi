@@ -14,8 +14,8 @@ import { fakeVector, makeAi } from './helpers.js';
 
 async function startApp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-meta-'));
-  const db = openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db, ai: makeAi(), vector: fakeVector() });
+  const db = await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db, ai: makeAi(), vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, db, dir, close: () => new Promise((r) => server.close(r)) };
@@ -27,19 +27,19 @@ test('first ingestion records the embedding model and dimension', async (t) => {
   const ctx = await startApp();
   t.after(ctx.close);
 
-  assert.equal(getMeta(ctx.db, 'embed_model'), null); // fresh install: nothing recorded yet
+  assert.equal(await getMeta(ctx.db, 'embed_model'), null); // fresh install: nothing recorded yet
   const res = await fetch(`${ctx.base}/api/sources/webpage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(WEBPAGE),
   });
   assert.equal(res.status, 201);
-  assert.equal(getMeta(ctx.db, 'embed_model'), config.nimEmbedModel);
+  assert.equal(await getMeta(ctx.db, 'embed_model'), config.nimEmbedModel);
 
   // same-model ingest right after: no error, meta untouched
   const again = await fetch(`${ctx.base}/api/sources/webpage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'https://learn.example/y', text: 'Y'.repeat(90) }),
   });
   assert.equal(again.status, 201);
-  assert.equal(getMeta(ctx.db, 'embed_model'), config.nimEmbedModel);
+  assert.equal(await getMeta(ctx.db, 'embed_model'), config.nimEmbedModel);
 });
 
 test('mismatched configured model stops ingestion with a clear reindex instruction', async (t) => {
@@ -50,7 +50,7 @@ test('mismatched configured model stops ingestion with a clear reindex instructi
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(WEBPAGE),
   });
   // simulate: the index was built with an older model, config now says another
-  setMeta(ctx.db, 'embed_model', 'some/older-embed-model');
+  await setMeta(ctx.db, 'embed_model', 'some/older-embed-model');
 
   const res = await fetch(`${ctx.base}/api/sources/webpage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -62,5 +62,5 @@ test('mismatched configured model stops ingestion with a clear reindex instructi
   assert.ok(body.error.message.includes('npm run reindex'));
 
   // the mismatched (stale) recording must be preserved, never silently replaced
-  assert.equal(getMeta(ctx.db, 'embed_model'), 'some/older-embed-model');
+  assert.equal(await getMeta(ctx.db, 'embed_model'), 'some/older-embed-model');
 });

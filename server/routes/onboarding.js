@@ -26,8 +26,8 @@ export function onboardingRouter({ db, ai }) {
     res.json(await turnOnboarding(db, message, { ai }));
   });
 
-  router.post('/skip', (req, res) => {
-    const row = db.prepare("SELECT * FROM learner_profile WHERE id = 'default'").get();
+  router.post('/skip', async (req, res) => {
+    const row = await db.get("SELECT * FROM learner_profile WHERE id = 'default'");
     if (row?.state === 'completed') {
       throw new ApiError(409, 'ONBOARDING_COMPLETE', 'Onboarding already finished.');
     }
@@ -35,14 +35,12 @@ export function onboardingRouter({ db, ai }) {
     // so a skipped row is simply written wholesale with a cleared transcript.
     const now = nowIso();
     if (row) {
-      db.prepare("UPDATE learner_profile SET state = 'skipped', transcript_json = '[]', updated_at = ? WHERE id = 'default'")
-        .run(now);
+      await db.run("UPDATE learner_profile SET state = 'skipped', transcript_json = '[]', updated_at = ? WHERE id = 'default'", now);
     } else {
-      db.prepare("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', 'skipped', '[]', '{}', ?, ?)")
-        .run(now, now);
+      await db.run("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', 'skipped', '[]', '{}', ?, ?)", now, now);
     }
-    const updated = db.prepare("SELECT * FROM learner_profile WHERE id = 'default'").get();
-    const subjects = db.prepare('SELECT * FROM learner_subjects ORDER BY subject COLLATE NOCASE').all();
+    const updated = await db.get("SELECT * FROM learner_profile WHERE id = 'default'");
+    const subjects = await db.all('SELECT * FROM learner_subjects ORDER BY subject COLLATE NOCASE');
     res.json({ profile: profileToApi(updated, subjects) });
   });
 

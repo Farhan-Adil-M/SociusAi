@@ -23,12 +23,12 @@ function parseFields(json) {
   }
 }
 
-function loadRow(db) {
-  return db.prepare("SELECT * FROM learner_profile WHERE id = 'default'").get() ?? null;
+async function loadRow(db) {
+  return await db.get("SELECT * FROM learner_profile WHERE id = 'default'") ?? null;
 }
 
-function loadSubjects(db) {
-  return db.prepare('SELECT * FROM learner_subjects ORDER BY subject COLLATE NOCASE').all();
+async function loadSubjects(db) {
+  return db.all('SELECT * FROM learner_subjects ORDER BY subject COLLATE NOCASE');
 }
 
 // ---- validation (all input is untrusted; clients cannot write 'source') ----
@@ -146,13 +146,13 @@ export function profileToApi(row, subjects) {
 export function profileRouter({ db }) {
   const router = express.Router();
 
-  router.get('/', (req, res) => {
-    const row = loadRow(db);
+  router.get('/', async (req, res) => {
+    const row = await loadRow(db);
     // No row yet → a built default. Never insert on GET; state stays "new".
-    res.json({ profile: profileToApi(row, row ? loadSubjects(db) : []) });
+    res.json({ profile: profileToApi(row, row ? await loadSubjects(db) : []) });
   });
 
-  router.patch('/', (req, res) => {
+  router.patch('/', async (req, res) => {
     const body = req.body ?? {};
     const keys = ['interests', 'goals', 'purpose', 'preferences', 'subjects'];
     if (!keys.some((key) => body[key] !== undefined)) {
@@ -167,7 +167,7 @@ export function profileRouter({ db }) {
     if (body.preferences !== undefined) updates.preferences = validatePreferences(body.preferences);
     if (body.subjects !== undefined) updates.subjects = validateSubjects(body.subjects);
 
-    const row = loadRow(db);
+    const row = await loadRow(db);
     const fields = parseFields(row?.fields_json);
 
     // Each provided key replaces that stored value wholesale; omitted keys are
@@ -179,28 +179,31 @@ export function profileRouter({ db }) {
 
     const now = nowIso();
     if (row) {
-      db.prepare("UPDATE learner_profile SET fields_json = ?, updated_at = ? WHERE id = 'default'")
-        .run(JSON.stringify(fields), now);
+      await db.run("UPDATE learner_profile SET fields_json = ?, updated_at = ? WHERE id = 'default'", JSON.stringify(fields), now);
     } else {
       // Manual editing counts as opted out of the intro: state "skipped".
-      db.prepare("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', 'skipped', '[]', ?, ?, ?)")
-        .run(JSON.stringify(fields), now, now);
+      await db.run("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', 'skipped', '[]', ?, ?, ?)",
+        JSON.stringify(fields), now, now);
     }
 
     if (updates.subjects !== undefined) {
       // Wholesale replacement: subjects absent from the new list are deleted.
-      db.prepare('DELETE FROM learner_subjects').run();
-      const insert = db.prepare('INSERT INTO learner_subjects (subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?)');
-      for (const s of updates.subjects) insert.run(s.subject, s.familiarity, s.confidence, s.source, now);
+      await db.batch([
+        { sql: 'DELETE FROM learner_subjects' },
+        ...updates.subjects.map((s) => ({
+          sql: 'INSERT INTO learner_subjects (subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?)',
+          args: [s.subject, s.familiarity, s.confidence, s.source, now],
+        })),
+      ], 'write');
     }
 
-    res.json({ profile: profileToApi(loadRow(db), loadSubjects(db)) });
+    res.json({ profile: profileToApi(await loadRow(db), await loadSubjects(db)) });
   });
 
-  router.delete('/', (req, res) => {
-    db.prepare("DELETE FROM learner_profile WHERE id = 'default'").run();
-    db.prepare('DELETE FROM learner_subjects').run();
-    db.prepare('DELETE FROM learning_events').run();
+  router.delete('/', async (req, res) => {
+    await db.run("DELETE FROM learner_profile WHERE id = 'default'");
+    await db.run('DELETE FROM learner_subjects');
+    await db.run('DELETE FROM learning_events');
     // 204 with an empty body; deleting when nothing exists is fine (idempotent).
     res.status(204).end();
   });

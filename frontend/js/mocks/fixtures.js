@@ -493,6 +493,7 @@ export async function handleMock(path, { method = 'GET', body = {} } = {}) {
         sqlite: { ok: true, message: '' },
         chroma: { ok: true, message: '' },
         nim: { ok: true, message: '', chatModel: 'nvidia/nemotron-3.5-lightning-30b-a3b', embeddingModel: 'nvidia/nemotron-3-embed-1b' },
+        limits: { maxUploadMb: 25 },
       },
     };
   }

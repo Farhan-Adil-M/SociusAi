@@ -22,7 +22,7 @@ import { resolveVectorStore } from './store/vectorProvider.js';
 
 const FRONTEND_DIR = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../frontend');
 
-export function createApp({ db, ai, vector } = {}) {
+export async function createApp({ db, ai, vector } = {}) {
   const services = {
     ai: { chatCompletion, embedTexts, embedQuery, ...ai },
     vector: { ...resolveVectorStore(db), ...vector },

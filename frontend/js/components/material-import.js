@@ -9,6 +9,7 @@
 // the upload.
 
 import { api } from '../api.js';
+import { getHealth } from './shell.js';
 import { icon, escapeHtml, errorMessage, formatDate } from '../ui.js';
 
 /* -------------------------------------------------- shared input checks --- */
@@ -25,6 +26,23 @@ export const MAX_WEBPAGE_CHARS = 200000;
 export function checkUploadFile(file) {
   if (!/\.(pdf|pptx)$/i.test(file.name)) return 'Unsupported file — use a .pdf or .pptx.';
   return null;
+}
+
+/* Upload-cap honesty: the real MAX_UPLOAD_MB lives on the backend and only
+   leaves it inside the health payload (checks.limits.maxUploadMb). getHealth()
+   is the single health request the page already makes (shell.js caches it for
+   the banner and status pill), so this adds no extra network call. When the
+   field is missing or health fails, the hint keeps the markup's default 25. */
+export const DEFAULT_UPLOAD_MB = 25;
+
+/** Fill an upload-hint element with the backend's real limit, e.g. "…up to N MB.". */
+export function setUploadLimitHint(hintEl) {
+  getHealth().then((health) => {
+    const maxMb = health.ok ? health.data?.checks?.limits?.maxUploadMb : null;
+    if (hintEl && Number(maxMb) > 0) {
+      hintEl.textContent = `Text-based files only, up to ${maxMb} MB.`;
+    }
+  });
 }
 
 /** First validation error for the pasted-webpage form, or null when valid. */
@@ -75,7 +93,7 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
     <div class="imp-block">
       <label class="field-label" for="imp-file">Upload a PDF or PowerPoint</label>
       <input class="input" id="imp-file" type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation">
-      <p class="field-hint">Text-based files only, up to 25 MB.</p>
+      <p class="field-hint" data-imp-limit>Text-based files only, up to ${DEFAULT_UPLOAD_MB} MB.</p>
     </div>
     <hr class="hairline">
     <form class="imp-block stack stack-2" data-imp-webpage novalidate>
@@ -92,6 +110,9 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
   const dupHost = host.querySelector('[data-imp-dup]');
   const fileInput = host.querySelector('#imp-file');
   const form = host.querySelector('[data-imp-webpage]');
+
+  // Replace the 25 MB default with the backend's real limit once health knows it.
+  setUploadLimitHint(host.querySelector('[data-imp-limit]'));
 
   /** Info-only hint when the chosen material already exists. Never blocks. */
   function showDuplicateHint(matched) {

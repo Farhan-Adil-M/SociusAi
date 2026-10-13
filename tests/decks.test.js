@@ -23,8 +23,8 @@ const json = (res) => res.json();
 async function startApp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-decks-'));
   const dbPath = path.join(dir, 'app.db');
-  const db = openDb(dbPath);
-  const app = createApp({ db, ai: makeAi(), vector: fakeVector() });
+  const db = await openDb(dbPath);
+  const app = await createApp({ db, ai: makeAi(), vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, db, dbPath, server, close: () => new Promise((r) => server.close(r)) };
@@ -80,8 +80,8 @@ test('decks persist and review status survive a restart across instances', async
 
   // "Restart": a genuinely separate app instance reopened over the same
   // SQLite file — no shared in-memory state with the first app.
-  const db2 = openDb(ctx.dbPath);
-  const app2 = createApp({ db: db2, ai: makeAi(), vector: fakeVector() });
+  const db2 = await openDb(ctx.dbPath);
+  const app2 = await createApp({ db: db2, ai: makeAi(), vector: fakeVector() });
   const server2 = app2.listen(0);
   await once(server2, 'listening');
   t.after(() => new Promise((r) => server2.close(r)));
@@ -176,8 +176,8 @@ test('a failed review update rolls back — no half-applied card mark', async (t
 
   // Force the *second* UPDATE (decks.last_reviewed_at) to abort, so the
   // parked card write must be rolled back or the card row is left corrupted.
-  ctx.db.exec("CREATE TRIGGER force_deck_fail BEFORE UPDATE ON decks BEGIN SELECT RAISE(ABORT, 'forced failure'); END;");
-  t.after(() => ctx.db.exec('DROP TRIGGER IF EXISTS force_deck_fail'));
+  await ctx.db.exec("CREATE TRIGGER force_deck_fail BEFORE UPDATE ON decks BEGIN SELECT RAISE(ABORT, 'forced failure'); END;");
+  t.after(async () => { await ctx.db.exec('DROP TRIGGER IF EXISTS force_deck_fail'); });
 
   const failed = await fetch(`${ctx.base}/api/decks/${deckId}/cards/1`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'known' }),
@@ -195,7 +195,7 @@ test('a failed review update rolls back — no half-applied card mark', async (t
   assert.equal(deck.deck.lastReviewedAt, null);
 
   // The trigger was really the cause: with it dropped, the same mark lands.
-  ctx.db.exec('DROP TRIGGER force_deck_fail');
+  await ctx.db.exec('DROP TRIGGER force_deck_fail');
   const ok = await fetch(`${ctx.base}/api/decks/${deckId}/cards/1`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'known' }),
   });

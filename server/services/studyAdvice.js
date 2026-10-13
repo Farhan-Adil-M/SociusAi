@@ -5,8 +5,8 @@
 // generator so the wording/prompts/provenance rules stay identical.
 //
 // All functions are pure over their (db, ai, vector) dependencies, so tests
-// can pass in-memory databases and stubs. DB reads are synchronous today
-// (db.prepare), matching the rest of the project.
+// can pass in-memory databases and stubs. DB reads go through the async engine
+// facade (db.get/db.all) like every other module.
 
 import { retrieve, toCitation, hitScore } from './retrieval.js';
 import { wrapPassages } from './prompts.js';
@@ -62,8 +62,8 @@ export function topicForPracticeQuestions(questionText) {
 const masteryPercentOf = (row) => Math.round((row.correct / row.total) * 100);
 const byWorstMastery = (a, b) => (a.correct / a.total) - (b.correct / b.total);
 
-export function revisionAdvice(db) {
-  const rows = db.prepare('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC').all();
+export async function revisionAdvice(db) {
+  const rows = await db.all('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC');
 
   if (rows.length === 0) {
     return {
@@ -104,10 +104,10 @@ export function revisionAdvice(db) {
 
 // ---------- b) progress roll-up (deterministic, no AI) ----------
 
-export function progressAdvice(db) {
-  const topicRows = db.prepare('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC').all();
-  const attempts = db.prepare('SELECT correct, total FROM quiz_attempts').all();
-  const activityCount = db.prepare('SELECT COUNT(*) AS n FROM activity').get().n;
+export async function progressAdvice(db) {
+  const topicRows = await db.all('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC');
+  const attempts = await db.all('SELECT correct, total FROM quiz_attempts');
+  const activityCount = (await db.get('SELECT COUNT(*) AS n FROM activity')).n;
 
   const questionsAnswered = attempts.reduce((sum, a) => sum + a.total, 0);
   const correctAnswers = attempts.reduce((sum, a) => sum + a.correct, 0);

@@ -162,19 +162,24 @@ export async function generateQuiz({ topic, questionCount = 5, difficulty, sourc
     // Persist with the answer key (server-side only).
     const quizId = newId('quiz');
     const createdAt = nowIso();
-    db.prepare('INSERT INTO quizzes (id, topic, difficulty, question_count, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(quizId, topic.trim(), difficulty, accepted.length, createdAt);
+    await db.batch([
+      {
+        sql: 'INSERT INTO quizzes (id, topic, difficulty, question_count, created_at) VALUES (?, ?, ?, ?, ?)',
+        args: [quizId, topic.trim(), difficulty, accepted.length, createdAt],
+      },
+      ...accepted.map((q, idx) => ({
+        sql: 'INSERT INTO quiz_questions (quiz_id, idx, text, choices_json, correct_choice_id, explanation, citations_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        args: [quizId, idx, q.text, JSON.stringify(q.choices), q.correctChoiceId, q.explanation, JSON.stringify(citationsForQuestion(hits, q.cite))],
+      })),
+    ], 'write');
 
-    const insertQuestion = db.prepare(
-      'INSERT INTO quiz_questions (quiz_id, idx, text, choices_json, correct_choice_id, explanation, citations_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    );
-
-    const responseQuestions = accepted.map((q, idx) => {
-      const citations = citationsForQuestion(hits, q.cite);
-      insertQuestion.run(quizId, idx, q.text, JSON.stringify(q.choices), q.correctChoiceId, q.explanation, JSON.stringify(citations));
-      // Strip the key before it ever reaches the response.
-      return { index: idx, text: q.text, choices: q.choices, citations };
-    });
+    // Strip the key before it ever reaches the response.
+    const responseQuestions = accepted.map((q, idx) => ({
+      index: idx,
+      text: q.text,
+      choices: q.choices,
+      citations: citationsForQuestion(hits, q.cite),
+    }));
 
     return { id: quizId, topic: topic.trim(), difficulty, questions: responseQuestions, weakEvidence: weakEvidence ? true : undefined };
 }

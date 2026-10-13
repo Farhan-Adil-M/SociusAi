@@ -22,7 +22,7 @@ export function flashcardsRouter({ db, ai, vector }) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'sourceIds must be an array of source id strings.');
     }
 
-    const scope = resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+    const scope = await resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
     if (!scope.session) {
       await assertSourcesExist(db, sourceIds ?? []); // legacy path: plain source filter
     }

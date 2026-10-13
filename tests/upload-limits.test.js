@@ -25,8 +25,8 @@ const { fakeVector, makeAi } = await import('./helpers.js');
 
 async function startApp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-limits-'));
-  const db = openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db, ai: makeAi(), vector: fakeVector() });
+  const db = await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db, ai: makeAi(), vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };

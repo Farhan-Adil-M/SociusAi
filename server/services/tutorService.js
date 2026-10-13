@@ -54,16 +54,16 @@ function buildSystemPrompt(context, approachUsed) {
 }
 
 /** Best-effort event recording; a logging failure must never fail the answer. */
-function answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven }) {
+async function answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven }) {
   try {
     // Repeated question? The route logs the CURRENT question AFTER this call,
     // so this history holds only earlier questions.
-    const rows = db.prepare("SELECT detail FROM activity WHERE type = 'question' ORDER BY id DESC LIMIT 5").all();
+    const rows = await db.all("SELECT detail FROM activity WHERE type = 'question' ORDER BY id DESC LIMIT 5");
     const recent = rows
       .map((r) => (typeof r.detail === 'string' && r.detail.startsWith('Asked: ') ? r.detail.slice(7) : ''))
       .filter((t) => t !== '');
     if (isRepeatedQuestion(question.trim(), recent)) {
-      recordEvent(db, {
+      await recordEvent(db, {
         kind: 'repeated_question',
         topic: matchedTopic,
         detail: { note: 'the student asked a near-identical question recently — treat as a possible confusion signal, not a proven misconception' },
@@ -75,7 +75,7 @@ function answerContextEvents(db, { question, matchedTopic, previous, explicit, a
   try {
     // The student asked to hear this AGAIN (differently): a confusion signal.
     if (explicit === 'different') {
-      recordEvent(db, { kind: 'explain_again', topic: matchedTopic, detail: { requested: true } });
+      await recordEvent(db, { kind: 'explain_again', topic: matchedTopic, detail: { requested: true } });
     }
   } catch { /* observability must not break answering */ }
   try {
@@ -83,7 +83,7 @@ function answerContextEvents(db, { question, matchedTopic, previous, explicit, a
     // for this topic (a saved style applying for the first time is a change:
     // from=null), or when the student explicitly requested one.
     if (approachGiven || approachUsed !== previous) {
-      recordEvent(db, { kind: 'approach_change', topic: matchedTopic, detail: { from: previous, to: approachUsed } });
+      await recordEvent(db, { kind: 'approach_change', topic: matchedTopic, detail: { from: previous, to: approachUsed } });
     }
   } catch { /* observability must not break answering */ }
 }
@@ -96,9 +96,9 @@ export async function answerQuestion({ question, sourceIds = [], db, approach },
   }
 
   // ---- learner-context personalisation (deterministic, db reads only) ----
-  const context = buildLearnerContext(db, { question });
+  const context = await buildLearnerContext(db, { question });
   const matchedTopic = context?.topics?.[0] ?? null;
-  const previous = lastApproach(db, matchedTopic);
+  const previous = await lastApproach(db, matchedTopic);
   const preferred = context?.style && APPROACH_ORDER.includes(context.style) ? context.style : null;
   const explicit = typeof approach === 'string' && REQUESTABLE_APPROACHES.has(approach.trim()) ? approach.trim() : null;
   const approachGiven = explicit !== null;
@@ -119,7 +119,7 @@ export async function answerQuestion({ question, sourceIds = [], db, approach },
     return { answer: ABSTAIN_MESSAGE, citations: [], needsContent: true, model: config.nimChatModel };
   }
 
-  answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven });
+  await answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven });
 
   return {
     answer,

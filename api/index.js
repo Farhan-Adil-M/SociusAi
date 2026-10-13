@@ -9,14 +9,19 @@
 
 import '../api/polyfill.js'; // must run BEFORE pdf-parse loads
 import { assertConfig } from '../server/config.js';
-import { openDb } from '../server/store/sqlite.js';
+import { openAppDb } from '../server/store/db.js';
 import { createApp } from '../server/app.js';
 import { resolveVectorStore } from '../server/store/vectorProvider.js';
 import { seedDemoCorpusIfEmpty } from '../server/store/sqlite-vector.js';
 import { embedTexts } from '../server/services/embeddings.js';
 
 assertConfig();
-const db = openDb(process.env.SQLITE_DB_PATH ?? '/tmp/socius-app.db');
+// TURSO_* envs transparently select the hosted engine (openAppDb refuses boot
+// with an actionable error when the hosted schema is behind this build — the
+// prod-honesty gate; do not catch this away). Local default keeps the
+// ephemeral serverless path as before.
+const db = await openAppDb({ dbPath: process.env.SQLITE_DB_PATH ?? '/tmp/socius-app.db' });
+
 const vector = resolveVectorStore(db);
 
 // Cold-start seeding (fallback backend only): when the store is empty — every
@@ -31,6 +36,6 @@ if (vector.backend === 'sqlite') {
   }
 }
 
-const app = createApp({ db, vector });
+const app = await createApp({ db, vector });
 
 export default app;

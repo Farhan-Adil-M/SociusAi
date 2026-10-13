@@ -24,7 +24,7 @@ function deckRowToApi(row, extra = {}) {
 export function decksRouter({ db }) {
   const router = express.Router();
 
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const { sessionId: sessionFilter, category, q } = req.query;
     const sort = req.query.sort ?? 'recent';
     if (!['recent', 'alpha', 'active'].includes(sort)) {
@@ -68,8 +68,8 @@ export function decksRouter({ db }) {
       active: `CASE WHEN d.last_reviewed_at IS NOT NULL THEN d.last_reviewed_at ELSE '' END DESC, d.created_at DESC`,
     }[sort];
 
-    const rows = db.prepare(`SELECT ${columns} FROM ${join} ${where} ORDER BY ${orderBy}`).all(...params);
-    const unsortedDeckCount = db.prepare('SELECT COUNT(*) AS n FROM decks WHERE session_id IS NULL').get().n;
+    const rows = await db.all(`SELECT ${columns} FROM ${join} ${where} ORDER BY ${orderBy}`, ...params);
+    const unsortedDeckCount = (await db.get('SELECT COUNT(*) AS n FROM decks WHERE session_id IS NULL')).n;
 
     res.json({
       decks: rows.map((row) => deckRowToApi(row, {
@@ -82,14 +82,14 @@ export function decksRouter({ db }) {
     });
   });
 
-  router.get('/:deckId', (req, res) => {
-    const row = db.prepare(`
+  router.get('/:deckId', async (req, res) => {
+    const row = await db.get(`
       SELECT d.*, ss.title AS session_title, ss.category AS session_category
       FROM decks d LEFT JOIN study_sessions ss ON ss.id = d.session_id
-      WHERE d.id = ?`).get(req.params.deckId);
+      WHERE d.id = ?`, req.params.deckId);
     if (!row) throw new ApiError(404, 'DECK_NOT_FOUND', 'That deck does not exist. Generate a new one.');
 
-    const cards = db.prepare('SELECT * FROM deck_cards WHERE deck_id = ? ORDER BY idx').all(row.id)
+    const cards = (await db.all('SELECT * FROM deck_cards WHERE deck_id = ? ORDER BY idx', row.id))
       .map((card) => ({
         idx: card.idx,
         front: card.front,
@@ -111,8 +111,8 @@ export function decksRouter({ db }) {
     });
   });
 
-  router.patch('/:deckId/cards/:idx', (req, res) => {
-    const deck = db.prepare('SELECT * FROM decks WHERE id = ?').get(req.params.deckId);
+  router.patch('/:deckId/cards/:idx', async (req, res) => {
+    const deck = await db.get('SELECT * FROM decks WHERE id = ?', req.params.deckId);
     if (!deck) throw new ApiError(404, 'DECK_NOT_FOUND', 'That deck does not exist. Generate a new one.');
 
     const idx = Number(req.params.idx);
@@ -123,27 +123,23 @@ export function decksRouter({ db }) {
     if (!CARD_STATUSES.has(status)) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'status must be new, known, or review.');
     }
+    if (!(await db.get('SELECT 1 AS ok FROM deck_cards WHERE deck_id = ? AND idx = ?', deck.id, idx))) {
+      throw new ApiError(404, 'DECK_NOT_FOUND', `Card ${idx} does not exist in the deck.`);
+    }
 
     // Both writes are one transaction: a card mark never lands without the
-    // deck's lastReviewedAt stamp (and vice versa).
+    // deck's lastReviewedAt stamp (and vice versa). db.batch is the engine-
+    // parity transaction primitive — atomic on BOTH engines.
     const now = nowIso();
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      const update = db.prepare('UPDATE deck_cards SET status = ?, reviewed_at = ? WHERE deck_id = ? AND idx = ?')
-        .run(status, now, deck.id, idx);
-      if (update.changes === 0) {
-        throw new ApiError(404, 'DECK_NOT_FOUND', `Card ${idx} does not exist in the deck.`);
-      }
-      db.prepare('UPDATE decks SET last_reviewed_at = ? WHERE id = ?').run(now, deck.id);
-      db.exec('COMMIT');
-    } catch (err) {
-      try { db.exec('ROLLBACK'); } catch { /* nothing left to roll back */ }
-      throw err; // express error handler still returns the right envelope
-    }
+    await db.batch([
+      { sql: 'UPDATE deck_cards SET status = ?, reviewed_at = ? WHERE deck_id = ? AND idx = ?', args: [status, now, deck.id, idx] },
+      { sql: 'UPDATE decks SET last_reviewed_at = ? WHERE id = ?', args: [now, deck.id] },
+    ], 'write');
+
     // Observed learning event: marking a card known/reviewed is weak evidence;
     // re-marking it new is not evidence at all, so nothing is recorded.
     if (status !== 'new') {
-      recordEvent(db, {
+      await recordEvent(db, {
         kind: status === 'known' ? 'card_known' : 'card_review',
         topic: deck.topic.toLowerCase().trim(),
         detail: { deckId: deck.id, idx, status },
@@ -152,10 +148,10 @@ export function decksRouter({ db }) {
     res.json({ deckId: deck.id, idx, status, lastReviewedAt: now });
   });
 
-  router.delete('/:deckId', (req, res) => {
-    const deck = db.prepare('SELECT * FROM decks WHERE id = ?').get(req.params.deckId);
+  router.delete('/:deckId', async (req, res) => {
+    const deck = await db.get('SELECT * FROM decks WHERE id = ?', req.params.deckId);
     if (!deck) throw new ApiError(404, 'DECK_NOT_FOUND', 'That deck does not exist. Generate a new one.');
-    db.prepare('DELETE FROM decks WHERE id = ?').run(deck.id); // cards cascade
+    await db.run('DELETE FROM decks WHERE id = ?', deck.id); // cards cascade
     res.status(204).end();
   });
 

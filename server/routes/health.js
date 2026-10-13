@@ -25,11 +25,15 @@ export function healthRouter({ db, ai, vector }) {
     const checks = { sqlite: { ok: false, message: '' }, chroma: { ok: false, message: '' }, nim: { ok: false, message: '' } };
 
     try {
-      db.prepare('SELECT 1 AS ok').get();
+      await db.get('SELECT 1 AS ok');
       checks.sqlite.ok = true;
     } catch (err) {
       checks.sqlite.message = 'Local database is not readable.';
     }
+
+    // Which storage engine answered: 'node' (local file) or 'libsql' (hosted).
+    // Additive field — A3's upload-limit block below stays untouched.
+    if (checks.sqlite.ok) checks.sqlite.backend = db.kind;
 
     try {
       await (vector?.pingChroma ?? (await import('../store/vectorStore.js')).pingChroma)();
@@ -51,7 +55,7 @@ export function healthRouter({ db, ai, vector }) {
     // Embedding-model guard (contract §Rebuilding): warn when the running
     // index was built with a different model than the configured one.
     if (checks.sqlite.ok && checks.nim.ok) {
-      const storedModel = getMeta(db, 'embed_model');
+      const storedModel = await getMeta(db, 'embed_model');
       if (storedModel && storedModel !== config.nimEmbedModel) {
         checks.nim.ok = false;
         checks.nim.message = `The vector index was built with "${storedModel}" but NIM_EMBED_MODEL is "${config.nimEmbedModel}" — run npm run reindex before ingesting or asking questions.`;

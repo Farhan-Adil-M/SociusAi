@@ -59,8 +59,8 @@ const RETRY_REMINDER = [
 
 // ---------- defensive parsing ----------
 
-function loadRow(db) {
-  return db.prepare("SELECT * FROM learner_profile WHERE id = 'default'").get() ?? null;
+async function loadRow(db) {
+  return await db.get("SELECT * FROM learner_profile WHERE id = 'default'") ?? null;
 }
 
 function parseFieldsJson(text) {
@@ -175,7 +175,7 @@ function buildMessages(fields, transcript, strict) {
 
 export async function turnOnboarding(db, rawMessage, { ai } = {}) {
   const chat = ai?.chatCompletion ?? chatCompletion;
-  const row = loadRow(db);
+  const row = await loadRow(db);
   // Only a finished interview blocks; skipping is retryable ('new' and
   // 'skipped' both (re)start here).
   if (row?.state === 'completed') {
@@ -252,16 +252,20 @@ export async function turnOnboarding(db, rawMessage, { ai } = {}) {
   // ---- the single write for this turn ----
   const now = nowIso();
   if (row) {
-    db.prepare("UPDATE learner_profile SET state = ?, transcript_json = ?, fields_json = ?, updated_at = ? WHERE id = 'default'")
-      .run(state, JSON.stringify(storedTranscript), JSON.stringify(fields), now);
+    await db.run("UPDATE learner_profile SET state = ?, transcript_json = ?, fields_json = ?, updated_at = ? WHERE id = 'default'",
+      state, JSON.stringify(storedTranscript), JSON.stringify(fields), now);
   } else {
-    db.prepare("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', ?, ?, ?, ?, ?)")
-      .run(state, JSON.stringify(storedTranscript), JSON.stringify(fields), now, now);
+    await db.run("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', ?, ?, ?, ?, ?)",
+      state, JSON.stringify(storedTranscript), JSON.stringify(fields), now, now);
   }
   if (subjects) {
-    db.prepare('DELETE FROM learner_subjects').run();
-    const insert = db.prepare('INSERT INTO learner_subjects (subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?)');
-    for (const s of subjects) insert.run(s.subject, s.familiarity, s.confidence, s.source, now);
+    await db.batch([
+      { sql: 'DELETE FROM learner_subjects' },
+      ...subjects.map((s) => ({
+        sql: 'INSERT INTO learner_subjects (subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?)',
+        args: [s.subject, s.familiarity, s.confidence, s.source, now],
+      })),
+    ], 'write');
   }
 
   return { reply: model.reply, state, questionsAsked, done };

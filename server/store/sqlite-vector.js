@@ -21,11 +21,11 @@ const SEED_FILE = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..
 const SEED_SOURCE_ID = 'src_seed_demo';
 
 export function createSqliteVectorStore(db) {
-  const stmtAll = () => db.prepare('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks');
-
   async function addChunks({ ids, embeddings, documents, metadatas }) {
-    const insert = db.prepare('INSERT OR REPLACE INTO vector_chunks (id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?)');
-    ids.forEach((id, i) => insert.run(id, metadatas[i]?.sourceId ?? null, documents[i] ?? '', JSON.stringify(embeddings[i]), JSON.stringify(metadatas[i] ?? {})));
+    await db.batch(ids.map((id, i) => ({
+      sql: 'INSERT OR REPLACE INTO vector_chunks (id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?)',
+      args: [id, metadatas[i]?.sourceId ?? null, documents[i] ?? '', JSON.stringify(embeddings[i]), JSON.stringify(metadatas[i] ?? {})],
+    })), 'write');
   }
 
   function cosine(a, b) {
@@ -41,7 +41,7 @@ export function createSqliteVectorStore(db) {
   }
 
   async function queryChunks({ embedding, nResults = 6, sourceIds = [] }) {
-    const rows = stmtAll().all();
+    const rows = await db.all('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks');
     return rows
       .map((row) => ({
         id: row.id,
@@ -55,25 +55,24 @@ export function createSqliteVectorStore(db) {
   }
 
   async function pingChroma() {
-    stmtAll().get(); // table readable = store healthy
+    await db.get('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks LIMIT 1'); // table readable = store healthy
     return true;
   }
 
   async function countChunks() {
-    return db.prepare('SELECT COUNT(*) AS n FROM vector_chunks').get().n;
+    return (await db.get('SELECT COUNT(*) AS n FROM vector_chunks')).n;
   }
 
   async function resetCollection() {
-    db.prepare('DELETE FROM vector_chunks').run();
+    await db.run('DELETE FROM vector_chunks');
   }
 
   async function deleteChunks(ids) {
-    const remove = db.prepare('DELETE FROM vector_chunks WHERE id = ?');
-    for (const id of ids) remove.run(id);
+    await db.batch(ids.map((id) => ({ sql: 'DELETE FROM vector_chunks WHERE id = ?', args: [id] })), 'write');
   }
 
   async function deleteBySource(sourceId) {
-    db.prepare('DELETE FROM vector_chunks WHERE source_id = ?').run(sourceId);
+    await db.run('DELETE FROM vector_chunks WHERE source_id = ?', sourceId);
   }
 
   return { backend: 'sqlite', addChunks, queryChunks, pingChroma, countChunks, resetCollection, deleteChunks, deleteBySource };
@@ -100,9 +99,9 @@ export async function seedDemoCorpusIfEmpty({ db, vector, ai }) {
 
   // Same embed-model bookkeeping as persistSource: record the model on first
   // write so the health drift guard sees a coherent index.
-  if (!getMeta(db, 'embed_model') && vectors[0]) {
-    setMeta(db, 'embed_model', config.nimEmbedModel);
-    setMeta(db, 'embed_dimension', String(vectors[0].length));
+  if (!await getMeta(db, 'embed_model') && vectors[0]) {
+    await setMeta(db, 'embed_model', config.nimEmbedModel);
+    await setMeta(db, 'embed_dimension', String(vectors[0].length));
   }
 
   await vector.addChunks({
@@ -120,10 +119,17 @@ export async function seedDemoCorpusIfEmpty({ db, vector, ai }) {
 
   // Make the demo source visible in the library and organisable like any other.
   const now = new Date().toISOString();
-  db.prepare(`INSERT OR IGNORE INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at, origin)
-    VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, 'seed')`).run(SEED_SOURCE_ID, seed.source?.type ?? 'pdf', seed.source?.title ?? 'Socius AI demo corpus', seed.pages.length, chunks.length, now);
-  const insertSegment = db.prepare('INSERT OR IGNORE INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)');
-  segments.forEach((segment, i) => insertSegment.run(SEED_SOURCE_ID, i, JSON.stringify(segment.location ?? {}), segment.text));
+  await db.batch([
+    {
+      sql: `INSERT OR IGNORE INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at, origin)
+        VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, 'seed')`,
+      args: [SEED_SOURCE_ID, seed.source?.type ?? 'pdf', seed.source?.title ?? 'Socius AI demo corpus', seed.pages.length, chunks.length, now],
+    },
+    ...segments.map((segment, i) => ({
+      sql: 'INSERT OR IGNORE INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)',
+      args: [SEED_SOURCE_ID, i, JSON.stringify(segment.location ?? {}), segment.text],
+    })),
+  ], 'write');
 
   return { seeded: true, chunks: chunks.length };
 }

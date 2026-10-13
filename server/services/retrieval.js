@@ -82,7 +82,7 @@ export async function assertSourcesExist(db, sourceIds) {
   for (const id of sourceIds) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const row = db.prepare('SELECT id FROM sources WHERE id = ?').get(id);
+    const row = await db.get('SELECT id FROM sources WHERE id = ?', id);
     if (!row) throw new ApiError(404, 'SOURCE_NOT_FOUND', `Source "${id}" does not exist.`);
   }
 }
@@ -97,16 +97,16 @@ export async function assertSourcesExist(db, sourceIds) {
  *  - both             → every sourceId must belong to the session
  *  - neither          → { sourceIds: [] } = all material (existing behaviour)
  */
-export function resolveScope(db, { sessionId, sourceIds = [] } = {}) {
+export async function resolveScope(db, { sessionId, sourceIds = [] } = {}) {
   if (!sessionId) {
     if (Array.isArray(sourceIds)) return { sourceIds: [...sourceIds], session: null };
     return { sourceIds: [], session: null };
   }
 
-  const session = db.prepare('SELECT * FROM study_sessions WHERE id = ?').get(sessionId);
+  const session = await db.get('SELECT * FROM study_sessions WHERE id = ?', sessionId);
   if (!session) throw new ApiError(404, 'SESSION_NOT_FOUND', `Session "${sessionId}" does not exist.`);
 
-  const owned = db.prepare('SELECT id FROM sources WHERE session_id = ?').all(sessionId).map((row) => row.id);
+  const owned = (await db.all('SELECT id FROM sources WHERE session_id = ?', sessionId)).map((row) => row.id);
   if (owned.length === 0) {
     throw new ApiError(400, 'SESSION_EMPTY', `No material in "${session.title}" yet. Add sources to this study session first.`);
   }

@@ -131,7 +131,7 @@ test('offline eval set: unsupported questions return NO evidence at all', async 
 
 test('quiz generation under weak evidence succeeds but flags it honestly', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-quizweak-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const db = await openDb(path.join(dir, 'app.db'));
   const baseStore = fakeVector().store;
   const belowFloor = {
     addChunks: async ({ ids, embeddings, documents, metadatas }) => {
@@ -144,7 +144,7 @@ test('quiz generation under weak evidence succeeds but flags it honestly', async
     pingChroma: async () => true,
     resetCollection: async () => {},
   };
-  const app = createApp({ db, ai: makeAi(), vector: belowFloor });
+  const app = await createApp({ db, ai: makeAi(), vector: belowFloor });
   const server = app.listen(0);
   await once(server, 'listening');
   const base = `http://localhost:${server.address().port}`;
@@ -168,7 +168,7 @@ test('quiz generation under weak evidence succeeds but flags it honestly', async
 
 test('tutor abstains when every retrieved chunk falls below the evidence floor', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-eval-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const db = await openDb(path.join(dir, 'app.db'));
   const baseStore = fakeVector().store;
   const belowFloor = {
     addChunks: async ({ ids, embeddings, documents, metadatas }) => {
@@ -182,7 +182,7 @@ test('tutor abstains when every retrieved chunk falls below the evidence floor',
     resetCollection: async () => {},
   };
 
-  const app = createApp({ db, ai: makeAi(), vector: belowFloor });
+  const app = await createApp({ db, ai: makeAi(), vector: belowFloor });
   const server = app.listen(0);
   await once(server, 'listening');
   const base = `http://localhost:${server.address().port}`;

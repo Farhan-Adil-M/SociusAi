@@ -65,18 +65,15 @@ export const CATEGORIES = new Set(['subject', 'research', 'self-study', 'exam-pr
 
 export async function suggestOrganization(db, { sourceId, description }, { chat } = {}) {
   const chatFn = chat ?? chatCompletion;
-  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId);
+  const source = await db.get('SELECT * FROM sources WHERE id = ?', sourceId);
   if (!source) throw new ApiError(404, 'SOURCE_NOT_FOUND', `Source "${sourceId}" does not exist.`);
 
-  const sample = db
-    .prepare('SELECT text FROM source_segments WHERE source_id = ? ORDER BY seg_index LIMIT 3')
-    .all(sourceId)
+  const sample = (await db.all('SELECT text FROM source_segments WHERE source_id = ? ORDER BY seg_index LIMIT 3', sourceId))
     .map((row) => row.text)
     .join('\n')
     .slice(0, TEXT_SAMPLE_CHARS);
 
-  const sessions = db.prepare('SELECT id, title, category, status FROM study_sessions ORDER BY updated_at DESC LIMIT ?')
-    .all(MAX_SESSIONS_LISTED);
+  const sessions = await db.all('SELECT id, title, category, status FROM study_sessions ORDER BY updated_at DESC LIMIT ?', MAX_SESSIONS_LISTED);
 
   const systemPrompt = [
     'You organise study material into the student\'s existing study sessions.',
@@ -121,7 +118,7 @@ export async function suggestOrganization(db, { sourceId, description }, { chat 
 
   const applicable = !source.manual_override;
   const record = { ...suggestion, savedAt: nowIso() };
-  db.prepare('UPDATE sources SET suggestion_json = ? WHERE id = ?').run(JSON.stringify(record), sourceId);
+  await db.run('UPDATE sources SET suggestion_json = ? WHERE id = ?', JSON.stringify(record), sourceId);
 
   return {
     sourceId: source.id,
@@ -130,8 +127,8 @@ export async function suggestOrganization(db, { sourceId, description }, { chat 
   };
 }
 
-export function acceptOrganization(db, { sourceId }) {
-  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId);
+export async function acceptOrganization(db, { sourceId }) {
+  const source = await db.get('SELECT * FROM sources WHERE id = ?', sourceId);
   if (!source) throw new ApiError(404, 'SOURCE_NOT_FOUND', `Source "${sourceId}" does not exist.`);
 
   let stored = null;
@@ -145,26 +142,24 @@ export function acceptOrganization(db, { sourceId }) {
     sessionId = stored.matchSessionId;
   } else {
     // Re-run the duplicate guard: something may have been created since.
-    const duplicate = db.prepare("SELECT id FROM study_sessions WHERE status = 'active' AND lower(trim(title)) = lower(?)")
-      .get(stored.newSession.title);
+    const duplicate = await db.get("SELECT id FROM study_sessions WHERE status = 'active' AND lower(trim(title)) = lower(?)", stored.newSession.title);
     if (duplicate) {
       sessionId = duplicate.id;
     } else {
       sessionId = newId('ses');
       const now = nowIso();
-      db.prepare(`INSERT INTO study_sessions (id, title, category, description, tags_json, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`)
-        .run(sessionId, stored.newSession.title, stored.newSession.category, stored.newSession.subject || null, JSON.stringify(stored.newSession.tags), now, now);
+      await db.run(`INSERT INTO study_sessions (id, title, category, description, tags_json, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+        sessionId, stored.newSession.title, stored.newSession.category, stored.newSession.subject || null, JSON.stringify(stored.newSession.tags), now, now);
     }
   }
 
   // Accepting is an explicit user action → counts as a manual choice, so later
   // suggestions are shown as "applicable: false" until the user acts again.
-  db.prepare("UPDATE sources SET session_id = ?, org_source = 'ai', manual_override = 1 WHERE id = ?")
-    .run(sessionId, sourceId);
-  const updated = db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId);
-  const session = sessionId ? db.prepare('SELECT * FROM study_sessions WHERE id = ?').get(sessionId) : null;
-  logActivity(db, 'organize', null, `${source.title} suggested → ${session?.title ?? 'Unsorted'}`, sessionId);
+  await db.run("UPDATE sources SET session_id = ?, org_source = 'ai', manual_override = 1 WHERE id = ?", sessionId, sourceId);
+  const updated = await db.get('SELECT * FROM sources WHERE id = ?', sourceId);
+  const session = sessionId ? await db.get('SELECT * FROM study_sessions WHERE id = ?', sessionId) : null;
+  await logActivity(db, 'organize', null, `${source.title} suggested → ${session?.title ?? 'Unsorted'}`, sessionId);
 
   return { source: updated, session };
 }

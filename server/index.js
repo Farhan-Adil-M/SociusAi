@@ -2,12 +2,12 @@
 
 import os from 'node:os';
 import { assertConfig, config } from './config.js';
-import { openDb } from './store/sqlite.js';
+import { openAppDb } from './store/db.js';
 import { createApp } from './app.js';
 
 assertConfig();
-const db = openDb();
-const app = createApp({ db });
+const db = await openAppDb(); // local node engine by default; TURSO_* envs select the hosted engine
+const app = await createApp({ db });
 
 // Bind address comes from BIND_HOST (default 127.0.0.1 — loopback only).
 // Set a LAN address or 0.0.0.0 to let other devices on the network connect;
@@ -43,6 +43,7 @@ app.listen(config.port, BIND_HOST, () => {
   console.log(`  tutor model:    ${config.nimChatModel}`);
   console.log(`  assessment:     ${config.nimAssessModel}`);
   console.log(`  embedding:      ${config.nimEmbedModel}`);
+  console.log(`  database:       ${db.kind === 'libsql' ? 'hosted (libSQL/Turso)' : 'local SQLite (node:sqlite)'} [${db.kind}]`);
   console.log(`  vector store:   ${config.chromaApiKey ? 'Chroma Cloud' : `local (${config.chromaLocalHost}:${config.chromaLocalPort})`}`);
 });
 

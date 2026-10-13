@@ -14,8 +14,8 @@ import { fakeVector, makeAi } from './helpers.js';
 async function startApp({ ai = makeAi(), vector = fakeVector() } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-profile-'));
   const dbPath = path.join(dir, 'app.db');
-  const db = openDb(dbPath);
-  const app = createApp({ db, ai, vector });
+  const db = await openDb(dbPath);
+  const app = await createApp({ db, ai, vector });
   const server = app.listen(0);
   await once(server, 'listening');
   return {
@@ -188,8 +188,8 @@ test('the saved profile survives a server restart (reopen same database file)', 
   });
   await ctx.close(); // close server AND release the db file
 
-  const db2 = openDb(ctx.dbPath);
-  const app2 = createApp({ db: db2, ai: makeAi(), vector: fakeVector() });
+  const db2 = await openDb(ctx.dbPath);
+  const app2 = await createApp({ db: db2, ai: makeAi(), vector: fakeVector() });
   const server2 = app2.listen(0);
   await once(server2, 'listening');
   t.after(() => new Promise((r) => server2.close(r)));

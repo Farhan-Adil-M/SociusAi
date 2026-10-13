@@ -73,10 +73,16 @@ export async function generateFlashcards({ topic, count = 8, sourceIds = [], ses
   let deckId = null;
   if (db) {
     deckId = newId('deck');
-    db.prepare('INSERT INTO decks (id, session_id, topic, source_ids_json, card_count, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(deckId, sessionId, topic, JSON.stringify(sourceIds), cards.length, nowIso());
-    const insertCard = db.prepare('INSERT INTO deck_cards (deck_id, idx, front, back, citations_json) VALUES (?, ?, ?, ?, ?)');
-    result.cards.forEach((card, idx) => insertCard.run(deckId, idx, card.front, card.back, JSON.stringify(card.citations)));
+    await db.batch([
+      {
+        sql: 'INSERT INTO decks (id, session_id, topic, source_ids_json, card_count, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [deckId, sessionId, topic, JSON.stringify(sourceIds), cards.length, nowIso()],
+      },
+      ...result.cards.map((card, idx) => ({
+        sql: 'INSERT INTO deck_cards (deck_id, idx, front, back, citations_json) VALUES (?, ?, ?, ?, ?)',
+        args: [deckId, idx, card.front, card.back, JSON.stringify(card.citations)],
+      })),
+    ], 'write');
   }
   return { topic, model: config.nimAssessModel, cards: result.cards, ...(weakEvidence ? { weakEvidence: true } : {}), deckId, sessionId };
 }

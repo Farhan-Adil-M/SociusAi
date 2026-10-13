@@ -20,7 +20,7 @@ import { fakeVector, makeAi } from './helpers.js';
 
 const NOW = new Date().toISOString();
 
-function newDb() {
+async function newDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-pers-'));
   return openDb(path.join(dir, 'app.db'));
 }
@@ -55,14 +55,14 @@ function insertProfile(db, fields, state = 'completed') {
 /* 1. resolveRelevantTopics                                            */
 /* ------------------------------------------------------------------ */
 
-test('resolveRelevantTopics matches topics via question tokens and ignores unrelated ones', () => {
-  const db = newDb();
+test('resolveRelevantTopics matches topics via question tokens and ignores unrelated ones', async () => {
+  const db = await newDb();
   insertTopic(db, 'probability in football');
   insertTopic(db, 'photosynthesis');
   db.prepare("INSERT INTO learner_subjects (subject, familiarity, confidence, source, updated_at) VALUES ('chemistry', 'basic', 3, 'stated', ?)")
     .run(NOW);
 
-  const topics = resolveRelevantTopics(db, 'How is probability used in football penalties?', null);
+  const topics = await resolveRelevantTopics(db, 'How is probability used in football penalties?', null);
   assert.ok(topics.includes('probability in football'), `matched by tokens: ${topics}`);
   assert.ok(!topics.includes('photosynthesis'), 'unrelated learner topic excluded');
   assert.ok(!topics.includes('chemistry'), 'unrelated subject excluded');
@@ -74,8 +74,8 @@ test('resolveRelevantTopics matches topics via question tokens and ignores unrel
 /* 2. buildLearnerContext                                              */
 /* ------------------------------------------------------------------ */
 
-test('buildLearnerContext includes relevant interests and goal, excludes unrelated interests', () => {
-  const db = newDb();
+test('buildLearnerContext includes relevant interests and goal, excludes unrelated interests', async () => {
+  const db = await newDb();
   insertProfile(db, {
     interests: [
       { label: 'football tactics', source: 'stated' },
@@ -87,7 +87,7 @@ test('buildLearnerContext includes relevant interests and goal, excludes unrelat
   });
   insertTopic(db, 'football statistics');
 
-  const ctx = buildLearnerContext(db, { question: 'How do expected goals use probability in football?', sessionId: null });
+  const ctx = await buildLearnerContext(db, { question: 'How do expected goals use probability in football?', sessionId: null });
   assert.ok(ctx, 'a real profile yields a context');
   assert.equal(ctx.goal, 'Under expected goals models');
   assert.equal(ctx.style, 'examples-first');
@@ -96,34 +96,34 @@ test('buildLearnerContext includes relevant interests and goal, excludes unrelat
   assert.deepEqual(ctx.mastery, [{ topic: 'football statistics', percent: 60, uncertain: false }]);
 });
 
-test('buildLearnerContext returns null for state "new", missing row, and an empty profile row', () => {
-  const db = newDb();
-  assert.equal(buildLearnerContext(db, { question: 'anything about cells', sessionId: null }), null, 'no row');
+test('buildLearnerContext returns null for state "new", missing row, and an empty profile row', async () => {
+  const db = await newDb();
+  assert.equal(await buildLearnerContext(db, { question: 'anything about cells', sessionId: null }), null, 'no row');
 
   insertProfile(db, {}, 'new');
   insertTopic(db, 'cells');
   // state "new" but matched observed topic → observed data is still usable.
-  const observed = buildLearnerContext(db, { question: 'explain cells', sessionId: null });
+  const observed = await buildLearnerContext(db, { question: 'explain cells', sessionId: null });
   assert.ok(observed, 'observed mastery personalises even without a filled profile');
   // Profile "new" with truly nothing else → null.
-  const empty = newDb();
+  const empty = await newDb();
   insertProfile(empty, {}, 'new');
-  assert.equal(buildLearnerContext(empty, { question: 'explain cells', sessionId: null }), null);
+  assert.equal(await buildLearnerContext(empty, { question: 'explain cells', sessionId: null }), null);
 
-  const withRow = newDb();
+  const withRow = await newDb();
   insertProfile(withRow, {}, 'completed');
-  assert.equal(buildLearnerContext(withRow, { question: 'explain us the krebs cycle', sessionId: null }), null,
+  assert.equal(await buildLearnerContext(withRow, { question: 'explain us the krebs cycle', sessionId: null }), null,
     'row exists but everything empty → null');
 });
 
-test('confusion strings are composed from recorded events for matched topics', () => {
-  const db = newDb();
+test('confusion strings are composed from recorded events for matched topics', async () => {
+  const db = await newDb();
   insertTopic(db, 'photosynthesis');
-  recordEvent(db, { kind: 'repeated_question', topic: 'photosynthesis', detail: {} });
-  recordEvent(db, { kind: 'quiz_item_incorrect', topic: 'photosynthesis', detail: {} });
-  recordEvent(db, { kind: 'explain_again', topic: 'unrelated topic', detail: {} });
+  await recordEvent(db, { kind: 'repeated_question', topic: 'photosynthesis', detail: {} });
+  await recordEvent(db, { kind: 'quiz_item_incorrect', topic: 'photosynthesis', detail: {} });
+  await recordEvent(db, { kind: 'explain_again', topic: 'unrelated topic', detail: {} });
 
-  const ctx = buildLearnerContext(db, { question: 'why does photosynthesis matter', sessionId: null });
+  const ctx = await buildLearnerContext(db, { question: 'why does photosynthesis matter', sessionId: null });
   assert.ok(ctx, 'observed events make the context non-null');
   assert.equal(ctx.confusion.length, 2, 'capped at two strings');
   assert.match(ctx.confusion[0], /photosynthesis/);
@@ -136,8 +136,8 @@ test('confusion strings are composed from recorded events for matched topics', (
 /* 3. learner block budget                                             */
 /* ------------------------------------------------------------------ */
 
-test('learner block stays within the 1200-char budget with a maximal profile', () => {
-  const db = newDb();
+test('learner block stays within the 1200-char budget with a maximal profile', async () => {
+  const db = await newDb();
   const irrelevant = ['sourdough baking', 'mountain hiking', 'chess puzzles', 'harbor shipwatching',
     'ceramic pottery', 'guitar practice', 'kite building', 'zoo volunteering',
     'gardening tomatoes', 'knitting scarves'];
@@ -157,9 +157,9 @@ test('learner block stays within the 1200-char budget with a maximal profile', (
     .run('statistics', 'basic', NOW);
   insertTopic(db, 'football statistics', { correct: 3, total: 5 });
   insertTopic(db, 'football history', { correct: 1, total: 3 });
-  recordEvent(db, { kind: 'explain_again', topic: 'football statistics', detail: {} });
+  await recordEvent(db, { kind: 'explain_again', topic: 'football statistics', detail: {} });
 
-  const ctx = buildLearnerContext(db, { question: 'expected goals in football scoring', sessionId: null });
+  const ctx = await buildLearnerContext(db, { question: 'expected goals in football scoring', sessionId: null });
   assert.ok(ctx);
   assert.equal(ctx.interests.length, 2, 'interest budget is two');
   const block = buildLearnerBlock(ctx);
@@ -180,7 +180,7 @@ test('learner block stays within the 1200-char budget with a maximal profile', (
 /* ------------------------------------------------------------------ */
 
 test('answerQuestion without profile/approach keeps the exact legacy prompt and result shape', async () => {
-  const db = newDb();
+  const db = await newDb();
   const ai = makeAi();
   const vector = fakeVector();
   seedVector(vector);
@@ -214,7 +214,7 @@ test('answerQuestion without profile/approach keeps the exact legacy prompt and 
 /* ------------------------------------------------------------------ */
 
 test('answerQuestion with a styled profile adds the learner block and records the approach change', async () => {
-  const db = newDb();
+  const db = await newDb();
   const ai = makeAi();
   const vector = fakeVector();
   seedVector(vector);
@@ -255,12 +255,12 @@ test('answerQuestion with a styled profile adds the learner block and records th
 /* ------------------------------------------------------------------ */
 
 test("approach 'different' never repeats the previous approach and logs explain_again", async () => {
-  const db = newDb();
+  const db = await newDb();
   const ai = makeAi();
   const vector = fakeVector();
   seedVector(vector);
   insertTopic(db, 'statistics'); // matched topic
-  recordEvent(db, { kind: 'approach_change', topic: 'statistics', detail: { from: null, to: 'step-by-step' } });
+  await recordEvent(db, { kind: 'approach_change', topic: 'statistics', detail: { from: null, to: 'step-by-step' } });
 
   const result = await answerQuestion(
     { question: 'explain this statistics idea differently', sourceIds: [], db, approach: 'different' },
@@ -284,18 +284,18 @@ test("approach 'different' never repeats the previous approach and logs explain_
 
 test('repeated questions are detected through the route (route logs AFTER the answer)', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-pers-http-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const db = await openDb(path.join(dir, 'app.db'));
   const ai = makeAi();
   const vector = fakeVector();
   seedVector(vector);
   insertTopic(db, 'photosynthesis');
-  const app = createApp({ db, ai, vector });
+  const app = await createApp({ db, ai, vector });
   const server = app.listen(0);
   await once(server, 'listening');
   t.after(() => new Promise((r) => server.close(r)));
 
   // History BEFORE this ask: the route logs the current question afterwards.
-  logActivity(db, 'question', null, 'Asked: explain photosynthesis');
+  await logActivity(db, 'question', null, 'Asked: explain photosynthesis');
 
   const res = await fetch(`http://localhost:${server.address().port}/api/tutor/ask`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -315,7 +315,7 @@ test('repeated questions are detected through the route (route logs AFTER the an
 /* ------------------------------------------------------------------ */
 
 test('citations always point at sources present in the vector store', async () => {
-  const db = newDb();
+  const db = await newDb();
   const vector = fakeVector();
   seedVector(vector, 'src_only_one');
   const ai = makeAi();
@@ -336,14 +336,14 @@ test('citations always point at sources present in the vector store', async () =
 /* 9. small unit checks for the helpers                                 */
 /* ------------------------------------------------------------------ */
 
-test('describeApproach and tokenize behave per contract', () => {
+test('describeApproach and tokenize behave per contract', async () => {
   assert.equal(describeApproach('step-by-step'), 'teach in numbered steps, one idea per step');
   assert.equal(describeApproach('different'), 'explain it a DIFFERENT way than before — change structure, framing, and the example; do not repeat the previous explanation');
   assert.equal(describeApproach('made-up'), '');
   assert.deepEqual(tokenize('Photosynthesis?. LIGHT, energy!'), ['photosynthesis', 'light', 'energy']);
   assert.deepEqual(tokenize('ab of to x'), [], 'tokens shorter than 3 chars are dropped');
   // chooseApproach + lastApproach wiring sanity
-  const db = newDb();
-  assert.equal(lastApproach(db, 'nope'), null);
+  const db = await newDb();
+  assert.equal(await lastApproach(db, 'nope'), null);
   assert.equal(chooseApproach({ explicit: null, previous: null, preferred: null }), null);
 });

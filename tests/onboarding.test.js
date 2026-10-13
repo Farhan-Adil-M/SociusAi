@@ -37,8 +37,8 @@ function buildOnboardingAi(script) {
 
 async function boot(t, ai) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-onb-'));
-  const db = openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db, ai, vector: fakeVector() });
+  const db = await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db, ai, vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   const base = `http://localhost:${server.address().port}`;

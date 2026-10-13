@@ -17,7 +17,7 @@ import { fakeVector, makeAi, EMBEDDING, TUTOR_ANSWER } from './helpers.js';
 
 // ---------- db + stub helpers ----------
 
-function unitDb() {
+async function unitDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-intent-'));
   return openDb(path.join(dir, 'app.db'));
 }
@@ -47,9 +47,9 @@ function seedChunks(vector, sourceId, texts) {
 
 async function startApp({ ai, vector } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-intent-http-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const db = await openDb(path.join(dir, 'app.db'));
   const vectorStub = vector ?? fakeVector();
-  const app = createApp({ db, ...(ai ? { ai } : {}), vector: vectorStub });
+  const app = await createApp({ db, ...(ai ? { ai } : {}), vector: vectorStub });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, db, vector: vectorStub, close: () => new Promise((r) => server.close(r)) };
@@ -84,14 +84,14 @@ test('classifyIntent routes deterministically in precedence order', () => {
 
 // ---------- unit: revisionAdvice (deterministic, no AI) ----------
 
-test('revisionAdvice recommends the worst flagged topic with honest numbers', () => {
+test('revisionAdvice recommends the worst flagged topic with honest numbers', async () => {
   const ai = makeAi();
-  const db = unitDb();
+  const db = await unitDb();
   // Topic 'ancient history' is recent but strong; 'cell division' is weak.
   seedTopic(db, 'cell division', 2, 5, '2026-01-02T00:00:00Z');
   seedTopic(db, 'ancient history', 4, 5, '2026-01-05T00:00:00Z');
 
-  const result = revisionAdvice(db);
+  const result = await revisionAdvice(db);
   assert.equal(result.intent, 'revise-next');
   assert.deepEqual(result.citations, []);
   assert.equal(result.needsContent, false);
@@ -103,9 +103,9 @@ test('revisionAdvice recommends the worst flagged topic with honest numbers', ()
   assert.equal(ai.calls.length, 0); // MUST be model-free
 });
 
-test('revisionAdvice with no history is honest and suggests a diagnostic quiz', () => {
-  const db = unitDb();
-  const result = revisionAdvice(db);
+test('revisionAdvice with no history is honest and suggests a diagnostic quiz', async () => {
+  const db = await unitDb();
+  const result = await revisionAdvice(db);
   assert.equal(result.intent, 'revise-next');
   assert.equal(result.suggestedNext, null);
   assert.deepEqual(result.citations, []);
@@ -117,16 +117,16 @@ test('revisionAdvice with no history is honest and suggests a diagnostic quiz', 
 
 // ---------- unit: progressAdvice (deterministic roll-up) ----------
 
-test('progressAdvice sums attempts and topics deterministically', () => {
-  const db = unitDb();
+test('progressAdvice sums attempts and topics deterministically', async () => {
+  const db = await unitDb();
   seedTopic(db, 'cell division', 2, 5, '2026-01-02T00:00:00Z');
   seedTopic(db, 'ancient history', 4, 5, '2026-01-05T00:00:00Z');
   seedAttempt(db, 'quiz_1', 1, 3);
   seedAttempt(db, 'quiz_2', 2, 2);
-  logActivity(db, 'quiz', 'cell division', 'Took decision quiz', null);
-  logActivity(db, 'question', null, 'Asked: what is a cell', null);
+  await logActivity(db, 'quiz', 'cell division', 'Took decision quiz', null);
+  await logActivity(db, 'question', null, 'Asked: what is a cell', null);
 
-  const result = progressAdvice(db);
+  const result = await progressAdvice(db);
   assert.equal(result.intent, 'progress');
   assert.deepEqual(result.citations, []);
   assert.equal(result.quizzesTaken, 2);
@@ -138,9 +138,9 @@ test('progressAdvice sums attempts and topics deterministically', () => {
   assert.equal(result.recentActivityCount, 2);
 });
 
-test('progressAdvice with no data is honest', () => {
-  const db = unitDb();
-  const result = progressAdvice(db);
+test('progressAdvice with no data is honest', async () => {
+  const db = await unitDb();
+  const result = await progressAdvice(db);
   assert.equal(result.intent, 'progress');
   assert.equal(result.quizzesTaken, 0);
   assert.equal(result.questionsAnswered, 0);
@@ -156,7 +156,7 @@ test('importantQuestions builds practice questions with answers and citations fr
   const vector = fakeVector();
   await seedChunks(vector, 'src_1', ['Mitosis produces two identical daughter cells.', 'Meiosis produces four varied cells.']);
 
-  const db = unitDb();
+  const db = await unitDb();
   const result = await importantQuestions(db, { question: 'give me important questions from the chapter', sourceIds: ['src_1'] }, { ai, vector });
 
   assert.equal(result.intent, 'important-questions');
@@ -175,7 +175,7 @@ test('importantQuestions builds practice questions with answers and citations fr
 test('importantQuestions with no matching material is an honest RETRIEVAL failure', async () => {
   const ai = makeAi();
   const vector = fakeVector(); // empty store
-  const db = unitDb();
+  const db = await unitDb();
   const result = await importantQuestions(db, { question: 'give me important questions on quantum physics', sourceIds: [] }, { ai, vector });
   assert.equal(result.intent, 'important-questions');
   assert.equal(result.needsContent, true);

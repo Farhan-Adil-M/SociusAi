@@ -19,7 +19,7 @@ function tempDb() {
 }
 
 test('sqlite vector store: cosine ranking, filtering, nResults', async () => {
-  const db = tempDb();
+  const db = await tempDb();
   const store = createSqliteVectorStore(db);
 
   await store.addChunks({
@@ -52,7 +52,7 @@ test('sqlite vector store: cosine ranking, filtering, nResults', async () => {
 });
 
 test('sqlite vector store: deletion by id and by source', async () => {
-  const db = tempDb();
+  const db = await tempDb();
   const store = createSqliteVectorStore(db);
 
   await store.addChunks({
@@ -71,8 +71,8 @@ test('sqlite vector store: deletion by id and by source', async () => {
   assert.equal(rest[0].metadata.sourceId, 'src_b');
 });
 
-test('resolveVectorStore honors VECTOR_STORE and Vercel default', () => {
-  const db = tempDb();
+test('resolveVectorStore honors VECTOR_STORE and Vercel default', async () => {
+  const db = await tempDb();
   const saved = { VECTOR_STORE: process.env.VECTOR_STORE, VERCEL: process.env.VERCEL };
   try {
     process.env.VECTOR_STORE = 'sqlite';
@@ -95,7 +95,7 @@ test('resolveVectorStore honors VECTOR_STORE and Vercel default', () => {
 });
 
 test('demo-corpus seeding: fills an empty store once, idempotently', async () => {
-  const db = tempDb();
+  const db = await tempDb();
   const store = createSqliteVectorStore(db);
   const ai = { embedTexts: async (texts) => texts.map((_, i) => (i % 2 === 0 ? [1, 0] : [0, 1])) };
 
@@ -109,7 +109,7 @@ test('demo-corpus seeding: fills an empty store once, idempotently', async () =>
   assert.equal(source.origin, 'seed');
   const segments = db.prepare('SELECT COUNT(*) AS n FROM source_segments WHERE source_id = ?').get('src_seed_demo').n;
   assert.equal(segments, 3, 'page texts stored for re-chunking');
-  assert.equal(getMeta(db, 'embed_model'), 'nvidia/nemotron-3-embed-1b', 'embed model recorded');
+  assert.equal(await getMeta(db, 'embed_model'), 'nvidia/nemotron-3-embed-1b', 'embed model recorded');
 
   const second = await seedDemoCorpusIfEmpty({ db, vector: store, ai });
   assert.equal(second.seeded, false, 'no double-seed');
@@ -117,7 +117,7 @@ test('demo-corpus seeding: fills an empty store once, idempotently', async () =>
 });
 
 test('seeding is a no-op on a non-empty store', async () => {
-  const db = tempDb();
+  const db = await tempDb();
   const store = createSqliteVectorStore(db);
   await store.addChunks({
     ids: ['x_0'], embeddings: [[1, 0]], documents: ['existing'],

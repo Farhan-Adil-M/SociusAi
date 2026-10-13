@@ -89,14 +89,14 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
   // Embedding-model guard (v1.2): record the model on first ingestion, and stop
   // clearly if the configured model no longer matches the recorded index — a
   // mixed-model index would silently corrupt retrieval.
-  const storedModel = getMeta(db, 'embed_model');
+  const storedModel = await getMeta(db, 'embed_model');
   if (storedModel && storedModel !== config.nimEmbedModel) {
     throw new ApiError(503, 'CHROMA_UNAVAILABLE',
       `The search index was built with "${storedModel}" but NIM_EMBED_MODEL is "${config.nimEmbedModel}". Run npm run reindex, then try again.`);
   }
   if (!storedModel && vectors[0]) {
-    setMeta(db, 'embed_model', config.nimEmbedModel);
-    setMeta(db, 'embed_dimension', String(vectors[0].length));
+    await setMeta(db, 'embed_model', config.nimEmbedModel);
+    await setMeta(db, 'embed_dimension', String(vectors[0].length));
   }
 
   const metadatas = chunks.map((c) => ({
@@ -114,6 +114,11 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
   const createdAt = nowIso();
   const removeVectors = () => (remove ?? deleteChunks)(ids);
 
+  const clearEmbeddingMeta = () => ([
+    delMeta(db, 'embed_model'),
+    delMeta(db, 'embed_dimension'),
+  ]);
+
   try {
     await store({
       ids,
@@ -124,28 +129,28 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
   } catch (err) {
     // Compensation (v1.2): if vector storage partially failed, remove anything
     // recorded persistently before rethrowing.
-    removeVectors();
-    if (!storedModel) {
-      delMeta(db, 'embed_model');
-      delMeta(db, 'embed_dimension');
-    }
+    await removeVectors();
+    if (!storedModel) await Promise.all(clearEmbeddingMeta());
     throw err;
   }
 
   // Structured persistence AFTER indexing: if it fails, delete the freshly
-  // indexed vectors so no searchable orphans are left behind.
+  // indexed vectors so no searchable orphans are left behind. Source record and
+  // all segments belong together — one atomic batch.
   try {
-    db.prepare('INSERT INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(sourceId, type, title, url ?? null, pageCount, slideCount, chunks.length, createdAt);
-
-    const insertSegment = db.prepare('INSERT INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)');
-    segments.forEach((segment, i) => insertSegment.run(sourceId, i, JSON.stringify(segment.location ?? {}), segment.text));
+    await db.batch([
+      {
+        sql: 'INSERT INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [sourceId, type, title, url ?? null, pageCount, slideCount, chunks.length, createdAt],
+      },
+      ...segments.map((segment, i) => ({
+        sql: 'INSERT INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)',
+        args: [sourceId, i, JSON.stringify(segment.location ?? {}), segment.text],
+      })),
+    ], 'write');
   } catch (err) {
-    removeVectors();
-    if (!storedModel) {
-      delMeta(db, 'embed_model');
-      delMeta(db, 'embed_dimension');
-    }
+    await removeVectors();
+    if (!storedModel) await Promise.all(clearEmbeddingMeta());
     throw err;
   }
 
@@ -176,14 +181,14 @@ export function sourcesRouter({ db, ai, vector }) {
       title: req.file.originalname,
       ...extracted,
     }, { embed, store, remove });
-    logActivity(db, 'upload', null, `${source.title} (${source.pageCount ?? source.slideCount} ${source.pageCount != null ? 'pages' : 'slides'})`);
+    await logActivity(db, 'upload', null, `${source.title} (${source.pageCount ?? source.slideCount} ${source.pageCount != null ? 'pages' : 'slides'})`);
     res.status(201).json({ source: { ...source, url: null } });
   });
 
   router.post('/webpage', async (req, res) => {
     const { segments, title, url, pageCount, slideCount } = extractWebpage(req.body ?? {});
     const source = await persistSource(db, { type: 'webpage', title, url, segments, pageCount, slideCount }, { embed, store, remove });
-    logActivity(db, 'upload', null, `${source.title} (webpage)`);
+    await logActivity(db, 'upload', null, `${source.title} (webpage)`);
     res.status(201).json({ source: { ...source, url } });
   });
 
@@ -196,13 +201,13 @@ export function sourcesRouter({ db, ai, vector }) {
     res.json(result); // 502 NIM_ERROR on model failure — the source simply stays Unsorted
   });
 
-  router.post('/:id/accept-suggestion', (req, res) => {
-    const { source, session } = acceptOrganization(db, { sourceId: req.params.id });
-    logActivity(db, 'organize', null, `${source.title} → ${session?.title ?? 'Unsorted'}`, session?.id ?? null);
+  router.post('/:id/accept-suggestion', async (req, res) => {
+    const { source, session } = await acceptOrganization(db, { sourceId: req.params.id });
+    await logActivity(db, 'organize', null, `${source.title} → ${session?.title ?? 'Unsorted'}`, session?.id ?? null);
     res.json({ source: sourceRowToApi(source), session: session ? { id: session.id, title: session.title, category: session.category } : null });
   });
 
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const { sessionId } = req.query;
     const filters = [];
     const params = [];
@@ -213,13 +218,13 @@ export function sourcesRouter({ db, ai, vector }) {
       params.push(sessionId);
     }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-    const rows = db.prepare(`SELECT * FROM sources ${where} ORDER BY created_at DESC`).all(...params);
-    const unsortedSourceCount = db.prepare('SELECT COUNT(*) AS n FROM sources WHERE session_id IS NULL').get().n;
+    const rows = await db.all(`SELECT * FROM sources ${where} ORDER BY created_at DESC`, ...params);
+    const unsortedSourceCount = (await db.get('SELECT COUNT(*) AS n FROM sources WHERE session_id IS NULL')).n;
     res.json({ sources: rows.map(sourceRowToApi), unsortedSourceCount });
   });
 
-  router.patch('/:id', (req, res) => {
-    const row = db.prepare('SELECT * FROM sources WHERE id = ?').get(req.params.id);
+  router.patch('/:id', async (req, res) => {
+    const row = await db.get('SELECT * FROM sources WHERE id = ?', req.params.id);
     if (!row) throw new ApiError(404, 'SOURCE_NOT_FOUND', `Source "${req.params.id}" does not exist.`);
 
     const { sessionId, title, tags } = req.body ?? {};
@@ -228,13 +233,13 @@ export function sourcesRouter({ db, ai, vector }) {
 
     if (sessionId !== undefined) {
       if (sessionId !== null) {
-        const session = db.prepare('SELECT * FROM study_sessions WHERE id = ?').get(sessionId);
+        const session = await db.get('SELECT * FROM study_sessions WHERE id = ?', sessionId);
         if (!session) throw new ApiError(404, 'SESSION_NOT_FOUND', `Session "${sessionId}" does not exist.`);
       }
       updates.push('session_id = ?');
       params.push(sessionId); // null = back to Unsorted
-      const destination = sessionId === null ? 'Unsorted' : db.prepare('SELECT title FROM study_sessions WHERE id = ?').get(sessionId)?.title ?? sessionId;
-      logActivity(db, 'organize', null, `${row.title} → moved to ${destination}`, sessionId);
+      const destination = sessionId === null ? 'Unsorted' : (await db.get('SELECT title FROM study_sessions WHERE id = ?', sessionId))?.title ?? sessionId;
+      await logActivity(db, 'organize', null, `${row.title} → moved to ${destination}`, sessionId);
     }
     if (title !== undefined) {
       if (typeof title !== 'string' || title.trim().length < 1 || title.trim().length > 160) {
@@ -262,8 +267,8 @@ export function sourcesRouter({ db, ai, vector }) {
     updates.push('org_source = ?');
     params.push('manual');
 
-    db.prepare(`UPDATE sources SET ${updates.join(', ')} WHERE id = ?`).run(...params, row.id);
-    res.json({ source: sourceRowToApi(db.prepare('SELECT * FROM sources WHERE id = ?').get(row.id)) });
+    await db.run(`UPDATE sources SET ${updates.join(', ')} WHERE id = ?`, ...params, row.id);
+    res.json({ source: sourceRowToApi(await db.get('SELECT * FROM sources WHERE id = ?', row.id)) });
   });
 
   return router;

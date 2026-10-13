@@ -41,9 +41,9 @@ function maliciousVector() {
 
 async function startApp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-inj-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const db = await openDb(path.join(dir, 'app.db'));
   const ai = makeAi();
-  const app = createApp({ db, ai, vector: maliciousVector() });
+  const app = await createApp({ db, ai, vector: maliciousVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, db, ai, close: () => new Promise((r) => server.close(r)) };

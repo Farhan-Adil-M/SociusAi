@@ -6,8 +6,8 @@ import { needsRevision, suggestNext, difficultyFor } from '../services/learner.j
 export function learnerRouter({ db }) {
   const router = express.Router();
 
-  router.get('/progress', (req, res) => {
-    const topicRows = db.prepare('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC').all();
+  router.get('/progress', async (req, res) => {
+    const topicRows = await db.all('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC');
 
     const topics = topicRows.map((row) => ({
       topic: row.topic,
@@ -19,11 +19,11 @@ export function learnerRouter({ db }) {
       lastPracticedAt: row.last_practiced_at,
     }));
 
-    const attempts = db.prepare('SELECT correct, total FROM quiz_attempts').all();
+    const attempts = await db.all('SELECT correct, total FROM quiz_attempts');
     const questionsAnswered = attempts.reduce((sum, a) => sum + a.total, 0);
     const correctAnswers = attempts.reduce((sum, a) => sum + a.correct, 0);
 
-    const recentActivity = db.prepare('SELECT type, topic, detail, at FROM activity ORDER BY id DESC LIMIT 10').all()
+    const recentActivity = (await db.all('SELECT type, topic, detail, at FROM activity ORDER BY id DESC LIMIT 10'))
       .map((row) => ({ type: row.type, topic: row.topic, detail: row.detail, at: row.at }));
 
     res.json({

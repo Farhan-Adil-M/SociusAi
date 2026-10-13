@@ -17,8 +17,8 @@ function post(base, url, body) {
 
 async function startApp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-sess-'));
-  const db = openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db, ai: makeAi(), vector: fakeVector() });
+  const db = await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db, ai: makeAi(), vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, db, dir, server, close: () => new Promise((r) => server.close(r)) };
@@ -48,12 +48,12 @@ function buildV1FixtureDb(filePath) {
   db.close();
 }
 
-test('migration upgrades a real v1 database without losing rows', () => {
+test('migration upgrades a real v1 database without losing rows', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-mig-'));
   const dbPath = path.join(dir, 'app.db');
   buildV1FixtureDb(dbPath);
 
-  const db = openDb(dbPath);
+  const db = await openDb(dbPath);
 
   // Pre-existing rows survived, exactly as they were.
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get('src_old1');
@@ -70,7 +70,7 @@ test('migration upgrades a real v1 database without losing rows', () => {
   assert.equal(db.prepare("SELECT value FROM app_meta WHERE key = 'schema_version'").get().value, '6');
   assert.ok(fs.existsSync(`${dbPath}.v1.bak`), 'v1 backup copy');
   // Idempotent: re-open does not re-badge or duplicate anything.
-  openDb(dbPath);
+  await openDb(dbPath);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sources').get().n, 1);
 });
 

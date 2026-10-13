@@ -29,13 +29,13 @@ export function quizRouter({ db, ai, vector }) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'sourceIds must be an array of source id strings.');
     }
 
-    const scope = resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+    const scope = await resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
     if (!scope.session) {
       await assertSourcesExist(db, sourceIds ?? []); // legacy path: plain source filter
     }
 
     // No difficulty given → the learner model chooses for this topic.
-    const stats = db.prepare('SELECT * FROM learner_topics WHERE topic = ?').get(topic.trim().toLowerCase());
+    const stats = await db.get('SELECT * FROM learner_topics WHERE topic = ?', topic.trim().toLowerCase());
     const chosenDifficulty = difficulty ?? chooseDifficulty(stats);
 
     const quiz = await generateQuiz(
@@ -43,7 +43,7 @@ export function quizRouter({ db, ai, vector }) {
       { db, ai, vector },
     );
     if (scope.session) {
-      db.prepare('UPDATE quizzes SET session_id = ? WHERE id = ?').run(scope.session.id, quiz.id);
+      await db.run('UPDATE quizzes SET session_id = ? WHERE id = ?', scope.session.id, quiz.id);
     }
     res.status(201).json({
       quiz,
@@ -54,49 +54,49 @@ export function quizRouter({ db, ai, vector }) {
 
   router.post('/:quizId/answer', async (req, res) => {
     const { quizId } = req.params;
-    const quiz = db.prepare('SELECT * FROM quizzes WHERE id = ?').get(quizId);
+    const quiz = await db.get('SELECT * FROM quizzes WHERE id = ?', quizId);
     if (!quiz) throw new ApiError(404, 'QUIZ_NOT_FOUND', 'That quiz does not exist. Generate a new one.');
 
-    const existingAttempt = db.prepare('SELECT * FROM quiz_attempts WHERE quiz_id = ?').get(quizId);
+    const existingAttempt = await db.get('SELECT * FROM quiz_attempts WHERE quiz_id = ?', quizId);
     if (existingAttempt) {
       // Idempotent retry: return the EXACT result the first submission produced
       // (stored verbatim), never a recomputed shape or a second mastery update.
       let stored = null;
       try { stored = existingAttempt.result_json ? JSON.parse(existingAttempt.result_json) : null; } catch { stored = null; }
-      const result = stored ?? buildResult(db, quiz, JSON.parse(existingAttempt.answers_json));
+      const result = stored ?? await buildResult(db, quiz, JSON.parse(existingAttempt.answers_json));
       return res.status(409).json({ error: { code: 'QUIZ_ALREADY_ANSWERED', message: 'This quiz was already submitted.' }, result });
     }
 
-    const questions = db.prepare('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY idx').all(quizId);
+    const questions = await db.all('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY idx', quizId);
     const { correct, total, perQuestion } = gradeAnswers(questions, req.body?.answers ?? []);
     const percent = Math.round((correct / total) * 100);
 
     // Deterministic learner-model update, once per quiz.
     const topicKey = quiz.topic.toLowerCase();
-    const topicStats = db.prepare('SELECT * FROM learner_topics WHERE topic = ?').get(topicKey);
+    const topicStats = await db.get('SELECT * FROM learner_topics WHERE topic = ?', topicKey);
     const update = applyAttempt(topicKey, topicStats, { correct, total });
 
     const now = nowIso();
-    db.prepare(`
+    await db.run(`
       INSERT INTO learner_topics (topic, correct, total, difficulty, updated_at, last_practiced_at)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(topic) DO UPDATE SET
         correct = excluded.correct, total = excluded.total,
         difficulty = excluded.difficulty, updated_at = excluded.updated_at,
         last_practiced_at = excluded.last_practiced_at
-    `).run(update.topic, update.correct, update.total, update.difficulty, now, now);
+    `, update.topic, update.correct, update.total, update.difficulty, now, now);
 
     // Observed learning events (server-side only, never touch mastery).
     // Per-question evidence, then the quiz-level result.
     const masteryAfter = Number(update.mastery.toFixed(4));
     for (const item of perQuestion) {
-      recordEvent(db, {
+      await recordEvent(db, {
         kind: item.correct ? 'quiz_item_correct' : 'quiz_item_incorrect',
         topic: quiz.topic.toLowerCase().trim(),
         detail: { index: item.index, correct: item.correct },
       });
     }
-    recordEvent(db, {
+    await recordEvent(db, {
       kind: 'quiz_result',
       topic: quiz.topic.toLowerCase().trim(),
       detail: { quizId: quiz.id, correct, total, masteryBefore: update.before, masteryAfter, percent },
@@ -105,7 +105,7 @@ export function quizRouter({ db, ai, vector }) {
     // open → credit that approach. 'before' null means the very first attempt,
     // so there is nothing to recover from.
     if (update.before !== null) {
-      maybeRecordRecovery(db, { topic: quiz.topic.toLowerCase().trim(), masteryBefore: update.before, masteryAfter });
+      await maybeRecordRecovery(db, { topic: quiz.topic.toLowerCase().trim(), masteryBefore: update.before, masteryAfter });
     }
 
     const result = {
@@ -120,10 +120,15 @@ export function quizRouter({ db, ai, vector }) {
       recommendedDifficulty: update.difficulty,
     };
 
-    db.prepare('INSERT INTO quiz_attempts (quiz_id, answers_json, correct, total, created_at, result_json) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(quizId, JSON.stringify(req.body.answers), correct, total, now, JSON.stringify(result));
-    db.prepare('UPDATE quizzes SET answered_at = ? WHERE id = ?').run(now, quizId);
-    logActivity(db, 'quiz', quiz.topic, `${correct}/${total} correct (${percent}%)`, quiz.session_id);
+    // Attempt record + answered stamp belong together: one atomic write.
+    await db.batch([
+      {
+        sql: 'INSERT INTO quiz_attempts (quiz_id, answers_json, correct, total, created_at, result_json) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [quizId, JSON.stringify(req.body.answers), correct, total, now, JSON.stringify(result)],
+      },
+      { sql: 'UPDATE quizzes SET answered_at = ? WHERE id = ?', args: [now, quizId] },
+    ], 'write');
+    await logActivity(db, 'quiz', quiz.topic, `${correct}/${total} correct (${percent}%)`, quiz.session_id);
 
     res.json({ result });
   });
@@ -132,10 +137,10 @@ export function quizRouter({ db, ai, vector }) {
 }
 
 // Rebuild a result payload from stored data (used for the 409 replay).
-function buildResult(db, quiz, answers) {
-  const questions = db.prepare('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY idx').all(quiz.id);
+async function buildResult(db, quiz, answers) {
+  const questions = await db.all('SELECT * FROM quiz_questions WHERE quiz_id = ? ORDER BY idx', quiz.id);
   const { correct, total, perQuestion } = gradeAnswers(questions, answers);
-  const stats = db.prepare('SELECT * FROM learner_topics WHERE topic = ?').get(quiz.topic.toLowerCase());
+  const stats = await db.get('SELECT * FROM learner_topics WHERE topic = ?', quiz.topic.toLowerCase());
   return {
     score: { correct, total, percent: Math.round((correct / total) * 100) },
     questions: perQuestion,

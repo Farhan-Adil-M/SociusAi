@@ -551,3 +551,41 @@ Response gains optional `approachUsed` (the teaching approach actually **applied
 - New **Profile** page: view/edit all fields with `stated`/`inferred` badges, "Restart intro" (= `DELETE /api/profile`, which returns state to `new`, then start onboarding again), delete profile with confirm + privacy explainer text.
 - Tutor answers: an **"Explain differently"** button sends `approach: "different"`; optional style chips send the other enum values.
 - `frontend/js/mocks/fixtures.js` must implement every new endpoint to match this section exactly.
+
+
+---
+
+# v1.5 — Study-planning intents, auto practice decks, engine metadata (2026-10-13)
+
+Additive fields only; the grounded-tutor path is byte-identical in behaviour.
+
+## `POST /api/tutor/ask` — intent routing (deterministic, no AI keyword router)
+
+The tutor classifies each question into `normal` (source-grounded RAG as always) or one of three **study-planning intents**, answered with different backends:
+
+| intent | answer source | extra response fields |
+|---|---|---|
+| `normal` | unchanged RAG tutor | — |
+| `revise-next` | **deterministic**: existing mastery/revision rules (`learner.js`) — recommended topic + why (real stored evidence) + next action (`suggestedNext: {topic, difficulty}`) | `intent`, `suggestedNext` |
+| `progress` | **deterministic**: honest roll-up of attempts/accuracy/weak topics — no history means an honest "nothing recorded yet" | `intent` |
+| `important-questions` | practice questions generated from retrieved passages (`k=8` breadth), answers + explanations included **deliberately** (not a graded quiz — no answer key exists to protect) | `intent` |
+
+- Planning answers never invent mastery, history, or "exam predictions"; insufficient material on the practice path returns `needsContent: true` with an explanation (a retrieval problem, honestly worded).
+- `citations` on the practice path come only from retrieved hits (session/source scoping unchanged); planning paths return `citations: []` because nothing was cited from sources.
+- A provider failure on the practice path yields the normal 5xx error envelope — never a fabricated answer. Revision/progress paths call no model at all.
+
+## Auto practice decks during active study (Part 8)
+
+After a **successful session-scoped tutor answer** (`sessionId` given, `needsContent: false`) on a session that has material but **no deck yet**, the server starts flashcard generation in the background (topic = session title, default count, scoped to the session's sources) and adds:
+
+```json
+{ "deckGeneration": "started" }
+```
+
+- Never triggered by opening pages or uploading files; never blocks the tutor response.
+- Duplicate prevention: the generation is skipped when the session already has any deck (per-process guard). Honest limitation: two cold serverless instances could race — strict cross-instance idempotency arrives with the hosted database; the local demo is unaffected.
+- Failure is not silent: it is written to the activity feed (`deck-failed`); the deck simply appears in Decks when ready. Empty-material sessions never trigger generation.
+
+## `GET /api/health` — engine metadata
+
+`checks.sqlite.backend` (`"node"` | `"libsql"`) names the active structured-database engine. `checks.limits.maxUploadMb` (v1.4-era addition) stays.

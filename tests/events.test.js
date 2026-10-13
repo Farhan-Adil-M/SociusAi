@@ -16,8 +16,8 @@ import { EVENT_WEIGHTS } from '../server/services/events.js';
 
 async function startApp({ ai = makeAi(), vector = fakeVector() } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-test-'));
-  const db = openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db, ai, vector });
+  const db = await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db, ai, vector });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, db, ai, vector, close: () => new Promise((r) => server.close(r)) };

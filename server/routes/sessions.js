@@ -9,8 +9,8 @@ import { sourceRowToApi } from './sources.js';
 
 export const CATEGORIES = new Set(['subject', 'research', 'self-study', 'exam-prep', 'general']);
 
-export function getSessionOr404(db, id) {
-  const row = db.prepare('SELECT * FROM study_sessions WHERE id = ?').get(id);
+export async function getSessionOr404(db, id) {
+  const row = await db.get('SELECT * FROM study_sessions WHERE id = ?', id);
   if (!row) throw new ApiError(404, 'SESSION_NOT_FOUND', `Session "${id}" does not exist.`);
   return row;
 }
@@ -72,7 +72,7 @@ const LIST_COLUMNS = `
 export function sessionsRouter({ db }) {
   const router = express.Router();
 
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const { category, q, includeArchived } = req.query;
     const sort = req.query.sort ?? 'recent';
     if (!['recent', 'alpha', 'active'].includes(sort)) {
@@ -96,9 +96,9 @@ export function sessionsRouter({ db }) {
     }
 
     const orderBy = { recent: 's.updated_at DESC', alpha: 's.title COLLATE NOCASE ASC', active: 'last_activity DESC' }[sort];
-    const rows = db.prepare(`SELECT ${LIST_COLUMNS} FROM study_sessions s ${where} ORDER BY ${orderBy}`).all(...params);
+    const rows = await db.all(`SELECT ${LIST_COLUMNS} FROM study_sessions s ${where} ORDER BY ${orderBy}`, ...params);
 
-    const unsortedSourceCount = db.prepare('SELECT COUNT(*) AS n FROM sources WHERE session_id IS NULL').get().n;
+    const unsortedSourceCount = (await db.get('SELECT COUNT(*) AS n FROM sources WHERE session_id IS NULL')).n;
 
     res.json({
       sessions: rows.map((row) => sessionToApi(row, {
@@ -110,7 +110,7 @@ export function sessionsRouter({ db }) {
     });
   });
 
-  router.post('/', (req, res) => {
+  router.post('/', async (req, res) => {
     const { title, category, description, tags } = req.body ?? {};
     const cleanTitle = validateTitle(title);
     if (category !== undefined && !CATEGORIES.has(category)) {
@@ -123,17 +123,17 @@ export function sessionsRouter({ db }) {
 
     const id = newId('ses');
     const now = nowIso();
-    db.prepare('INSERT INTO study_sessions (id, title, category, description, tags_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, cleanTitle, category ?? 'subject', description ?? null, JSON.stringify(cleanTags), 'active', now, now);
+    await db.run('INSERT INTO study_sessions (id, title, category, description, tags_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      id, cleanTitle, category ?? 'subject', description ?? null, JSON.stringify(cleanTags), 'active', now, now);
 // session create gets logged with the session id so "active" sorting has real data
-    logActivity(db, 'session', null, `Created session "${cleanTitle}"`, id);
-    res.status(201).json({ session: sessionToApi(db.prepare('SELECT * FROM study_sessions WHERE id = ?').get(id)) });
+    await logActivity(db, 'session', null, `Created session "${cleanTitle}"`, id);
+    res.status(201).json({ session: sessionToApi(await db.get('SELECT * FROM study_sessions WHERE id = ?', id)) });
   });
 
-  router.get('/:id', (req, res) => {
-    const session = getSessionOr404(db, req.params.id);
-    const sources = db.prepare('SELECT * FROM sources WHERE session_id = ? ORDER BY created_at DESC').all(session.id);
-    const decks = db.prepare('SELECT id, topic, card_count, created_at FROM decks WHERE session_id = ? ORDER BY created_at DESC').all(session.id)
+  router.get('/:id', async (req, res) => {
+    const session = await getSessionOr404(db, req.params.id);
+    const sources = await db.all('SELECT * FROM sources WHERE session_id = ? ORDER BY created_at DESC', session.id);
+    const decks = (await db.all('SELECT id, topic, card_count, created_at FROM decks WHERE session_id = ? ORDER BY created_at DESC', session.id))
       .map((row) => ({ id: row.id, topic: row.topic, cardCount: row.card_count, createdAt: row.created_at }));
     res.json({
       session: sessionToApi(session, {
@@ -146,8 +146,8 @@ export function sessionsRouter({ db }) {
     });
   });
 
-  router.patch('/:id', (req, res) => {
-    const session = getSessionOr404(db, req.params.id);
+  router.patch('/:id', async (req, res) => {
+    const session = await getSessionOr404(db, req.params.id);
     const { title, category, description, tags, status } = req.body ?? {};
     const updates = [];
 
@@ -175,9 +175,9 @@ export function sessionsRouter({ db }) {
     }
     updates.push(['updated_at', nowIso()]);
     const setClause = updates.map(([column]) => `${column} = ?`).join(', ');
-    db.prepare(`UPDATE study_sessions SET ${setClause} WHERE id = ?`).run(...updates.map(([, value]) => value), session.id);
+    await db.run(`UPDATE study_sessions SET ${setClause} WHERE id = ?`, ...updates.map(([, value]) => value), session.id);
 
-    res.json({ session: sessionToApi(db.prepare('SELECT * FROM study_sessions WHERE id = ?').get(session.id)) });
+    res.json({ session: sessionToApi(await db.get('SELECT * FROM study_sessions WHERE id = ?', session.id)) });
   });
 
   return router;

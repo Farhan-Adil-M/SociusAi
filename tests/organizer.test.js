@@ -80,8 +80,8 @@ test('AI suggestion flow: suggest → accept → session assignment; model outpu
   ];
   const ai = buildOrganizingAi(chatScript);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-org-'));
-  const db = openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db, ai, vector: fakeVector() });
+  const db = await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db, ai, vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   const base = `http://localhost:${server.address().port}`;
@@ -135,8 +135,8 @@ test('AI suggestion flow: suggest → accept → session assignment; model outpu
 test('upload works fine even when the AI service is completely down', async (t) => {
   const ai = makeAi({ chatCompletion: async () => { throw new Error('provider down'); } });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-org2-'));
-  const db = openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db, ai, vector: fakeVector() });
+  const db = await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db, ai, vector: fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   const base = `http://localhost:${server.address().port}`;
@@ -159,7 +159,7 @@ test('upload works fine even when the AI service is completely down', async (t) 
 
 test('honest 502 without touching ingestion when the model returns empty or unusable output twice', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-org3-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const db = await openDb(path.join(dir, 'app.db'));
   db.prepare("INSERT INTO sources (id, type, title, created_at) VALUES ('src_x', 'webpage', 'Unorganised note', '2026-10-13T00:00:00.000Z')").run();
 
   // empty content twice (what the audit observed live)

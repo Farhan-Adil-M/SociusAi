@@ -64,6 +64,12 @@ Open http://localhost:3000 — `GET /api/health` shows whether sqlite, Chroma, a
 
 **Exposure policy:** by default the server binds to `127.0.0.1` — this machine only. The app has **no authentication**: never port-forward it or put it behind a public URL; that requires an approved authentication/rate-limiting design first. On a trusted local network you may opt in by setting `BIND_HOST` in `.env` to your LAN IP (or `0.0.0.0`) and restarting — the startup log then prints the `http://<lan-ip>:<port>` URLs to open from other devices, and anyone on that network can upload, delete data, and spend NIM tokens.
 
+## Storage architecture
+
+- **Structured records** (sessions, sources, decks, quizzes, attempts, learner progress, profiles, events) live in one database selected by configuration: the local `node:sqlite` file at `data/app.db` by default (auto-migrating, idempotent, version-tracked), or a **hosted Turso/libSQL** database when `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` are configured. Hosted schema is applied once with `npm run migrate` — the server refuses to boot against a behind-schema hosted database instead of racing migrations on every serverless invocation.
+- **ChromaDB** remains the vector store (embeddings, chunks, retrieval metadata) behind the existing provider switch — local server, Chroma Cloud, or the SQLite fallback. Source IDs and session scope tie the two stores together.
+- **Original uploaded binaries are not retained** — text is extracted and stored (`source_segments`), which is what makes `npm run reindex` possible without re-uploading. Large uploads on the cloud demo are capped by the platform (~4.5 MB); the laptop demo takes up to the configured `MAX_UPLOAD_MB` (25 by default).
+
 ## Deploying to Vercel (cloud demo)
 
 ```

@@ -51,19 +51,19 @@ function sharesToken(candidate, reference) {
  * title-matched subjects, then the session title itself; ties alphabetical.
  * Capped at 3. Returns lowercase keys.
  */
-export function resolveRelevantTopics(db, question, sessionId = null) {
+export async function resolveRelevantTopics(db, question, sessionId = null) {
   const questionSet = new Set(tokenize(question ?? ''));
   let titleSet = new Set();
   let sessionTitle = null;
   if (sessionId) {
-    const session = db.prepare('SELECT title FROM study_sessions WHERE id = ?').get(sessionId) ?? null;
+    const session = await db.get('SELECT title FROM study_sessions WHERE id = ?', sessionId) ?? null;
     sessionTitle = typeof session?.title === 'string' ? session.title.trim() : null;
     titleSet = new Set(tokenize(sessionTitle ?? ''));
   }
 
   // { name, rank } — lower rank = more relevant.
   const scored = [];
-  for (const row of db.prepare('SELECT topic FROM learner_topics ORDER BY updated_at DESC, topic ASC').all()) {
+  for (const row of await db.all('SELECT topic FROM learner_topics ORDER BY updated_at DESC, topic ASC')) {
     const name = row.topic?.trim().toLowerCase();
     if (!name) continue;
     const viaQuestion = questionSet.size > 0 && sharesToken(name, questionSet);
@@ -71,7 +71,7 @@ export function resolveRelevantTopics(db, question, sessionId = null) {
     if (viaQuestion) scored.push({ name, rank: 0 });
     else if (viaTitle) scored.push({ name, rank: 2 });
   }
-  for (const row of db.prepare('SELECT subject FROM learner_subjects ORDER BY subject ASC').all()) {
+  for (const row of await db.all('SELECT subject FROM learner_subjects ORDER BY subject ASC')) {
     const name = row.subject?.trim().toLowerCase();
     if (!name) continue;
     const viaQuestion = questionSet.size > 0 && sharesToken(name, questionSet);
@@ -104,7 +104,7 @@ function countWord(n) {
 // ≤2 confusion strings from observed event kinds, deterministic order:
 // within a topic by kind (repeated_question → explain_again →
 // quiz_item_incorrect), across topics in relevance order.
-function buildConfusion(db, matchedTopics, cap = 2) {
+async function buildConfusion(db, matchedTopics, cap = 2) {
   if (matchedTopics.length === 0) return [];
   const kinds = [
     { kind: 'repeated_question', make: (topic) => `asked a near-identical question about ${topic} before — a possible confusion signal` },
@@ -112,10 +112,11 @@ function buildConfusion(db, matchedTopics, cap = 2) {
     { kind: 'quiz_item_incorrect', make: (topic, n) => `answered ${n} quiz question${n === 1 ? '' : 's'} on ${topic} incorrectly` },
   ];
   const placeholders = matchedTopics.map(() => '?').join(', ');
-  const rows = db.prepare(
+  const rows = await db.all(
     `SELECT kind, topic FROM learning_events
-     WHERE kind IN ('repeated_question','explain_again','quiz_item_incorrect') AND topic IN (${placeholders})`
-  ).all(...matchedTopics);
+     WHERE kind IN ('repeated_question','explain_again','quiz_item_incorrect') AND topic IN (${placeholders})`,
+    ...matchedTopics,
+  );
   const counts = new Map(); // `topic|kind` → n
   for (const row of rows) counts.set(`${row.topic}|${row.kind}`, (counts.get(`${row.topic}|${row.kind}`) ?? 0) + 1);
 
@@ -132,9 +133,9 @@ function buildConfusion(db, matchedTopics, cap = 2) {
 
 // ≤1 approach note from the approach-effectiveness summary for the matched
 // topics ("X explanations helped on T" / "… did not help on T").
-function buildApproachNotes(db, matchedTopics, cap = 1) {
+async function buildApproachNotes(db, matchedTopics, cap = 1) {
   if (matchedTopics.length === 0) return [];
-  const events = db.prepare('SELECT id, kind, topic, detail_json FROM learning_events').all();
+  const events = await db.all('SELECT id, kind, topic, detail_json FROM learning_events');
   for (const topic of matchedTopics) {
     const summary = summarizeApproaches(events, topic);
     const helped = summary.helped[0];
@@ -146,12 +147,13 @@ function buildApproachNotes(db, matchedTopics, cap = 1) {
 }
 
 /** Any learning event recorded under one of these topics? */
-function hasEventsForTopics(db, topics) {
+async function hasEventsForTopics(db, topics) {
   if (topics.length === 0) return false;
   const placeholders = topics.map(() => '?').join(', ');
-  return db.prepare(
-    `SELECT 1 FROM learning_events WHERE topic IN (${placeholders}) LIMIT 1`
-  ).get(...topics) !== undefined;
+  return await db.get(
+    `SELECT 1 FROM learning_events WHERE topic IN (${placeholders}) LIMIT 1`,
+    ...topics,
+  ) !== undefined;
 }
 
 // ---- learner context ---------------------------------------------------------
@@ -162,10 +164,10 @@ function hasEventsForTopics(db, topics) {
  * subjects at all, and no matched learner_topics or learning events → the
  * tutor prompt stays byte-identical to the pre-personalisation version.
  */
-export function buildLearnerContext(db, { question = '', sessionId = null } = {}) {
-  const topics = resolveRelevantTopics(db, question, sessionId);
+export async function buildLearnerContext(db, { question = '', sessionId = null } = {}) {
+  const topics = await resolveRelevantTopics(db, question, sessionId);
 
-  const row = db.prepare("SELECT * FROM learner_profile WHERE id = 'default'").get() ?? null;
+  const row = await db.get("SELECT * FROM learner_profile WHERE id = 'default'") ?? null;
   const fields = row ? parseFields(row.fields_json) : {};
 
   const goal = Array.isArray(fields.goals) && fields.goals.length > 0 ? asString(fields.goals[0]?.label, 120) : null;
@@ -181,7 +183,7 @@ export function buildLearnerContext(db, { question = '', sessionId = null } = {}
   // working inside this session, so its topic scope counts as relevant.
   const relevantTokens = new Set(tokenize(question ?? ''));
   if (sessionId) {
-    const session = db.prepare('SELECT title FROM study_sessions WHERE id = ?').get(sessionId) ?? null;
+    const session = await db.get('SELECT title FROM study_sessions WHERE id = ?', sessionId) ?? null;
     for (const t of tokenize(session?.title ?? '')) relevantTokens.add(t);
   }
 
@@ -194,13 +196,13 @@ export function buildLearnerContext(db, { question = '', sessionId = null } = {}
   }
 
   // Subjects: only the matched ones, with their self-reported familiarity.
-  const subjectRows = db.prepare('SELECT subject, familiarity FROM learner_subjects ORDER BY subject ASC').all();
+  const subjectRows = await db.all('SELECT subject, familiarity FROM learner_subjects ORDER BY subject ASC');
   const subjects = subjectRows
     .filter((s) => topics.includes(s.subject.trim().toLowerCase()))
     .map((s) => ({ subject: s.subject, familiarity: s.familiarity }));
 
   // Observed mastery for matched learner_topics.
-  const masteryRows = db.prepare('SELECT topic, correct, total FROM learner_topics').all();
+  const masteryRows = await db.all('SELECT topic, correct, total FROM learner_topics');
   const mastery = [];
   for (const topic of topics) {
     const r = masteryRows.find((m) => m.topic === topic);
@@ -209,8 +211,8 @@ export function buildLearnerContext(db, { question = '', sessionId = null } = {}
     if (mastery.length === 5) break;
   }
 
-  const confusion = buildConfusion(db, topics);
-  const approachNotes = buildApproachNotes(db, topics);
+  const confusion = await buildConfusion(db, topics);
+  const approachNotes = await buildApproachNotes(db, topics);
 
   // Nothing usable anywhere → tell the tutor service to keep the legacy prompt.
   // Usable self-reported data: any filled field on a row that is not "new".
@@ -219,7 +221,7 @@ export function buildLearnerContext(db, { question = '', sessionId = null } = {}
     && Boolean(goal || style || purpose || interestLabels.length > 0);
   const noSubjects = subjectRows.length === 0;
   const noMatchedObserved = mastery.length === 0 && confusion.length === 0
-    && approachNotes.length === 0 && !hasEventsForTopics(db, topics);
+    && approachNotes.length === 0 && !(await hasEventsForTopics(db, topics));
   if (!hasSelfReported && noSubjects && noMatchedObserved) return null;
 
   return { goal, style, interests, subjects, mastery, confusion, approachNotes, topics };

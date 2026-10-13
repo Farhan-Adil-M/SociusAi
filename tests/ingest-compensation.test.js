@@ -14,23 +14,33 @@ import { makeAi, fakeVector } from './helpers.js';
 
 /** DB proxy that lets vector-related work run, then throws on the Nth structured
  *  INSERT — mimicking a disk/DB failure right after successful indexing.
- *  (Vector calls go through the injected vector stub, not the db.) */
+ *  (Vector calls go through the injected vector stub, not the db.)
+ *  Intercepts the ASYNC facade methods (run/batch) that structured persistence
+ *  uses since the async-facade conversion. */
 function dbThatFailsAfterVectors(realDb, failOnInsertNumber) {
   let insertCount = 0;
+  const maybeFail = (sql) => {
+    if (sql.startsWith('INSERT INTO sources') || sql.startsWith('INSERT INTO source_segments')) {
+      insertCount += 1;
+      if (insertCount >= failOnInsertNumber) {
+        throw new Error('simulated disk failure after vector indexing');
+      }
+    }
+  };
   return new Proxy(realDb, {
     get(target, prop) {
-      if (prop !== 'prepare') return Reflect.get(target, prop);
-      return (sql) => {
-        if (sql.startsWith('INSERT INTO sources') || sql.startsWith('INSERT INTO source_segments')) {
-          insertCount += 1;
-          if (insertCount >= failOnInsertNumber) {
-            return {
-              run() { throw new Error('simulated disk failure after vector indexing'); },
-            };
+      if (prop === 'run') {
+        return (sql, ...args) => { maybeFail(sql); return target.run(sql, ...args); };
+      }
+      if (prop === 'batch') {
+        return async (statements, mode) => {
+          for (const stmt of statements) {
+            maybeFail(typeof stmt === 'string' ? stmt : stmt.sql);
           }
-        }
-        return target.prepare(sql);
-      };
+          return target.batch(statements, mode);
+        };
+      }
+      return Reflect.get(target, prop);
     },
   });
 }
@@ -39,8 +49,8 @@ const WEBPAGE = { url: 'https://learn.example/unit1', text: 'U'.repeat(200) };
 
 async function startApp({ db, vector } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-orphan-'));
-  const realDb = db ?? openDb(path.join(dir, 'app.db'));
-  const app = createApp({ db: realDb, ai: makeAi(), vector: vector ?? fakeVector() });
+  const realDb = db ?? await openDb(path.join(dir, 'app.db'));
+  const app = await createApp({ db: realDb, ai: makeAi(), vector: vector ?? fakeVector() });
   const server = app.listen(0);
   await once(server, 'listening');
   return { base: `http://localhost:${server.address().port}`, realDb, dir, close: () => new Promise((r) => server.close(r)) };
@@ -59,7 +69,7 @@ test('vector-orphan compensation runs when structured persistence fails', async 
 
   // The db proxy throws on the FIRST sources INSERT — which happens only after
   // the vector indexing step has completed, replicating a real failure order.
-  const realDb = openDb(path.join((fs.mkdtempSync(path.join(os.tmpdir(), 'socius-orphan2-'))), 'app.db'));
+  const realDb = await openDb(path.join((fs.mkdtempSync(path.join(os.tmpdir(), 'socius-orphan2-'))), 'app.db'));
   const failingDb = dbThatFailsAfterVectors(realDb, 1);
   const ctx = await startApp({ db: failingDb, vector });
   t.after(ctx.close);

@@ -19,9 +19,9 @@ import {
   maybeRecordRecovery,
 } from '../server/services/events.js';
 
-function tempDb(t) {
+async function tempDb(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-events-'));
-  const db = openDb(path.join(dir, 'app.db'));
+  const db = await openDb(path.join(dir, 'app.db'));
   t.after(() => db.close());
   return db;
 }
@@ -47,10 +47,10 @@ test('EVENT_WEIGHTS matches the contract: quiz evidence 3, everything else 1', (
   assert.deepEqual(APPROACH_ORDER, ['step-by-step', 'examples-first', 'visual', 'concise', 'guided-questions']);
 });
 
-test('recordEvent stores the row with the canonical weight and normalised topic', (t) => {
-  const db = tempDb(t);
+test('recordEvent stores the row with the canonical weight and normalised topic', async (t) => {
+  const db = await tempDb(t);
 
-  const event = recordEvent(db, { kind: 'quiz_result', topic: '  Photosynthesis ', detail: { correct: 3 } });
+  const event = await recordEvent(db, { kind: 'quiz_result', topic: '  Photosynthesis ', detail: { correct: 3 } });
   assert.equal(event.kind, 'quiz_result');
   assert.equal(event.weight, 3);
   assert.equal(typeof event.at, 'string');
@@ -60,14 +60,14 @@ test('recordEvent stores the row with the canonical weight and normalised topic'
   assert.deepEqual(JSON.parse(row.detail_json), { correct: 3 });
   assert.equal(row.weight, 3);
 
-  const noTopic = recordEvent(db, { kind: 'card_known' });
+  const noTopic = await recordEvent(db, { kind: 'card_known' });
   assert.equal(noTopic.weight, 1);
   assert.equal(db.prepare('SELECT topic FROM learning_events WHERE id = (SELECT MAX(id) FROM learning_events)').get().topic, null);
 });
 
-test('recordEvent throws VALIDATION_ERROR for unknown kinds', (t) => {
-  const db = tempDb(t);
-  assert.throws(
+test('recordEvent throws VALIDATION_ERROR for unknown kinds', async (t) => {
+  const db = await tempDb(t);
+  await assert.rejects(
     () => recordEvent(db, { kind: 'made_up_event' }),
     (err) => err.status === 400 && err.code === 'VALIDATION_ERROR',
   );
@@ -120,17 +120,17 @@ test('chooseApproach: explicit style wins; "different" cycles; preference is the
   assert.equal(chooseApproach({}), null);
 });
 
-test('lastApproach returns the newest approach_change for the topic', (t) => {
-  const db = tempDb(t);
-  assert.equal(lastApproach(db, 'cells'), null, 'no events → null');
+test('lastApproach returns the newest approach_change for the topic', async (t) => {
+  const db = await tempDb(t);
+  assert.equal(await lastApproach(db, 'cells'), null, 'no events → null');
 
   insertEvent(db, 'approach_change', 'cells', { to: 'visual' });
   insertEvent(db, 'approach_change', 'cells', { to: 'step-by-step' });
   insertEvent(db, 'approach_change', 'recursion', { to: 'concise' });
 
-  assert.equal(lastApproach(db, 'cells'), 'step-by-step', 'newest wins');
-  assert.equal(lastApproach(db, ' Cells '), 'step-by-step', 'topic normalisation matches recording');
-  assert.equal(lastApproach(db, 'recursion'), 'concise');
+  assert.equal(await lastApproach(db, 'cells'), 'step-by-step', 'newest wins');
+  assert.equal(await lastApproach(db, ' Cells '), 'step-by-step', 'topic normalisation matches recording');
+  assert.equal(await lastApproach(db, 'recursion'), 'concise');
 });
 
 test('summarizeApproaches classifies helped, unhelpful and last', () => {
@@ -163,21 +163,21 @@ test('summarizeApproaches classifies helped, unhelpful and last', () => {
   });
 });
 
-test('maybeRecordRecovery records only on improvement with an open approach_change, and never twice', (t) => {
-  const db = tempDb(t);
+test('maybeRecordRecovery records only on improvement with an open approach_change, and never twice', async (t) => {
+  const db = await tempDb(t);
 
   // No approach_change yet → nothing to attribute.
-  assert.equal(maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.4, masteryAfter: 0.6 }), null);
+  assert.equal(await maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.4, masteryAfter: 0.6 }), null);
 
   insertEvent(db, 'approach_change', 'cells', { from: 'visual', to: 'step-by-step' });
 
   // No improvement → no event.
-  assert.equal(maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.6, masteryAfter: 0.5 }), null);
-  assert.equal(maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.6, masteryAfter: 0.6 }), null, 'equal is not improvement');
+  assert.equal(await maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.6, masteryAfter: 0.5 }), null);
+  assert.equal(await maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.6, masteryAfter: 0.6 }), null, 'equal is not improvement');
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM learning_events WHERE kind = 'recovery_success'").get().n, 0);
 
   // Improvement with the approach_change still open → recovery recorded.
-  const event = maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.4, masteryAfter: 0.7 });
+  const event = await maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.4, masteryAfter: 0.7 });
   assert.ok(event, 'recovery event returned');
   assert.equal(event.kind, 'recovery_success');
   const row = db.prepare("SELECT * FROM learning_events WHERE kind = 'recovery_success'").get();
@@ -185,12 +185,12 @@ test('maybeRecordRecovery records only on improvement with an open approach_chan
   assert.deepEqual(JSON.parse(row.detail_json), { approach: 'step-by-step', before: 0.4, after: 0.7 });
 
   // Second call finds the recorded recovery → not recorded twice.
-  assert.equal(maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.5, masteryAfter: 0.8 }), null);
+  assert.equal(await maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.5, masteryAfter: 0.8 }), null);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM learning_events WHERE kind = 'recovery_success'").get().n, 1);
 
   // A fresh approach_change re-opens the question.
   insertEvent(db, 'approach_change', 'cells', { from: 'step-by-step', to: 'examples-first' });
-  const second = maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.3, masteryAfter: 0.5 });
+  const second = await maybeRecordRecovery(db, { topic: 'cells', masteryBefore: 0.3, masteryAfter: 0.5 });
   assert.ok(second, 'a new approach change can recover again');
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM learning_events WHERE kind = 'recovery_success'").get().n, 2);
 });
