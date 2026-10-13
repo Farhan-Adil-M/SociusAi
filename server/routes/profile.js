@@ -1,10 +1,14 @@
-// Learner profile (v1.4): a single, installation-scoped profile the student
-// can view, edit and delete. No authentication exists, so exactly one row
-// (id = 'default') ever exists. Validation is deterministic; no AI involved.
+// Learner profile (v1.4 + v7 ownership): one profile row per verified user —
+// the row id IS the user id (a Supabase users uuid, or the fixed dev user
+// 'default' in prototype mode). Validation is deterministic; no AI involved.
+// The first write in supabase mode kicks off per-user demo seeding
+// (ensureUserSeeded) so a brand-new account opens with answerable material.
 
 import express from 'express';
 import { ApiError } from '../middleware/errors.js';
-import { nowIso } from '../store/sqlite.js';
+import { requireAuth } from '../middleware/auth.js';
+import { nowIso, loadProfileRow, saveProfileRow, deleteProfileRow } from '../store/sqlite.js';
+import { ensureUserSeeded } from '../store/sqlite-vector.js';
 import { PURPOSES, EXPLANATION_STYLES } from '../constants.js';
 import { turnOnboarding } from '../services/onboarding.js';
 
@@ -23,12 +27,8 @@ function parseFields(json) {
   }
 }
 
-async function loadRow(db) {
-  return await db.get("SELECT * FROM learner_profile WHERE id = 'default'") ?? null;
-}
-
-async function loadSubjects(db) {
-  return db.all('SELECT * FROM learner_subjects ORDER BY subject COLLATE NOCASE');
+async function loadSubjects(db, userId) {
+  return db.all('SELECT * FROM learner_subjects WHERE user_id = ? ORDER BY subject COLLATE NOCASE', userId);
 }
 
 // ---- validation (all input is untrusted; clients cannot write 'source') ----
@@ -143,13 +143,14 @@ export function profileToApi(row, subjects) {
   };
 }
 
-export function profileRouter({ db }) {
+export function profileRouter({ db, ai, vector, auth }) {
   const router = express.Router();
+  router.use(requireAuth({ auth }));
 
   router.get('/', async (req, res) => {
-    const row = await loadRow(db);
+    const row = await loadProfileRow(db, req.userId);
     // No row yet → a built default. Never insert on GET; state stays "new".
-    res.json({ profile: profileToApi(row, row ? await loadSubjects(db) : []) });
+    res.json({ profile: profileToApi(row, row ? await loadSubjects(db, req.userId) : []) });
   });
 
   router.patch('/', async (req, res) => {
@@ -167,7 +168,7 @@ export function profileRouter({ db }) {
     if (body.preferences !== undefined) updates.preferences = validatePreferences(body.preferences);
     if (body.subjects !== undefined) updates.subjects = validateSubjects(body.subjects);
 
-    const row = await loadRow(db);
+    const row = await loadProfileRow(db, req.userId);
     const fields = parseFields(row?.fields_json);
 
     // Each provided key replaces that stored value wholesale; omitted keys are
@@ -179,32 +180,38 @@ export function profileRouter({ db }) {
 
     const now = nowIso();
     if (row) {
-      await db.run("UPDATE learner_profile SET fields_json = ?, updated_at = ? WHERE id = 'default'", JSON.stringify(fields), now);
+      await saveProfileRow(db, req.userId, { state: row.state, transcriptJson: row.transcript_json, fieldsJson: JSON.stringify(fields) });
     } else {
       // Manual editing counts as opted out of the intro: state "skipped".
-      await db.run("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', 'skipped', '[]', ?, ?, ?)",
-        JSON.stringify(fields), now, now);
+      await saveProfileRow(db, req.userId, { state: 'skipped', transcriptJson: '[]', fieldsJson: JSON.stringify(fields) });
+      // First profile write on the hosted engine: give the brand-new account
+      // answerable demo material. Prototype mode already seeded at boot.
+      if (auth?.mode === 'supabase') {
+        void ensureUserSeeded({ db, vector, ai, userId: req.userId }).catch(() => {}); // best effort
+      }
     }
 
     if (updates.subjects !== undefined) {
       // Wholesale replacement: subjects absent from the new list are deleted.
       await db.batch([
-        { sql: 'DELETE FROM learner_subjects' },
+        { sql: 'DELETE FROM learner_subjects WHERE user_id = ?', args: [req.userId] },
         ...updates.subjects.map((s) => ({
-          sql: 'INSERT INTO learner_subjects (subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?)',
-          args: [s.subject, s.familiarity, s.confidence, s.source, now],
+          sql: 'INSERT INTO learner_subjects (user_id, subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+          args: [req.userId, s.subject, s.familiarity, s.confidence, s.source, now],
         })),
       ], 'write');
     }
 
-    res.json({ profile: profileToApi(await loadRow(db), await loadSubjects(db)) });
+    res.json({ profile: profileToApi(await loadProfileRow(db, req.userId), await loadSubjects(db, req.userId)) });
   });
 
   router.delete('/', async (req, res) => {
-    await db.run("DELETE FROM learner_profile WHERE id = 'default'");
-    await db.run('DELETE FROM learner_subjects');
-    await db.run('DELETE FROM learning_events');
-    // 204 with an empty body; deleting when nothing exists is fine (idempotent).
+    // Per-user teardown: the profile row, this user's subjects and events.
+    // Idempotent like before — deleting when nothing exists is fine.
+    await deleteProfileRow(db, req.userId);
+    await db.run('DELETE FROM learner_subjects WHERE user_id = ?', req.userId);
+    await db.run('DELETE FROM learning_events WHERE user_id = ?', req.userId);
+    // 204 with an empty body.
     res.status(204).end();
   });
 
@@ -214,8 +221,9 @@ export function profileRouter({ db }) {
 // Conversational onboarding endpoints (v1.4): POST /message drives the
 // interview one short question at a time; POST /skip opts out at any point.
 // Turn logic, model validation and all writes live in services/onboarding.js.
-export function onboardingRouter({ db, ai }) {
+export function onboardingRouter({ db, ai, vector, auth }) {
   const router = express.Router();
+  router.use(requireAuth({ auth }));
 
   router.post('/message', async (req, res) => {
     const raw = req.body?.message;
@@ -229,23 +237,25 @@ export function onboardingRouter({ db, ai }) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'message must be between 1 and 800 characters.');
       }
     }
-    res.json(await turnOnboarding(db, message, { ai }));
+    res.json(await turnOnboarding(db, message, { ai, userId: req.userId }));
   });
 
   router.post('/skip', async (req, res) => {
-    const row = await loadRow(db);
+    const row = await loadProfileRow(db, req.userId);
     if (row?.state === 'completed') {
       throw new ApiError(409, 'ONBOARDING_COMPLETE', 'Onboarding already finished.');
     }
     // Skipping is always reversible (a later /message restarts the interview),
     // so a skipped row is simply written wholesale with a cleared transcript.
-    const now = nowIso();
     if (row) {
-      await db.run("UPDATE learner_profile SET state = 'skipped', transcript_json = '[]', updated_at = ? WHERE id = 'default'", now);
+      await saveProfileRow(db, req.userId, { state: 'skipped', transcriptJson: '[]', fieldsJson: row.fields_json });
     } else {
-      await db.run("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', 'skipped', '[]', '{}', ?, ?)", now, now);
+      await saveProfileRow(db, req.userId, { state: 'skipped', transcriptJson: '[]', fieldsJson: '{}' });
+      if (auth?.mode === 'supabase') {
+        void ensureUserSeeded({ db, vector, ai, userId: req.userId }).catch(() => {});
+      }
     }
-    res.json({ profile: profileToApi(await loadRow(db), await loadSubjects(db)) });
+    res.json({ profile: profileToApi(await loadProfileRow(db, req.userId), await loadSubjects(db, req.userId)) });
   });
 
   return router;

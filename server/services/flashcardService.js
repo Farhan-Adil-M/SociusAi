@@ -24,9 +24,9 @@ export function normalizeCard(raw, hits) {
   return { front, back, citations };
 }
 
-export async function generateFlashcards({ topic, count = 8, sourceIds = [], sessionId = null }, { ai, vector, db } = {}) {
+export async function generateFlashcards({ topic, count = 8, sourceIds = [], sessionId = null, userId = 'default' }, { ai, vector, db } = {}) {
   const chat = ai?.chatCompletion ?? chatCompletion;
-  const hits = await retrieve(topic, { sourceIds, k: 8, minScore: 0, ai, vector });
+  const hits = await retrieve(topic, { sourceIds, k: 8, minScore: 0, ai, vector, userId });
   const weakEvidence = hits.every((hit) => (hitScore(hit) ?? 0) < config.ragMinSimilarity);
 
   if (hits.length === 0) {
@@ -75,8 +75,8 @@ export async function generateFlashcards({ topic, count = 8, sourceIds = [], ses
     deckId = newId('deck');
     await db.batch([
       {
-        sql: 'INSERT INTO decks (id, session_id, topic, source_ids_json, card_count, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [deckId, sessionId, topic, JSON.stringify(sourceIds), cards.length, nowIso()],
+        sql: 'INSERT INTO decks (id, user_id, session_id, topic, source_ids_json, card_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        args: [deckId, userId, sessionId, topic, JSON.stringify(sourceIds), cards.length, nowIso()],
       },
       ...result.cards.map((card, idx) => ({
         sql: 'INSERT INTO deck_cards (deck_id, idx, front, back, citations_json) VALUES (?, ?, ?, ?, ?)',

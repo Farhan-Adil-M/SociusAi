@@ -4,6 +4,7 @@
 // pages.
 
 import { api, isMockMode } from '../api.js';
+import { authReady, getHealthStatus, getUserName, signOut } from '../auth.js';
 import { icon, escapeHtml, errorMessage } from '../ui.js';
 
 const NAV_ITEMS = [
@@ -15,9 +16,13 @@ const NAV_ITEMS = [
   { key: 'profile', href: 'profile.html', label: 'Profile' },
 ];
 
-/** Display name entered on the login page. Empty string when signed out. */
+/**
+ * Who is signed in (kept synchronous for callers; see auth.getUserName for the
+ * two modes): in Supabase mode the account's name metadata or email local-part,
+ * in prototype mode the name typed on the login page. '' when signed out.
+ */
 export function currentUser() {
-  try { return localStorage.getItem('socius_user') || ''; } catch { return ''; }
+  return getUserName();
 }
 
 let healthPromise = null;
@@ -25,10 +30,14 @@ let healthPromise = null;
 /** One shared health request per page load (the contract asks for exactly one). */
 export function getHealth() {
   if (!healthPromise) {
-    healthPromise = api.getHealth().then(
-      (data) => ({ ok: true, data }),
-      (error) => ({ ok: false, error }),
-    );
+    // Mock mode answers from fixtures. Otherwise auth.boot()'s cached
+    // /api/health read (config discovery) is reused — no second request.
+    healthPromise = isMockMode()
+      ? api.getHealth().then(
+          (data) => ({ ok: true, data }),
+          (error) => ({ ok: false, error }),
+        )
+      : authReady().then(() => getHealthStatus());
   }
   return healthPromise;
 }
@@ -85,7 +94,7 @@ function headerHtml(active) {
           <span class="status-dot" aria-hidden="true"></span>
           <span class="sys-status-label">Checking services…</span>
         </span>
-        ${accountArea()}
+        <span data-account>${accountArea()}</span>
       </div>
     </div>`;
 }
@@ -151,6 +160,15 @@ function renderStatus(root, health) {
   wrap.title = `Unavailable: ${broken.join(', ') || 'unknown'}. Features that need it will show an error.`;
 }
 
+/** Attach (re-attach) the sign-out handler after the account area re-renders. */
+function wireSignOut(header) {
+  header.querySelector('[data-sign-out]')?.addEventListener('click', () => {
+    // auth.signOut clears the prototype name (and the Supabase session when one
+    // exists), then both modes route back to login.html.
+    signOut();
+  });
+}
+
 /**
  * Inject the shared header/footer, wire the mobile menu and sign-out, and
  * resolve the system status once for the page.
@@ -175,9 +193,16 @@ export function mountShell(active) {
         toggle.setAttribute('aria-expanded', 'false');
       }
     });
-    header.querySelector('[data-sign-out]')?.addEventListener('click', () => {
-      try { localStorage.removeItem('socius_user'); } catch { /* storage blocked */ }
-      window.location.href = 'login.html';
+    wireSignOut(header);
+    // In Supabase mode the account chip depends on the restored session, which
+    // finishes after this first render — refresh the account corner once ready.
+    authReady().then(() => {
+      if (!document.body.contains(header)) return;
+      if (getUserName()) {
+        const slot = header.querySelector('[data-account]');
+        if (slot) slot.innerHTML = accountArea();
+      }
+      wireSignOut(header);
     });
     getHealth().then((health) => renderStatus(header, health));
   }

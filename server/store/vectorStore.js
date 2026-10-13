@@ -52,19 +52,33 @@ function isNotFound(err) {
   return err && (err.name === 'InvalidCollectionError' || err.name === 'NotFoundError');
 }
 
-export async function addChunks({ ids, embeddings, documents, metadatas }) {
+export async function addChunks({ ids, embeddings, documents, metadatas, userId = 'default' }) {
   try {
     const collection = await getCollection();
-    await collection.add({ ids, embeddings, documents, metadatas });
+    // Ownership lives in chunk metadata (Chroma has no user columns): every
+    // write stamps ownerId. Call sites that know the request's user already
+    // set it (ingestion, per-user seeding); the userId parameter keeps the
+    // prototype-only npm run reindex working — it re-embeds the install's
+    // local store as the fixed dev user.
+    const owned = metadatas.map((m) => ({ ownerId: userId, ...m }));
+    await collection.add({ ids, embeddings, documents, metadatas: owned });
   } catch (err) {
     throw chromaError(err);
   }
 }
 
-export async function queryChunks({ embedding, nResults = 6, sourceIds = [] }) {
+export async function queryChunks({ embedding, nResults = 6, sourceIds = [], userId = 'default' }) {
   try {
     const collection = await getCollection();
-    const where = sourceIds.length > 0 ? { sourceId: { $in: sourceIds } } : undefined;
+    // Per-user retrieval: chunks added by other users carry a different
+    // ownerId metadata value and must never surface. When both owner and
+    // source filters apply, Chroma wants them combined with $and.
+    const sourceFilter = sourceIds.length > 0 ? { sourceId: { $in: sourceIds } } : null;
+    const ownerFilter = userId ? { ownerId: userId } : null;
+    let where = ownerFilter;
+    if (sourceFilter) {
+      where = ownerFilter ? { $and: [ownerFilter, sourceFilter] } : sourceFilter;
+    }
     const res = await collection.query({
       queryEmbeddings: [embedding],
       nResults,

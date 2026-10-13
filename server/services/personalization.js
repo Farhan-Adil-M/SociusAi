@@ -7,7 +7,7 @@
 // it (the caller records events separately in tutorService).
 
 import { APPROACH_ORDER, questionTokens, summarizeApproaches } from './events.js';
-import { parseJsonObject } from '../store/sqlite.js';
+import { parseJsonObject, loadProfileRow } from '../store/sqlite.js';
 
 // Same normalisation as events.js question tokens (consistent repeat detection).
 export function tokenize(text) {
@@ -45,19 +45,23 @@ function sharesToken(candidate, reference) {
  * title-matched subjects, then the session title itself; ties alphabetical.
  * Capped at 3. Returns lowercase keys.
  */
-export async function resolveRelevantTopics(db, question, sessionId = null) {
+export async function resolveRelevantTopics(db, question, sessionId = null, userId = 'default') {
   const questionSet = new Set(tokenize(question ?? ''));
   let titleSet = new Set();
   let sessionTitle = null;
   if (sessionId) {
-    const session = await db.get('SELECT title FROM study_sessions WHERE id = ?', sessionId) ?? null;
-    sessionTitle = typeof session?.title === 'string' ? session.title.trim() : null;
-    titleSet = new Set(tokenize(sessionTitle ?? ''));
+    const session = await db.get('SELECT title, user_id FROM study_sessions WHERE id = ?', sessionId) ?? null;
+    // Only the caller's session title can ever count (tutor scope already
+    // verified ownership); a foreign session id is treated as nonexistent.
+    if (session && session.user_id === userId) {
+      sessionTitle = typeof session.title === 'string' ? session.title.trim() : null;
+      titleSet = new Set(tokenize(sessionTitle ?? ''));
+    }
   }
 
   // { name, rank } — lower rank = more relevant.
   const scored = [];
-  for (const row of await db.all('SELECT topic FROM learner_topics ORDER BY updated_at DESC, topic ASC')) {
+  for (const row of await db.all('SELECT topic FROM learner_topics WHERE user_id = ? ORDER BY updated_at DESC, topic ASC', userId)) {
     const name = row.topic?.trim().toLowerCase();
     if (!name) continue;
     const viaQuestion = questionSet.size > 0 && sharesToken(name, questionSet);
@@ -65,7 +69,7 @@ export async function resolveRelevantTopics(db, question, sessionId = null) {
     if (viaQuestion) scored.push({ name, rank: 0 });
     else if (viaTitle) scored.push({ name, rank: 2 });
   }
-  for (const row of await db.all('SELECT subject FROM learner_subjects ORDER BY subject ASC')) {
+  for (const row of await db.all('SELECT subject FROM learner_subjects WHERE user_id = ? ORDER BY subject ASC', userId)) {
     const name = row.subject?.trim().toLowerCase();
     if (!name) continue;
     const viaQuestion = questionSet.size > 0 && sharesToken(name, questionSet);
@@ -98,7 +102,7 @@ function countWord(n) {
 // ≤2 confusion strings from observed event kinds, deterministic order:
 // within a topic by kind (repeated_question → explain_again →
 // quiz_item_incorrect), across topics in relevance order.
-async function buildConfusion(db, matchedTopics, cap = 2) {
+async function buildConfusion(db, matchedTopics, cap = 2, userId = 'default') {
   if (matchedTopics.length === 0) return [];
   const kinds = [
     { kind: 'repeated_question', make: (topic) => `asked a near-identical question about ${topic} before — a possible confusion signal` },
@@ -108,8 +112,8 @@ async function buildConfusion(db, matchedTopics, cap = 2) {
   const placeholders = matchedTopics.map(() => '?').join(', ');
   const rows = await db.all(
     `SELECT kind, topic FROM learning_events
-     WHERE kind IN ('repeated_question','explain_again','quiz_item_incorrect') AND topic IN (${placeholders})`,
-    ...matchedTopics,
+     WHERE user_id = ? AND kind IN ('repeated_question','explain_again','quiz_item_incorrect') AND topic IN (${placeholders})`,
+    userId, ...matchedTopics,
   );
   const counts = new Map(); // `topic|kind` → n
   for (const row of rows) counts.set(`${row.topic}|${row.kind}`, (counts.get(`${row.topic}|${row.kind}`) ?? 0) + 1);
@@ -127,9 +131,9 @@ async function buildConfusion(db, matchedTopics, cap = 2) {
 
 // ≤1 approach note from the approach-effectiveness summary for the matched
 // topics ("X explanations helped on T" / "… did not help on T").
-async function buildApproachNotes(db, matchedTopics, cap = 1) {
+async function buildApproachNotes(db, matchedTopics, cap = 1, userId = 'default') {
   if (matchedTopics.length === 0) return [];
-  const events = await db.all('SELECT id, kind, topic, detail_json FROM learning_events');
+  const events = await db.all('SELECT id, kind, topic, detail_json FROM learning_events WHERE user_id = ?', userId);
   for (const topic of matchedTopics) {
     const summary = summarizeApproaches(events, topic);
     const helped = summary.helped[0];
@@ -140,13 +144,13 @@ async function buildApproachNotes(db, matchedTopics, cap = 1) {
   return [];
 }
 
-/** Any learning event recorded under one of these topics? */
-async function hasEventsForTopics(db, topics) {
+/** Any learning event recorded under one of these topics (for THIS user)? */
+async function hasEventsForTopics(db, topics, userId = 'default') {
   if (topics.length === 0) return false;
   const placeholders = topics.map(() => '?').join(', ');
   return await db.get(
-    `SELECT 1 FROM learning_events WHERE topic IN (${placeholders}) LIMIT 1`,
-    ...topics,
+    `SELECT 1 FROM learning_events WHERE user_id = ? AND topic IN (${placeholders}) LIMIT 1`,
+    userId, ...topics,
   ) !== undefined;
 }
 
@@ -158,10 +162,10 @@ async function hasEventsForTopics(db, topics) {
  * subjects at all, and no matched learner_topics or learning events → the
  * tutor prompt stays byte-identical to the pre-personalisation version.
  */
-export async function buildLearnerContext(db, { question = '', sessionId = null } = {}) {
-  const topics = await resolveRelevantTopics(db, question, sessionId);
+export async function buildLearnerContext(db, { question = '', sessionId = null, userId = 'default' } = {}) {
+  const topics = await resolveRelevantTopics(db, question, sessionId, userId);
 
-  const row = await db.get("SELECT * FROM learner_profile WHERE id = 'default'") ?? null;
+  const row = await loadProfileRow(db, userId);
   const fields = row ? parseJsonObject(row.fields_json) : {};
 
   const goal = Array.isArray(fields.goals) && fields.goals.length > 0 ? asString(fields.goals[0]?.label, 120) : null;
@@ -177,8 +181,10 @@ export async function buildLearnerContext(db, { question = '', sessionId = null 
   // working inside this session, so its topic scope counts as relevant.
   const relevantTokens = new Set(tokenize(question ?? ''));
   if (sessionId) {
-    const session = await db.get('SELECT title FROM study_sessions WHERE id = ?', sessionId) ?? null;
-    for (const t of tokenize(session?.title ?? '')) relevantTokens.add(t);
+    const session = await db.get('SELECT title, user_id FROM study_sessions WHERE id = ?', sessionId) ?? null;
+    if (session && session.user_id === userId) {
+      for (const t of tokenize(session?.title ?? '')) relevantTokens.add(t);
+    }
   }
 
   // Interests: only the ones that relate to what we are being asked about —
@@ -190,13 +196,13 @@ export async function buildLearnerContext(db, { question = '', sessionId = null 
   }
 
   // Subjects: only the matched ones, with their self-reported familiarity.
-  const subjectRows = await db.all('SELECT subject, familiarity FROM learner_subjects ORDER BY subject ASC');
+  const subjectRows = await db.all('SELECT subject, familiarity FROM learner_subjects WHERE user_id = ? ORDER BY subject ASC', userId);
   const subjects = subjectRows
     .filter((s) => topics.includes(s.subject.trim().toLowerCase()))
     .map((s) => ({ subject: s.subject, familiarity: s.familiarity }));
 
-  // Observed mastery for matched learner_topics.
-  const masteryRows = await db.all('SELECT topic, correct, total FROM learner_topics');
+  // Observed mastery for matched learner_topics (this user only).
+  const masteryRows = await db.all('SELECT topic, correct, total FROM learner_topics WHERE user_id = ?', userId);
   const mastery = [];
   for (const topic of topics) {
     const r = masteryRows.find((m) => m.topic === topic);
@@ -205,8 +211,8 @@ export async function buildLearnerContext(db, { question = '', sessionId = null 
     if (mastery.length === 5) break;
   }
 
-  const confusion = await buildConfusion(db, topics);
-  const approachNotes = await buildApproachNotes(db, topics);
+  const confusion = await buildConfusion(db, topics, 2, userId);
+  const approachNotes = await buildApproachNotes(db, topics, 1, userId);
 
   // Nothing usable anywhere → tell the tutor service to keep the legacy prompt.
   // Usable self-reported data: any filled field on a row that is not "new".
@@ -215,7 +221,7 @@ export async function buildLearnerContext(db, { question = '', sessionId = null 
     && Boolean(goal || style || purpose || interestLabels.length > 0);
   const noSubjects = subjectRows.length === 0;
   const noMatchedObserved = mastery.length === 0 && confusion.length === 0
-    && approachNotes.length === 0 && !(await hasEventsForTopics(db, topics));
+    && approachNotes.length === 0 && !(await hasEventsForTopics(db, topics, userId));
   if (!hasSelfReported && noSubjects && noMatchedObserved) return null;
 
   return { goal, style, interests, subjects, mastery, confusion, approachNotes, topics };

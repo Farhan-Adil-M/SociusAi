@@ -6,6 +6,7 @@
 
 import express from 'express';
 import { ApiError } from '../middleware/errors.js';
+import { requireAuth } from '../middleware/auth.js';
 import { recordEvent } from '../services/events.js';
 import { CATEGORIES } from '../constants.js';
 import { generateFlashcards } from '../services/flashcardService.js';
@@ -31,8 +32,9 @@ function deckRowToApi(row, extra = {}) {
   };
 }
 
-export function decksRouter({ db }) {
+export function decksRouter({ db, auth }) {
   const router = express.Router();
+  router.use(requireAuth({ auth }));
 
   router.get('/', async (req, res) => {
     const { sessionId: sessionFilter, category, q } = req.query;
@@ -45,8 +47,8 @@ export function decksRouter({ db }) {
     }
     const search = typeof q === 'string' && q.trim() !== '' ? q.trim() : null;
 
-    const filters = [];
-    const params = [];
+    const filters = ['d.user_id = ?'];
+    const params = [req.userId];
     if (sessionFilter === 'unsorted') filters.push('d.session_id IS NULL');
     else if (typeof sessionFilter === 'string' && sessionFilter !== '') {
       filters.push('d.session_id = ?');
@@ -69,7 +71,10 @@ export function decksRouter({ db }) {
       (SELECT COUNT(*) FROM deck_cards WHERE deck_id = d.id AND status = 'known') AS known_count,
       (SELECT COUNT(*) FROM deck_cards WHERE deck_id = d.id AND status = 'review') AS review_count
     `;
-    const join = 'decks d LEFT JOIN study_sessions ss ON ss.id = d.session_id';
+    // The join also matches on user so a deck of user A can never borrow the
+    // title/category of user B's same-id... ids are unique, but per-user rows
+    // make every join explicit anyway.
+    const join = 'decks d LEFT JOIN study_sessions ss ON ss.id = d.session_id AND ss.user_id = d.user_id';
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     // "active" = last studied first, never-studied decks last, newest first then.
     const orderBy = {
@@ -79,7 +84,7 @@ export function decksRouter({ db }) {
     }[sort];
 
     const rows = await db.all(`SELECT ${columns} FROM ${join} ${where} ORDER BY ${orderBy}`, ...params);
-    const unsortedDeckCount = (await db.get('SELECT COUNT(*) AS n FROM decks WHERE session_id IS NULL')).n;
+    const unsortedDeckCount = (await db.get('SELECT COUNT(*) AS n FROM decks WHERE user_id = ? AND session_id IS NULL', req.userId)).n;
 
     res.json({
       decks: rows.map((row) => deckRowToApi(row, {
@@ -95,8 +100,8 @@ export function decksRouter({ db }) {
   router.get('/:deckId', async (req, res) => {
     const row = await db.get(`
       SELECT d.*, ss.title AS session_title, ss.category AS session_category
-      FROM decks d LEFT JOIN study_sessions ss ON ss.id = d.session_id
-      WHERE d.id = ?`, req.params.deckId);
+      FROM decks d LEFT JOIN study_sessions ss ON ss.id = d.session_id AND ss.user_id = d.user_id
+      WHERE d.id = ? AND d.user_id = ?`, req.params.deckId, req.userId);
     if (!row) throw new ApiError(404, 'DECK_NOT_FOUND', 'That deck does not exist. Generate a new one.');
 
     const cards = (await db.all('SELECT * FROM deck_cards WHERE deck_id = ? ORDER BY idx', row.id))
@@ -122,7 +127,8 @@ export function decksRouter({ db }) {
   });
 
   router.patch('/:deckId/cards/:idx', async (req, res) => {
-    const deck = await db.get('SELECT * FROM decks WHERE id = ?', req.params.deckId);
+    // Ownership first: another user's deck id = does not exist.
+    const deck = await db.get('SELECT * FROM decks WHERE id = ? AND user_id = ?', req.params.deckId, req.userId);
     if (!deck) throw new ApiError(404, 'DECK_NOT_FOUND', 'That deck does not exist. Generate a new one.');
 
     const idx = Number(req.params.idx);
@@ -153,15 +159,17 @@ export function decksRouter({ db }) {
         kind: status === 'known' ? 'card_known' : 'card_review',
         topic: deck.topic.toLowerCase().trim(),
         detail: { deckId: deck.id, idx, status },
+        userId: req.userId,
       });
     }
     res.json({ deckId: deck.id, idx, status, lastReviewedAt: now });
   });
 
   router.delete('/:deckId', async (req, res) => {
-    const deck = await db.get('SELECT * FROM decks WHERE id = ?', req.params.deckId);
+    // Ownership first (404 for someone else's deck).
+    const deck = await db.get('SELECT * FROM decks WHERE id = ? AND user_id = ?', req.params.deckId, req.userId);
     if (!deck) throw new ApiError(404, 'DECK_NOT_FOUND', 'That deck does not exist. Generate a new one.');
-    await db.run('DELETE FROM decks WHERE id = ?', deck.id); // cards cascade
+    await db.run('DELETE FROM decks WHERE id = ? AND user_id = ?', deck.id, req.userId); // cards cascade
     res.status(204).end();
   });
 
@@ -172,8 +180,9 @@ export function decksRouter({ db }) {
 // Session scope is enforced server-side via resolveRequestScope (sessionId
 // present) or the legacy sourceIds filter. The deck is saved and returned
 // with its id. Mounted by app.js under /api/flashcards.
-export function flashcardsRouter({ db, ai, vector }) {
+export function flashcardsRouter({ db, ai, vector, auth }) {
   const router = express.Router();
+  router.use(requireAuth({ auth }));
 
   router.post('/generate', async (req, res) => {
     const { topic, count, sourceIds, sessionId } = req.body ?? {};
@@ -183,10 +192,11 @@ export function flashcardsRouter({ db, ai, vector }) {
     }
     validateSourceIds(sourceIds);
 
-    const scope = await resolveRequestScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+    const userId = req.userId;
+    const scope = await resolveRequestScope(db, { sessionId, sourceIds: sourceIds ?? [] }, userId);
 
     const result = await generateFlashcards(
-      { topic: topic.trim(), count: count ?? 8, sourceIds: scope.sourceIds, sessionId: scope.session?.id ?? null },
+      { topic: topic.trim(), count: count ?? 8, sourceIds: scope.sourceIds, sessionId: scope.session?.id ?? null, userId },
       { ai, vector, db },
     );
     res.status(201).json(result);

@@ -20,6 +20,7 @@ import { createClient } from '@libsql/client';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
+import postgres from 'postgres';
 
 /** Mirror of sqlite.js's create-block; identical shapes, idempotent CREATEs. */
 export const SCHEMA_SQL = `
@@ -121,7 +122,7 @@ export const SCHEMA_SQL = `
   );
 
   CREATE TABLE IF NOT EXISTS learner_profile (
-    id              TEXT PRIMARY KEY CHECK (id = 'default'),
+    id              TEXT PRIMARY KEY,
     state           TEXT NOT NULL DEFAULT 'new',
     transcript_json TEXT NOT NULL DEFAULT '[]',
     fields_json     TEXT NOT NULL DEFAULT '{}',
@@ -145,7 +146,7 @@ export const SCHEMA_SQL = `
   );
 `;
 
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 // ---- versioned, additive, idempotent migrations (single source of truth) ----
 // One surgical mirror of stores/sqlite.js's migrate() chain (v2..v6), written
@@ -220,6 +221,73 @@ export async function runMigrations(engine, { dbPath } = {}) {
     embedding_json TEXT NOT NULL,
     metadata_json  TEXT NOT NULL DEFAULT '{}'
   );`);
+
+  // ---- v7: per-user ownership (accounts and durable user data) --------------
+  // Adds user_id to every directly-queried owner table and rebuilds the two
+  // tables whose PRIMARY KEY was the natural key (topic / subject) into
+  // composite (user_id, key) PKs so separate accounts can work on the same
+  // topic independently. Node-side safety: one-time .v6.bak copy before any
+  // drop. The Postgres engine never runs this chain (its schema lives in
+  // store/pg-schema.sql and already has composite keys + user_id).
+  if (engine.kind === 'node' && version < 7) {
+    for (const t of ['study_sessions', 'sources', 'quizzes', 'quiz_attempts', 'decks', 'activity', 'learning_events',
+                     'learner_topics', 'learner_subjects']) {
+      await addColumnIfMissing(engine, t, 'user_id', "user_id TEXT NOT NULL DEFAULT 'default'");
+    }
+    await addColumnIfMissing(engine, 'vector_chunks', 'user_id', "user_id TEXT NOT NULL DEFAULT 'default'");
+
+    if (dbPath && fs.existsSync(dbPath) && !fs.existsSync(`${dbPath}.v6.bak`)) {
+      try { fs.copyFileSync(dbPath, `${dbPath}.v6.bak`); } catch { /* read-only fs */ }
+    }
+
+    // rebuild #1: learner_topics (user_id, topic)
+    await engine.exec(`CREATE TABLE learner_topics_v7 (
+      user_id TEXT NOT NULL DEFAULT 'default',
+      topic TEXT NOT NULL DEFAULT '',
+      correct INTEGER NOT NULL DEFAULT 0,
+      total INTEGER NOT NULL DEFAULT 0,
+      difficulty TEXT NOT NULL DEFAULT 'medium',
+      updated_at TEXT NOT NULL,
+      last_practiced_at TEXT,
+      PRIMARY KEY (user_id, topic)
+    );`);
+    await engine.exec(`INSERT INTO learner_topics_v7 (user_id, topic, correct, total, difficulty, updated_at, last_practiced_at)
+      SELECT user_id, topic, correct, total, difficulty, updated_at, last_practiced_at FROM learner_topics;`);
+    await engine.exec('DROP TABLE learner_topics;');
+    await engine.exec('ALTER TABLE learner_topics_v7 RENAME TO learner_topics;');
+
+    // rebuild #2: learner_subjects (user_id, subject)
+    await engine.exec(`CREATE TABLE learner_subjects_v7 (
+      user_id TEXT NOT NULL DEFAULT 'default',
+      subject TEXT NOT NULL DEFAULT '',
+      familiarity TEXT NOT NULL,
+      confidence INTEGER,
+      source TEXT NOT NULL DEFAULT 'stated',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, subject)
+    );`);
+    await engine.exec(`INSERT INTO learner_subjects_v7 (user_id, subject, familiarity, confidence, source, updated_at)
+      SELECT user_id, subject, familiarity, confidence, source, updated_at FROM learner_subjects;`);
+    await engine.exec('DROP TABLE learner_subjects;');
+    await engine.exec('ALTER TABLE learner_subjects_v7 RENAME TO learner_subjects;');
+
+    // rebuild #3: learner_profile — its key becomes the VERIFIED user id
+    // (Supabase uuid, or the prototype dev user 'default'); the legacy
+    // CHECK (id = 'default') would reject every real account, so the table is
+    // rebuilt row-for-row without it.
+    await engine.exec(`CREATE TABLE learner_profile_v7 (
+      id              TEXT PRIMARY KEY,
+      state           TEXT NOT NULL DEFAULT 'new',
+      transcript_json TEXT NOT NULL DEFAULT '[]',
+      fields_json     TEXT NOT NULL DEFAULT '{}',
+      created_at      TEXT NOT NULL,
+      updated_at      TEXT NOT NULL
+    );`);
+    await engine.exec(`INSERT INTO learner_profile_v7 (id, state, transcript_json, fields_json, created_at, updated_at)
+      SELECT id, state, transcript_json, fields_json, created_at, updated_at FROM learner_profile;`);
+    await engine.exec('DROP TABLE learner_profile;');
+    await engine.exec('ALTER TABLE learner_profile_v7 RENAME TO learner_profile;');
+  }
 
   if (version < CURRENT_SCHEMA_VERSION) {
     await engine.run(
@@ -316,6 +384,47 @@ export function libSqlEngine(url, authToken) {
   };
 }
 
+
+// ---- Postgres (Supabase) engine — third engine behind the same facade ------
+// Placeholder contract stays `?` at every call site; translated to `$n` here
+// with a per-statement counter (our SQL never contains a literal '?' —
+// messages with question marks live in code, not in SQL text). DDL for this
+// engine lives in store/pg-schema.sql (applied by scripts/migrate-supabase.mjs).
+
+export function pgEngine(url) {
+  const raw = postgres(url, { prepare: false, max: 5 }); // pooler-safe
+  const toPg = (sql) => {
+    let n = 0;
+    return sql.replace(/\?/g, () => '$' + (++n));
+  };
+  const trim = (r) => ({ changes: r.count ?? 0, lastInsertRowid: 0 });
+  return {
+    kind: 'pg',
+    async get(sql, ...args) { const r = await raw.unsafe(toPg(sql), args); return r[0] ?? null; },
+    async all(sql, ...args) { return await raw.unsafe(toPg(sql), args); },
+    async run(sql, ...args) { const r = await raw.unsafe(toPg(sql), args); return trim(r); },
+    async exec(sql) { await raw.unsafe(toPg(sql)); },
+    async batch(statements, _mode = 'write') {
+      const results = [];
+      await raw.begin(async (tx) => {
+        for (const stmt of statements) {
+          const { sql, args } = typeof stmt === 'string' ? { sql: stmt, args: [] } : stmt;
+          const r = await tx.unsafe(toPg(sql), args);
+          results.push(trim(r));
+        }
+      });
+      return { results };
+    },
+    prepare() {
+      throw new Error(
+        'prepare() is not available on the Postgres engine. Convert this call site to the facade (get/all/run/batch in server/store/db.js).'
+      );
+    },
+    close() { raw.end({ timeout: 1 }); },
+  };
+}
+
+
 // ---- configuration ----------------------------------------------------------
 
 function envMissing(name) {
@@ -339,8 +448,31 @@ export async function openAppDb({ dbPath, migrate = true, allowRemoteMigrate = f
   if (!dbPath) dbPath = process.env.SQLITE_DB_PATH || undefined;
   // NOTE: config captured env values at import time as '' — empty strings are
   // "unset", so fall through with || (?? would keep the empty string).
+  // Supabase mode wins when its direct-connection URL is present.
+  const supabaseDb = (config.supabaseDbUrl || process.env.SUPABASE_DB_URL || '').trim();
   const remoteUrl = (config.tursoDatabaseUrl || process.env.TURSO_DATABASE_URL || '').trim();
   const remoteToken = (config.tursoAuthToken || process.env.TURSO_AUTH_TOKEN || '').trim();
+
+  if (supabaseDb) {
+    const engine = pgEngine(supabaseDb);
+    if (migrate || allowRemoteMigrate) {
+      if (migrate && !allowRemoteMigrate) {
+        // Hosted app_meta is created by scripts/migrate-supabase.mjs together
+        // with the whole schema; refuse to boot a behind-schema hosted db.
+        const row = await engine.get("SELECT value FROM public.app_meta WHERE key = 'schema_version'");
+        const version = row ? Number(row.value) : 1;
+        if (version < CURRENT_SCHEMA_VERSION) {
+          engine.close?.();
+          throw new Error(
+            `The hosted database is at schema version ${version} but this build expects ${CURRENT_SCHEMA_VERSION}. Run "npm run migrate:supabase" once from a trusted machine, then start the server.`,
+          );
+        }
+      }
+      // allowRemoteMigrate → scripts/migrate-supabase.mjs applies pg-schema.sql itself.
+      // (pg migrations are engine-specific and live there, not in runMigrations.)
+    }
+    return engine;
+  }
 
   if (remoteUrl) {
     if (!remoteToken) throw envMissing('TURSO_AUTH_TOKEN');

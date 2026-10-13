@@ -29,14 +29,14 @@ function cleanTopic(topic) {
   return typeof topic === 'string' && topic.trim() !== '' ? topic.trim().toLowerCase() : null;
 }
 
-export async function recordEvent(db, { kind, topic = null, detail = {} }) {
+export async function recordEvent(db, { kind, topic = null, detail = {}, userId = 'default' }) {
   const weight = EVENT_WEIGHTS[kind];
   if (weight === undefined) {
     throw new ApiError(400, 'VALIDATION_ERROR', `Unknown event kind "${kind}".`);
   }
   const at = nowIso();
-  await db.run('INSERT INTO learning_events (kind, topic, detail_json, weight, at) VALUES (?, ?, ?, ?, ?)',
-    kind, cleanTopic(topic), JSON.stringify(detail ?? {}), weight, at);
+  await db.run('INSERT INTO learning_events (kind, topic, detail_json, weight, at, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+    kind, cleanTopic(topic), JSON.stringify(detail ?? {}), weight, at, userId);
   return { kind, weight, at };
 }
 
@@ -77,12 +77,12 @@ export function isRepeatedQuestion(current, recent = []) {
 // ---- teaching-approach memory (pure + one read) -----------------------------
 
 // The most recently requested approach for a topic, or null.
-export async function lastApproach(db, topic) {
+export async function lastApproach(db, topic, userId = 'default') {
   const key = cleanTopic(topic);
   if (key === null) return null;
   const row = await db.get(
-    "SELECT detail_json FROM learning_events WHERE kind = 'approach_change' AND topic = ? ORDER BY id DESC LIMIT 1",
-    key,
+    "SELECT detail_json FROM learning_events WHERE kind = 'approach_change' AND topic = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
+    key, userId,
   );
   if (!row) return null;
   const approach = parseJsonObject(row.detail_json).to;
@@ -182,19 +182,19 @@ export function summarizeApproaches(events, topic) {
 // record a recovery_success event attributed to that approach. Returns the
 // event, or null when there is nothing open or no improvement happened.
 // A second call after success finds the recorded recovery and returns null.
-export async function maybeRecordRecovery(db, { topic, masteryBefore, masteryAfter }) {
+export async function maybeRecordRecovery(db, { topic, masteryBefore, masteryAfter, userId = 'default' }) {
   const key = cleanTopic(topic);
   if (key === null) return null;
 
   const lastChange = await db.get(
-    "SELECT id, detail_json FROM learning_events WHERE kind = 'approach_change' AND topic = ? ORDER BY id DESC LIMIT 1",
-    key,
+    "SELECT id, detail_json FROM learning_events WHERE kind = 'approach_change' AND topic = ? AND user_id = ? ORDER BY id DESC LIMIT 1",
+    key, userId,
   );
   if (!lastChange) return null;
 
   const laterRecovery = await db.get(
-    "SELECT id FROM learning_events WHERE kind = 'recovery_success' AND topic = ? AND id > ? LIMIT 1",
-    key, lastChange.id,
+    "SELECT id FROM learning_events WHERE kind = 'recovery_success' AND topic = ? AND id > ? AND user_id = ? LIMIT 1",
+    key, lastChange.id, userId,
   );
   if (laterRecovery) return null; // this approach change already has its outcome
 
@@ -206,5 +206,6 @@ export async function maybeRecordRecovery(db, { topic, masteryBefore, masteryAft
     kind: 'recovery_success',
     topic: key,
     detail: { approach, before: masteryBefore, after: masteryAfter },
+    userId,
   });
 }

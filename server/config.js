@@ -16,6 +16,9 @@ export function assertConfig() {
   }
 }
 
+const supabaseUrl = optional('SUPABASE_URL', '');
+const supabaseAnonKey = optional('SUPABASE_ANON_KEY', '');
+const supabaseDbUrl = optional('SUPABASE_DB_URL', '');
 const tursoDatabaseUrl = optional('TURSO_DATABASE_URL', '');
 const tursoAuthToken = optional('TURSO_AUTH_TOKEN', '');
 
@@ -48,6 +51,9 @@ export const config = {
   chromaLocalHost: optional('CHROMA_LOCAL_HOST', 'localhost'),
   chromaLocalPort: Number(optional('CHROMA_LOCAL_PORT', 8100)),
 
+  supabaseUrl,
+  supabaseAnonKey,
+  supabaseDbUrl,
   tursoDatabaseUrl,
   tursoAuthToken,
   dataDir: optional('DATA_DIR', 'data'),

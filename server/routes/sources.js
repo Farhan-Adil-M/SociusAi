@@ -14,6 +14,7 @@ import { addChunks, deleteChunks } from '../store/vectorStore.js';
 import { embedTexts } from '../services/embeddings.js';
 import { retrieve, toCitation, assertSourcesExist } from '../services/retrieval.js';
 import { suggestOrganization, acceptOrganization } from '../services/organizer.js';
+import { requireAuth } from '../middleware/auth.js';
 import { logActivity, newId, nowIso, getMeta, setMeta, delMeta } from '../store/sqlite.js';
 
 const ALLOWED_EXTENSIONS = new Set(['.pdf', '.pptx']);
@@ -77,7 +78,7 @@ export function sourceRowToApi(row) {
   };
 }
 
-async function persistSource(db, { type, title, url, segments, pageCount, slideCount }, { embed, store, remove }) {
+async function persistSource(db, { type, title, url, segments, pageCount, slideCount, userId }, { embed, store, remove }) {
   const sourceId = newId('src');
   const chunks = chunkSegments(segments);
   if (chunks.length === 0) {
@@ -108,6 +109,9 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
     ...(c.location?.page != null ? { page: c.location.page } : {}),
     ...(c.location?.slide != null ? { slide: c.location.slide } : {}),
     ...(c.location?.paragraph != null ? { paragraph: c.location.paragraph } : {}),
+    // Per-user ownership on the vector side: retrieval filters by metadata
+    // ownerId (Chroma) and the user_id column (sqlite fallback).
+    ownerId: userId,
   }));
 
   const ids = chunks.map((c) => `${sourceId}_${c.chunkIndex}`);
@@ -125,6 +129,7 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
       embeddings: vectors,
       documents: chunks.map((c) => c.text),
       metadatas,
+      userId,
     });
   } catch (err) {
     // Compensation (v1.2): if vector storage partially failed, remove anything
@@ -140,8 +145,8 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
   try {
     await db.batch([
       {
-        sql: 'INSERT INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        args: [sourceId, type, title, url ?? null, pageCount, slideCount, chunks.length, createdAt],
+        sql: 'INSERT INTO sources (id, user_id, type, title, url, page_count, slide_count, chunk_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [sourceId, userId, type, title, url ?? null, pageCount, slideCount, chunks.length, createdAt],
       },
       ...segments.map((segment, i) => ({
         sql: 'INSERT INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)',
@@ -160,16 +165,18 @@ async function persistSource(db, { type, title, url, segments, pageCount, slideC
   };
 }
 
-export function sourcesRouter({ db, ai, vector }) {
+export function sourcesRouter({ db, ai, vector, auth }) {
   const router = express.Router();
   const embed = ai?.embedTexts ?? embedTexts;
   const store = vector?.addChunks ?? addChunks;
   const remove = vector?.deleteChunks ?? deleteChunks;
+  router.use(requireAuth({ auth }));
 
   router.post('/upload', uploadSingleFile, async (req, res) => {
     if (!req.file) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Attach one file in the "file" field.');
     }
+    const userId = req.userId;
 
     const ext = path.extname(req.file.originalname).toLowerCase();
     const extracted = ext === '.pdf'
@@ -179,16 +186,17 @@ export function sourcesRouter({ db, ai, vector }) {
     const source = await persistSource(db, {
       type: ext === '.pdf' ? 'pdf' : 'pptx',
       title: req.file.originalname,
+      userId,
       ...extracted,
     }, { embed, store, remove });
-    await logActivity(db, 'upload', null, `${source.title} (${source.pageCount ?? source.slideCount} ${source.pageCount != null ? 'pages' : 'slides'})`);
+    await logActivity(db, 'upload', null, `${source.title} (${source.pageCount ?? source.slideCount} ${source.pageCount != null ? 'pages' : 'slides'})`, null, userId);
     res.status(201).json({ source: { ...source, url: null } });
   });
 
   router.post('/webpage', async (req, res) => {
     const { segments, title, url, pageCount, slideCount } = extractWebpage(req.body ?? {});
-    const source = await persistSource(db, { type: 'webpage', title, url, segments, pageCount, slideCount }, { embed, store, remove });
-    await logActivity(db, 'upload', null, `${source.title} (webpage)`);
+    const source = await persistSource(db, { type: 'webpage', title, url, segments, pageCount, slideCount, userId: req.userId }, { embed, store, remove });
+    await logActivity(db, 'upload', null, `${source.title} (webpage)`, null, req.userId);
     res.status(201).json({ source: { ...source, url } });
   });
 
@@ -197,34 +205,35 @@ export function sourcesRouter({ db, ai, vector }) {
     if (description !== undefined && (typeof description !== 'string' || description.length > 500)) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Description must be at most 500 characters.');
     }
-    const result = await suggestOrganization(db, { sourceId: req.params.id, description }, { chat: ai?.chatCompletion, });
+    const result = await suggestOrganization(db, { sourceId: req.params.id, description, userId: req.userId }, { chat: ai?.chatCompletion, });
     res.json(result); // 502 NIM_ERROR on model failure — the source simply stays Unsorted
   });
 
   router.post('/:id/accept-suggestion', async (req, res) => {
-    const { source, session } = await acceptOrganization(db, { sourceId: req.params.id });
-    await logActivity(db, 'organize', null, `${source.title} → ${session?.title ?? 'Unsorted'}`, session?.id ?? null);
+    const { source, session } = await acceptOrganization(db, { sourceId: req.params.id, userId: req.userId });
+    await logActivity(db, 'organize', null, `${source.title} → ${session?.title ?? 'Unsorted'}`, session?.id ?? null, req.userId);
     res.json({ source: sourceRowToApi(source), session: session ? { id: session.id, title: session.title, category: session.category } : null });
   });
 
   router.get('/', async (req, res) => {
     const { sessionId } = req.query;
-    const filters = [];
-    const params = [];
+    const filters = ['user_id = ?'];
+    const params = [req.userId];
     if (sessionId === 'unsorted') {
       filters.push('session_id IS NULL');
     } else if (typeof sessionId === 'string' && sessionId !== '') {
       filters.push('session_id = ?');
       params.push(sessionId);
     }
-    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const where = `WHERE ${filters.join(' AND ')}`;
     const rows = await db.all(`SELECT * FROM sources ${where} ORDER BY created_at DESC`, ...params);
-    const unsortedSourceCount = (await db.get('SELECT COUNT(*) AS n FROM sources WHERE session_id IS NULL')).n;
+    const unsortedSourceCount = (await db.get(`SELECT COUNT(*) AS n FROM sources ${where}`, ...params)).n;
     res.json({ sources: rows.map(sourceRowToApi), unsortedSourceCount });
   });
 
   router.patch('/:id', async (req, res) => {
-    const row = await db.get('SELECT * FROM sources WHERE id = ?', req.params.id);
+    // Ownership: another user's source id is indistinguishable from a missing one.
+    const row = await db.get('SELECT * FROM sources WHERE id = ? AND user_id = ?', req.params.id, req.userId);
     if (!row) throw new ApiError(404, 'SOURCE_NOT_FOUND', `Source "${req.params.id}" does not exist.`);
 
     const { sessionId, title, tags } = req.body ?? {};
@@ -233,13 +242,13 @@ export function sourcesRouter({ db, ai, vector }) {
 
     if (sessionId !== undefined) {
       if (sessionId !== null) {
-        const session = await db.get('SELECT * FROM study_sessions WHERE id = ?', sessionId);
+        const session = await db.get('SELECT * FROM study_sessions WHERE id = ? AND user_id = ?', sessionId, req.userId);
         if (!session) throw new ApiError(404, 'SESSION_NOT_FOUND', `Session "${sessionId}" does not exist.`);
       }
       updates.push('session_id = ?');
       params.push(sessionId); // null = back to Unsorted
-      const destination = sessionId === null ? 'Unsorted' : (await db.get('SELECT title FROM study_sessions WHERE id = ?', sessionId))?.title ?? sessionId;
-      await logActivity(db, 'organize', null, `${row.title} → moved to ${destination}`, sessionId);
+      const destination = sessionId === null ? 'Unsorted' : (await db.get('SELECT title FROM study_sessions WHERE id = ? AND user_id = ?', sessionId, req.userId))?.title ?? sessionId;
+      await logActivity(db, 'organize', null, `${row.title} → moved to ${destination}`, sessionId, req.userId);
     }
     if (title !== undefined) {
       if (typeof title !== 'string' || title.trim().length < 1 || title.trim().length > 160) {

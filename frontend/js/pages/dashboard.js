@@ -3,6 +3,7 @@
 // and error state so one failed request never blanks the whole page.
 
 import { mountShell, currentUser, mountHealthBanner } from '../components/shell.js';
+import { authReady } from '../auth.js';
 import { api } from '../api.js';
 import {
   icon, escapeHtml, showError, showEmpty,
@@ -22,10 +23,17 @@ document.querySelector('[data-today]').textContent = today.toLocaleDateString(un
   weekday: 'long', month: 'long', day: 'numeric',
 });
 
-const name = currentUser();
+const greetingEl = document.querySelector('[data-welcome]');
 const hour = today.getHours();
 const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-document.querySelector('[data-welcome]').textContent = name ? `${greeting}, ${name}.` : 'Welcome back.';
+
+/** The name can resolve after this first render (Supabase session restore). */
+function renderGreeting() {
+  const name = currentUser();
+  greetingEl.textContent = name ? `${greeting}, ${name}.` : 'Welcome back.';
+}
+renderGreeting();
+authReady().then(renderGreeting);
 
 /* ------------------------------------------------------- health banner */
 

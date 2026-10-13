@@ -2,6 +2,7 @@
 
 import express from 'express';
 import { ApiError } from '../middleware/errors.js';
+import { requireAuth } from '../middleware/auth.js';
 import { answerQuestion } from '../services/tutorService.js';
 import { APPROACH_ORDER } from '../services/events.js';
 import { resolveRequestScope, validateSourceIds } from '../services/retrieval.js';
@@ -23,27 +24,28 @@ import { logActivity } from '../store/sqlite.js';
  * before either deck lands — accepted for the local demo; strict
  * cross-instance idempotency arrives with the hosted database.
  */
-async function maybeStartAutoDeck({ db, ai, vector, scope }) {
+async function maybeStartAutoDeck({ db, ai, vector, scope, userId }) {
   const { session, sourceIds } = scope;
   if (!session || sourceIds.length === 0) return false; // unscoped answer or zero-source session: never trigger
 
-  const deckCount = await db.get('SELECT COUNT(*) AS n FROM decks WHERE session_id = ?', session.id);
+  const deckCount = await db.get('SELECT COUNT(*) AS n FROM decks WHERE session_id = ? AND user_id = ?', session.id, userId);
   if (deckCount.n > 0) return false; // the session already has a deck
 
   const topic = session.title.trim().slice(0, 80);
   // Fire-and-forget, never blocking this answer: the exact saved-deck path as
   // POST /api/flashcards/generate — generateFlashcards with `db` persists the
   // deck row + cards identically (the deck later simply appears in Decks).
-  void generateFlashcards({ topic, count: 8, sourceIds, sessionId: session.id }, { ai, vector, db }).catch((err) => {
+  void generateFlashcards({ topic, count: 8, sourceIds, sessionId: session.id, userId }, { ai, vector, db }).catch((err) => {
     // Failure is not silent (contract v1.5): written to the activity feed,
     // and never crashes the already-sent response.
-    void logActivity(db, 'deck-failed', topic, `Auto deck generation failed: ${err?.message ?? err}`, session.id).catch(() => {});
+    void logActivity(db, 'deck-failed', topic, `Auto deck generation failed: ${err?.message ?? err}`, session.id, userId).catch(() => {});
   });
   return true;
 }
 
-export function tutorRouter({ db, ai, vector }) {
+export function tutorRouter({ db, ai, vector, auth }) {
   const router = express.Router();
+  router.use(requireAuth({ auth }));
 
   // One-off teaching approach for this answer (v1.4): stored styles plus the
   // request-only values 'simpler' and 'different'.
@@ -55,16 +57,16 @@ export function tutorRouter({ db, ai, vector }) {
   // flow below is used, untouched.
   const INTENT_HANDLERS = {
     'revise-next': {
-      run: (db, question) => revisionAdvice(db), // deterministic, no AI call
+      run: (db, question, scope, { userId }) => revisionAdvice(db, userId), // deterministic, no AI call
       log: (question) => `[revision] asked what to revise: ${question.slice(0, 80)}`,
     },
     progress: {
-      run: (db, question) => progressAdvice(db), // deterministic roll-up, no AI call
+      run: (db, question, scope, { userId }) => progressAdvice(db, userId), // deterministic roll-up, no AI call
       log: (question) => `[progress] asked how they are doing: ${question.slice(0, 80)}`,
     },
     'important-questions': {
-      run: (db, question, scope, { ai, vector }) =>
-        importantQuestions(db, { question, sourceIds: scope.sourceIds }, { ai, vector }),
+      run: (db, question, scope, { ai, vector, userId }) =>
+        importantQuestions(db, { question, sourceIds: scope.sourceIds }, { ai, vector, userId }),
       log: (question) => `[practice] asked for important questions: ${question.slice(0, 80)}`,
     },
   };
@@ -79,22 +81,23 @@ export function tutorRouter({ db, ai, vector }) {
       throw new ApiError(400, 'VALIDATION_ERROR', `approach must be one of: ${[...REQUESTABLE].join(', ')}.`);
     }
 
-    const scope = await resolveRequestScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+    const userId = req.userId;
+    const scope = await resolveRequestScope(db, { sessionId, sourceIds: sourceIds ?? [] }, userId);
 
     // ---- study-planning intents (Part 6) ----
     const asked = question.trim();
     const handler = INTENT_HANDLERS[classifyIntent(asked).intent];
     if (handler) {
-      const result = await handler.run(db, asked, scope, { ai, vector });
-      await logActivity(db, 'question', null, handler.log(asked), scope.session?.id ?? null);
+      const result = await handler.run(db, asked, scope, { ai, vector, userId });
+      await logActivity(db, 'question', null, handler.log(asked), scope.session?.id ?? null, userId);
       return res.json({ ...result, sessionId: scope.session?.id ?? null });
     }
 
     const result = await answerQuestion(
-      { question: asked, sourceIds: scope.sourceIds, db, ...(approach !== undefined ? { approach } : {}) },
+      { question: asked, sourceIds: scope.sourceIds, db, userId, ...(approach !== undefined ? { approach } : {}) },
       { ai, vector },
     );
-    await logActivity(db, 'question', null, `Asked: ${asked.slice(0, 80)}`, scope.session?.id ?? null);
+    await logActivity(db, 'question', null, `Asked: ${asked.slice(0, 80)}`, scope.session?.id ?? null, userId);
 
     // ---- Part 8 (contract v1.5): auto practice deck during active study ----
     // Only on a successful grounded answer (needsContent false) inside a
@@ -103,7 +106,7 @@ export function tutorRouter({ db, ai, vector }) {
     // pre-guard so the response field is honest about "actually started".
     // Intent paths returned above, so generation can never start from those.
     let extra = {};
-    if (!result.needsContent && await maybeStartAutoDeck({ db, ai, vector, scope })) extra = { deckGeneration: 'started' };
+    if (!result.needsContent && await maybeStartAutoDeck({ db, ai, vector, scope, userId })) extra = { deckGeneration: 'started' };
     res.json({ ...result, ...extra, sessionId: scope.session?.id ?? null });
   });
 

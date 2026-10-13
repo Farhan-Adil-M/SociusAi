@@ -9,6 +9,8 @@
 // In mock mode nothing touches the network — responses come from
 // js/mocks/fixtures.js, and the UI shows a "Demo data" badge.
 
+import { authReady, accessToken, refreshAccessToken, redirectToLoginWithNotice } from './auth.js';
+
 const MOCK_KEY = 'socius_mock';
 
 /** True when the page is running on fixture data instead of the backend. */
@@ -46,17 +48,8 @@ const HTTP_FALLBACKS = {
   504: 'The AI service took too long to respond.',
 };
 
-async function request(path, { method = 'GET', body, formData, signal } = {}) {
-  if (isMockMode()) {
-    const { handleMock } = await import('./mocks/fixtures.js');
-    try {
-      return await handleMock(path, { method, body });
-    } catch (error) {
-      if (error && error.code) throw new ApiError(error.code, error.message, error.status || 400, error.data || null);
-      throw error;
-    }
-  }
-
+/** One real HTTP round trip. Returns { response, data } (data is parsed JSON). */
+async function httpRequest(path, { method, body, formData, signal }, token) {
   const init = { method, headers: { Accept: 'application/json' }, credentials: 'same-origin', signal };
   if (formData) {
     // Browser sets the multipart boundary itself — never set Content-Type manually.
@@ -65,6 +58,9 @@ async function request(path, { method = 'GET', body, formData, signal } = {}) {
     init.headers['Content-Type'] = 'application/json';
     if (body !== undefined) init.body = JSON.stringify(body);
   }
+  // Private endpoints expect the Supabase access token (see the contract's
+  // UNAUTHENTICATED entry). Prototype/mock mode never has a token to attach.
+  if (token) init.headers.Authorization = `Bearer ${token}`;
 
   let response;
   try {
@@ -77,6 +73,37 @@ async function request(path, { method = 'GET', body, formData, signal } = {}) {
   const text = await response.text().catch(() => '');
   let data = null;
   if (text) { try { data = JSON.parse(text); } catch { data = null; } }
+  return { response, data };
+}
+
+async function request(path, { method = 'GET', body, formData, signal } = {}) {
+  if (isMockMode()) {
+    const { handleMock } = await import('./mocks/fixtures.js');
+    try {
+      return await handleMock(path, { method, body });
+    } catch (error) {
+      if (error && error.code) throw new ApiError(error.code, error.message, error.status || 400, error.data || null);
+      throw error;
+    }
+  }
+
+  // Wait for the one-time auth boot (config discovery + session restore).
+  // Resolves instantly in prototype mode and never rejects.
+  await authReady();
+
+  let { response, data } = await httpRequest(path, { method, body, formData, signal }, accessToken());
+
+  // Expired/invalid token: force one refresh and replay the request. If that
+  // is not possible (no session), route the user to sign in again.
+  if (!response.ok && response.status === 401 && data && data.error && data.error.code === 'UNAUTHENTICATED') {
+    const token = await refreshAccessToken();
+    if (token) {
+      ({ response, data } = await httpRequest(path, { method, body, formData, signal }, token));
+    } else {
+      redirectToLoginWithNotice('Your session has expired — sign in again to continue.');
+      throw new ApiError('UNAUTHENTICATED', 'Sign in required.', 401);
+    }
+  }
 
   if (!response.ok) {
     const envelope = data && data.error ? data.error : {};

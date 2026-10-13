@@ -104,10 +104,10 @@ test('demo-corpus seeding: fills an empty store once, idempotently', async () =>
   assert.ok(first.chunks >= 3, `expected the 3 demo pages, got ${first.chunks}`);
   assert.equal(await store.countChunks(), first.chunks);
 
-  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get('src_seed_demo');
+  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get('seed_default') // per-user seed id shape;
   assert.ok(source, 'demo source visible in the library');
   assert.equal(source.origin, 'seed');
-  const segments = db.prepare('SELECT COUNT(*) AS n FROM source_segments WHERE source_id = ?').get('src_seed_demo').n;
+  const segments = db.prepare('SELECT COUNT(*) AS n FROM source_segments WHERE source_id = ?').get('seed_default').n;
   assert.equal(segments, 3, 'page texts stored for re-chunking');
   assert.equal(await getMeta(db, 'embed_model'), 'nvidia/nemotron-3-embed-1b', 'embed model recorded');
 

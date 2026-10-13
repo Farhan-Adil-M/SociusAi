@@ -1,20 +1,22 @@
-// Conversational onboarding (v1.4). One call = one conversational turn: the
-// assess-model interviewer asks exactly one short question per message, and
-// anything it "learns" comes back as JSON that is validated here against a
-// strict whitelist before storage — junk, hallucinated fields, sensitive data
-// and injection attempts can never reach the profile.
+// Conversational onboarding (v1.4 + v7 per-user rows). One call = one
+// conversational turn: the assess-model interviewer asks exactly one short
+// question per message, and anything it "learns" comes back as JSON that is
+// validated here against a strict whitelist before storage — junk,
+// hallucinated fields, sensitive data and injection attempts can never reach
+// the profile.
 //
 // Write discipline: everything for a turn is kept in memory and written in a
 // SINGLE batch at the very end, only after the model produced a usable reply.
 // A model failure therefore leaves the row (or absence of one) exactly as it
-// was — no half-started interviews.
+// was — no half-started interviews. The profile row is keyed by the VERIFIED
+// userId (Supabase uuid, or the prototype dev user 'default').
 
 import { chatCompletion } from './nimChat.js';
 import { parseJsonLoose } from './quizService.js';
 import { UNTRUSTED_RULE } from './prompts.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
-import { nowIso } from '../store/sqlite.js';
+import { loadProfileRow, saveProfileRow } from '../store/sqlite.js';
 // Shared v1.4 enums come from constants.js — the single source of truth
 // (routes never get imported from services).
 import { PURPOSES, EXPLANATION_STYLES } from '../constants.js';
@@ -59,10 +61,6 @@ const RETRY_REMINDER = [
 ].join(' ');
 
 // ---------- defensive parsing ----------
-
-async function loadRow(db) {
-  return await db.get("SELECT * FROM learner_profile WHERE id = 'default'") ?? null;
-}
 
 function parseFieldsJson(text) {
   try {
@@ -174,9 +172,9 @@ function buildMessages(fields, transcript, strict) {
 
 // ---------- the one public function ----------
 
-export async function turnOnboarding(db, rawMessage, { ai } = {}) {
+export async function turnOnboarding(db, rawMessage, { ai, userId = 'default' } = {}) {
   const chat = ai?.chatCompletion ?? chatCompletion;
-  const row = await loadRow(db);
+  const row = await loadProfileRow(db, userId);
   // Only a finished interview blocks; skipping is retryable ('new' and
   // 'skipped' both (re)start here).
   if (row?.state === 'completed') {
@@ -250,21 +248,18 @@ export async function turnOnboarding(db, rawMessage, { ai } = {}) {
   const state = done ? 'completed' : 'in_progress';
   const storedTranscript = done ? [] : transcript; // finished → working memory cleared
 
-  // ---- the single write for this turn ----
-  const now = nowIso();
-  if (row) {
-    await db.run("UPDATE learner_profile SET state = ?, transcript_json = ?, fields_json = ?, updated_at = ? WHERE id = 'default'",
-      state, JSON.stringify(storedTranscript), JSON.stringify(fields), now);
-  } else {
-    await db.run("INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES ('default', ?, ?, ?, ?, ?)",
-      state, JSON.stringify(storedTranscript), JSON.stringify(fields), now, now);
-  }
+  // ---- the single write for this turn (keyed by the verified user id) ----
+  await saveProfileRow(db, userId, {
+    state,
+    transcriptJson: JSON.stringify(storedTranscript),
+    fieldsJson: JSON.stringify(fields),
+  });
   if (subjects) {
     await db.batch([
-      { sql: 'DELETE FROM learner_subjects' },
+      { sql: 'DELETE FROM learner_subjects WHERE user_id = ?', args: [userId] },
       ...subjects.map((s) => ({
-        sql: 'INSERT INTO learner_subjects (subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?)',
-        args: [s.subject, s.familiarity, s.confidence, s.source, now],
+        sql: 'INSERT INTO learner_subjects (user_id, subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [userId, s.subject, s.familiarity, s.confidence, s.source, now],
       })),
     ], 'write');
   }

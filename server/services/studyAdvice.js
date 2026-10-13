@@ -62,8 +62,8 @@ function topicForPracticeQuestions(questionText) {
 const masteryPercentOf = (row) => Math.round((row.correct / row.total) * 100);
 const byWorstMastery = (a, b) => (a.correct / a.total) - (b.correct / b.total);
 
-export async function revisionAdvice(db) {
-  const rows = await db.all('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC');
+export async function revisionAdvice(db, userId = 'default') {
+  const rows = await db.all('SELECT * FROM learner_topics WHERE user_id = ? ORDER BY last_practiced_at DESC', userId);
 
   if (rows.length === 0) {
     return {
@@ -104,10 +104,10 @@ export async function revisionAdvice(db) {
 
 // ---------- b) progress roll-up (deterministic, no AI) ----------
 
-export async function progressAdvice(db) {
-  const topicRows = await db.all('SELECT * FROM learner_topics ORDER BY last_practiced_at DESC');
-  const attempts = await db.all('SELECT correct, total FROM quiz_attempts');
-  const activityCount = (await db.get('SELECT COUNT(*) AS n FROM activity')).n;
+export async function progressAdvice(db, userId = 'default') {
+  const topicRows = await db.all('SELECT * FROM learner_topics WHERE user_id = ? ORDER BY last_practiced_at DESC', userId);
+  const attempts = await db.all('SELECT correct, total FROM quiz_attempts WHERE user_id = ?', userId);
+  const activityCount = (await db.get('SELECT COUNT(*) AS n FROM activity WHERE user_id = ?', userId)).n;
 
   const questionsAnswered = attempts.reduce((sum, a) => sum + a.total, 0);
   const correctAnswers = attempts.reduce((sum, a) => sum + a.correct, 0);
@@ -203,7 +203,7 @@ function formatPracticeAnswer(topic, questions) {
   return lines.join('\n').trim();
 }
 
-export async function importantQuestions(db, { question, sourceIds = [] }, { ai, vector } = {}) {
+export async function importantQuestions(db, { question, sourceIds = [] }, { ai, vector, userId = 'default' } = {}) {
   const NO_MATERIAL = {
     answer: "I couldn't find enough in your study materials to compose practice questions on this — add or select material covering the topic first.",
     citations: [],
@@ -211,9 +211,10 @@ export async function importantQuestions(db, { question, sourceIds = [] }, { ai,
     intent: 'important-questions',
   };
 
-  // Breadth retrieval; the relative evidence filter sorts relevance, then we
-  // apply the absolute sanity bound here (same as generateQuiz).
-  const hits = await retrieve(question, { sourceIds, k: 8, minScore: 0, ai, vector });
+  // Breadth retrieval (owner-scoped); the relative evidence filter sorts
+  // relevance, then we apply the absolute sanity bound here (same as
+  // generateQuiz).
+  const hits = await retrieve(question, { sourceIds, k: 8, minScore: 0, ai, vector, userId });
   if (hits.length === 0 || hits.every((hit) => (hitScore(hit) ?? 0) < config.ragMinSimilarity)) {
     return NO_MATERIAL; // honest RETRIEVAL failure — never a fabricated list
   }

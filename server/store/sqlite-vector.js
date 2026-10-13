@@ -18,13 +18,14 @@ import { getMeta, setMeta } from './sqlite.js';
 import { config } from '../config.js';
 
 const SEED_FILE = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../data/demo-seed.json');
-const SEED_SOURCE_ID = 'src_seed_demo';
+const SEED_SOURCE_PREFIX = 'seed_';
 
 export function createSqliteVectorStore(db) {
-  async function addChunks({ ids, embeddings, documents, metadatas }) {
+  async function addChunks({ ids, embeddings, documents, metadatas, userId = 'default' }) {
+    // user_id is written EXPLICITLY (pg mode forbids relying on the default).
     await db.batch(ids.map((id, i) => ({
-      sql: 'INSERT OR REPLACE INTO vector_chunks (id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?)',
-      args: [id, metadatas[i]?.sourceId ?? null, documents[i] ?? '', JSON.stringify(embeddings[i]), JSON.stringify(metadatas[i] ?? {})],
+      sql: 'INSERT OR REPLACE INTO vector_chunks (id, user_id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [id, userId, metadatas[i]?.sourceId ?? null, documents[i] ?? '', JSON.stringify(embeddings[i]), JSON.stringify(metadatas[i] ?? {})],
     })), 'write');
   }
 
@@ -40,8 +41,8 @@ export function createSqliteVectorStore(db) {
     return dot / Math.sqrt(na * nb);
   }
 
-  async function queryChunks({ embedding, nResults = 6, sourceIds = [] }) {
-    const rows = await db.all('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks');
+  async function queryChunks({ embedding, nResults = 6, sourceIds = [], userId = 'default' }) {
+    const rows = await db.all('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks WHERE user_id = ?', userId);
     return rows
       .map((row) => ({
         id: row.id,
@@ -80,11 +81,16 @@ export function createSqliteVectorStore(db) {
 
 /**
  * Seed the fallback store with the demo corpus on an EMPTY store. Runs on the
- * serverless deployment at cold start so judges always land on a populated,
- * answerable library. Embeddings are computed live (model-consistent — no
+ * serverless deployment in PROTOTYPE mode only: the corpus belongs to the
+ * fixed dev user 'default'. Hosted (supabase) deployments skip cold-start
+ * seeding entirely — per-user material is seeded at profile creation via
+ * ensureUserSeeded. Embeddings are computed live (model-consistent — no
  * committed vector blobs to go stale). Idempotent: no-ops when data exists.
  */
-export async function seedDemoCorpusIfEmpty({ db, vector, ai }) {
+export async function seedDemoCorpusIfEmpty({ db, vector, ai, userId = 'default' }) {
+  // User-qualified ids: chunk ids embed the owner so PKs cannot collide across
+  // users, and the sources row is owned by this seed user, not a shared one.
+  const SEED_SOURCE_ID = `${SEED_SOURCE_PREFIX}${userId}`;
   const count = await vector.countChunks();
   if (count > 0) return { seeded: false, reason: `store already has ${count} chunks` };
   if (!fs.existsSync(SEED_FILE)) return { seeded: false, reason: 'no seed file' };
@@ -108,8 +114,10 @@ export async function seedDemoCorpusIfEmpty({ db, vector, ai }) {
     ids: chunks.map((c) => `${SEED_SOURCE_ID}_${c.chunkIndex}`),
     embeddings: vectors,
     documents: chunks.map((c) => c.text),
+    userId,
     metadatas: chunks.map((c) => ({
       sourceId: SEED_SOURCE_ID,
+      ownerId: userId,
       type: seed.source?.type ?? 'pdf',
       title: seed.source?.title ?? 'Socius AI demo corpus',
       chunkIndex: c.chunkIndex,
@@ -121,9 +129,9 @@ export async function seedDemoCorpusIfEmpty({ db, vector, ai }) {
   const now = new Date().toISOString();
   await db.batch([
     {
-      sql: `INSERT OR IGNORE INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at, origin)
-        VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, 'seed')`,
-      args: [SEED_SOURCE_ID, seed.source?.type ?? 'pdf', seed.source?.title ?? 'Socius AI demo corpus', seed.pages.length, chunks.length, now],
+      sql: `INSERT OR IGNORE INTO sources (id, user_id, type, title, url, page_count, slide_count, chunk_count, created_at, origin)
+        VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, 'seed')`,
+      args: [SEED_SOURCE_ID, userId, seed.source?.type ?? 'pdf', seed.source?.title ?? 'Socius AI demo corpus', seed.pages.length, chunks.length, now],
     },
     ...segments.map((segment, i) => ({
       sql: 'INSERT OR IGNORE INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)',
@@ -132,4 +140,19 @@ export async function seedDemoCorpusIfEmpty({ db, vector, ai }) {
   ], 'write');
 
   return { seeded: true, chunks: chunks.length };
+}
+
+/**
+ * Per-user first-material seeding (hosted/supabase mode only). Called from
+ * routes/profile.js right after a user's FIRST profile row is created. Small
+ * guarded wrapper: only acts when the active vector backend is the SQLite
+ * fallback (Chroma deployments keep their own shared library story) and this
+ * user has no chunks yet; any failure stays non-fatal (the caller swallows).
+ */
+export async function ensureUserSeeded({ db, vector, ai, userId }) {
+  if (!vector || vector.backend !== 'sqlite') return { seeded: false, reason: 'backend is not the sqlite fallback' };
+  if (!userId) return { seeded: false, reason: 'no user id' };
+  const mine = (await db.get('SELECT COUNT(*) AS n FROM vector_chunks WHERE user_id = ?', userId)).n;
+  if (mine > 0) return { seeded: false, reason: `user already has ${mine} chunks` };
+  return seedDemoCorpusIfEmpty({ db, vector, ai, userId });
 }

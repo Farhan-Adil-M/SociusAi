@@ -44,12 +44,12 @@ export function filterByEvidence(hits, minScore, relativeKeep = config.ragRelati
   return hits.filter((_, i) => scores[i] >= cutoff);
 }
 
-export async function retrieve(question, { sourceIds = [], k = DEFAULT_K, minScore = config.ragMinSimilarity, ai, vector } = {}) {
+export async function retrieve(question, { sourceIds = [], k = DEFAULT_K, minScore = config.ragMinSimilarity, ai, vector, userId = 'default' } = {}) {
   const embedFn = ai?.embedQuery ?? embedQuery;
   const queryFn = vector?.queryChunks ?? queryChunks;
 
   const embedding = await embedFn(question);
-  let hits = await queryFn({ embedding, nResults: k, sourceIds });
+  let hits = await queryFn({ embedding, nResults: k, sourceIds, userId });
   hits = dedupeHits(hits);
   hits = filterByEvidence(hits, minScore);
   return hits;
@@ -76,13 +76,14 @@ export function toCitation(hit) {
   };
 }
 
-export async function assertSourcesExist(db, sourceIds) {
+export async function assertSourcesExist(db, sourceIds, userId = 'default') {
   if (!Array.isArray(sourceIds) || sourceIds.length === 0) return;
   const seen = new Set();
   for (const id of sourceIds) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const row = await db.get('SELECT id FROM sources WHERE id = ?', id);
+    // Ownership separates "someone else's source" from "no source": both 404.
+    const row = await db.get('SELECT id FROM sources WHERE id = ? AND user_id = ?', id, userId);
     if (!row) throw new ApiError(404, 'SOURCE_NOT_FOUND', `Source "${id}" does not exist.`);
   }
 }
@@ -97,16 +98,17 @@ export async function assertSourcesExist(db, sourceIds) {
  *  - both             → every sourceId must belong to the session
  *  - neither          → { sourceIds: [] } = all material (existing behaviour)
  */
-export async function resolveScope(db, { sessionId, sourceIds = [] } = {}) {
+export async function resolveScope(db, { sessionId, sourceIds = [] } = {}, userId = 'default') {
   if (!sessionId) {
     if (Array.isArray(sourceIds)) return { sourceIds: [...sourceIds], session: null };
     return { sourceIds: [], session: null };
   }
 
-  const session = await db.get('SELECT * FROM study_sessions WHERE id = ?', sessionId);
+  // Sessions, like sources, are per-user rows.
+  const session = await db.get('SELECT * FROM study_sessions WHERE id = ? AND user_id = ?', sessionId, userId);
   if (!session) throw new ApiError(404, 'SESSION_NOT_FOUND', `Session "${sessionId}" does not exist.`);
 
-  const owned = (await db.all('SELECT id FROM sources WHERE session_id = ?', sessionId)).map((row) => row.id);
+  const owned = (await db.all('SELECT id FROM sources WHERE session_id = ? AND user_id = ?', sessionId, userId)).map((row) => row.id);
   if (owned.length === 0) {
     throw new ApiError(400, 'SESSION_EMPTY', `No material in "${session.title}" yet. Add sources to this study session first.`);
   }
@@ -144,10 +146,10 @@ export function validateTopic(topic) {
  * The scope every content route uses: resolve the session scope, then (only on
  * the legacy path with no session) verify the plain sourceIds actually exist.
  */
-export async function resolveRequestScope(db, { sessionId, sourceIds = [] } = {}) {
-  const scope = await resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] });
+export async function resolveRequestScope(db, { sessionId, sourceIds = [] } = {}, userId = 'default') {
+  const scope = await resolveScope(db, { sessionId, sourceIds: sourceIds ?? [] }, userId);
   if (!scope.session) {
-    await assertSourcesExist(db, sourceIds ?? []); // legacy path: plain source filter
+    await assertSourcesExist(db, sourceIds ?? [], userId); // legacy path: plain source filter
   }
   return scope;
 }

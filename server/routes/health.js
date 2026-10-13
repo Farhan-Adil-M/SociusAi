@@ -23,6 +23,7 @@ export function healthRouter({ db, ai, vector }) {
     }
 
     const checks = { sqlite: { ok: false, message: '' }, chroma: { ok: false, message: '' }, nim: { ok: false, message: '' } };
+    const authMode = config.supabaseUrl ? 'supabase' : 'prototype'; // public fact, read by the frontend
 
     try {
       await db.get('SELECT 1 AS ok');
@@ -64,9 +65,11 @@ export function healthRouter({ db, ai, vector }) {
 
     // Static fact, not a service probe. The status rollup is computed from the
     // three service checks BEFORE limits is added, so this can never mark the
-    // system degraded. The frontend reads checks.limits.maxUploadMb to show the
-    // real upload cap instead of a hardcoded number.
+    // system degraded. The frontend reads checks.auth.mode and
+    // checks.limits.maxUploadMb to show the real upload cap instead of a
+    // hardcoded number.
     const status = Object.values(checks).every((c) => c.ok) ? 'ok' : 'degraded';
+    checks.auth = { mode: authMode };
     checks.limits = { maxUploadMb: config.maxUploadMb };
 
     const payload = {

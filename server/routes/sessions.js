@@ -5,11 +5,13 @@
 import express from 'express';
 import { CATEGORIES } from '../constants.js';
 import { ApiError } from '../middleware/errors.js';
+import { requireAuth } from '../middleware/auth.js';
 import { newId, nowIso, logActivity } from '../store/sqlite.js';
 import { sourceRowToApi } from './sources.js';
 
-export async function getSessionOr404(db, id) {
-  const row = await db.get('SELECT * FROM study_sessions WHERE id = ?', id);
+export async function getSessionOr404(db, id, userId = 'default') {
+  // Ownership: another user's session id reads as "does not exist".
+  const row = await db.get('SELECT * FROM study_sessions WHERE id = ? AND user_id = ?', id, userId);
   if (!row) throw new ApiError(404, 'SESSION_NOT_FOUND', `Session "${id}" does not exist.`);
   return row;
 }
@@ -68,8 +70,9 @@ const LIST_COLUMNS = `
   ) AS last_activity
 `;
 
-export function sessionsRouter({ db }) {
+export function sessionsRouter({ db, auth }) {
   const router = express.Router();
+  router.use(requireAuth({ auth }));
 
   router.get('/', async (req, res) => {
     const { category, q, includeArchived } = req.query;
@@ -82,12 +85,12 @@ export function sessionsRouter({ db }) {
     }
     const search = typeof q === 'string' && q.trim() !== '' ? q.trim() : null;
 
-    const filters = [];
+    const filters = ['s.user_id = ?'];
     if (includeArchived !== '1') filters.push("s.status = 'active'");
     if (category) filters.push('s.category = ?');
     if (search) filters.push('(s.title LIKE ? OR s.description LIKE ? OR s.tags_json LIKE ?)');
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-    const params = [];
+    const params = [req.userId];
     if (category) params.push(category);
     if (search) {
       const like = `%${search}%`;
@@ -97,7 +100,7 @@ export function sessionsRouter({ db }) {
     const orderBy = { recent: 's.updated_at DESC', alpha: 's.title COLLATE NOCASE ASC', active: 'last_activity DESC' }[sort];
     const rows = await db.all(`SELECT ${LIST_COLUMNS} FROM study_sessions s ${where} ORDER BY ${orderBy}`, ...params);
 
-    const unsortedSourceCount = (await db.get('SELECT COUNT(*) AS n FROM sources WHERE session_id IS NULL')).n;
+    const unsortedSourceCount = (await db.get('SELECT COUNT(*) AS n FROM sources WHERE user_id = ? AND session_id IS NULL', req.userId)).n;
 
     res.json({
       sessions: rows.map((row) => sessionToApi(row, {
@@ -122,17 +125,17 @@ export function sessionsRouter({ db }) {
 
     const id = newId('ses');
     const now = nowIso();
-    await db.run('INSERT INTO study_sessions (id, title, category, description, tags_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      id, cleanTitle, category ?? 'subject', description ?? null, JSON.stringify(cleanTags), 'active', now, now);
+    await db.run('INSERT INTO study_sessions (id, user_id, title, category, description, tags_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      id, req.userId, cleanTitle, category ?? 'subject', description ?? null, JSON.stringify(cleanTags), 'active', now, now);
 // session create gets logged with the session id so "active" sorting has real data
-    await logActivity(db, 'session', null, `Created session "${cleanTitle}"`, id);
-    res.status(201).json({ session: sessionToApi(await db.get('SELECT * FROM study_sessions WHERE id = ?', id)) });
+    await logActivity(db, 'session', null, `Created session "${cleanTitle}"`, id, req.userId);
+    res.status(201).json({ session: sessionToApi(await db.get('SELECT * FROM study_sessions WHERE id = ? AND user_id = ?', id, req.userId)) });
   });
 
   router.get('/:id', async (req, res) => {
-    const session = await getSessionOr404(db, req.params.id);
-    const sources = await db.all('SELECT * FROM sources WHERE session_id = ? ORDER BY created_at DESC', session.id);
-    const decks = (await db.all('SELECT id, topic, card_count, created_at FROM decks WHERE session_id = ? ORDER BY created_at DESC', session.id))
+    const session = await getSessionOr404(db, req.params.id, req.userId);
+    const sources = await db.all('SELECT * FROM sources WHERE session_id = ? AND user_id = ? ORDER BY created_at DESC', session.id, req.userId);
+    const decks = (await db.all('SELECT id, topic, card_count, created_at FROM decks WHERE session_id = ? AND user_id = ? ORDER BY created_at DESC', session.id, req.userId))
       .map((row) => ({ id: row.id, topic: row.topic, cardCount: row.card_count, createdAt: row.created_at }));
     res.json({
       session: sessionToApi(session, {
@@ -146,7 +149,7 @@ export function sessionsRouter({ db }) {
   });
 
   router.patch('/:id', async (req, res) => {
-    const session = await getSessionOr404(db, req.params.id);
+    const session = await getSessionOr404(db, req.params.id, req.userId);
     const { title, category, description, tags, status } = req.body ?? {};
     const updates = [];
 
@@ -174,9 +177,9 @@ export function sessionsRouter({ db }) {
     }
     updates.push(['updated_at', nowIso()]);
     const setClause = updates.map(([column]) => `${column} = ?`).join(', ');
-    await db.run(`UPDATE study_sessions SET ${setClause} WHERE id = ?`, ...updates.map(([, value]) => value), session.id);
+    await db.run(`UPDATE study_sessions SET ${setClause} WHERE id = ? AND user_id = ?`, ...updates.map(([, value]) => value), session.id, req.userId);
 
-    res.json({ session: sessionToApi(await db.get('SELECT * FROM study_sessions WHERE id = ?', session.id)) });
+    res.json({ session: sessionToApi(await db.get('SELECT * FROM study_sessions WHERE id = ? AND user_id = ?', session.id, req.userId)) });
   });
 
   return router;

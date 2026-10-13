@@ -11,7 +11,9 @@ const app = await createApp({ db });
 
 // Bind address comes from BIND_HOST (default 127.0.0.1 — loopback only).
 // Set a LAN address or 0.0.0.0 to let other devices on the network connect;
-// the app has no authentication, so only do that on a network you trust.
+// every private endpoint now requires a verified user (Supabase JWT in
+// supabase mode, the fixed dev user in prototype mode), but a WAN address
+// still deserves firewall care.
 const BIND_HOST = config.bindHost;
 const isLoopback = BIND_HOST === '127.0.0.1' || BIND_HOST === '::1' || BIND_HOST === 'localhost';
 
@@ -38,12 +40,16 @@ app.listen(config.port, BIND_HOST, () => {
     } else {
       console.log('  no LAN IPv4 address found for this machine');
     }
-    console.log('  WARNING: no authentication — anyone on this network can upload, delete, and spend NIM tokens.');
+    console.log(
+      config.supabaseUrl && config.supabaseAnonKey
+        ? '  authentication: Supabase JWT required on every private endpoint.'
+        : '  WARNING: prototype mode — no authentication (fixed dev user).\\n  Do not expose this beyond a trusted network.',
+    );
   }
   console.log(`  tutor model:    ${config.nimChatModel}`);
   console.log(`  assessment:     ${config.nimAssessModel}`);
   console.log(`  embedding:      ${config.nimEmbedModel}`);
-  console.log(`  database:       ${db.kind === 'libsql' ? 'hosted (libSQL/Turso)' : 'local SQLite (node:sqlite)'} [${db.kind}]`);
+  console.log(`  database:       ${db.kind === 'libsql' ? 'hosted (libSQL/Turso)' : db.kind === 'pg' ? 'Supabase / Postgres' : 'local SQLite (node:sqlite)'} [${db.kind}]`);
   console.log(`  vector store:   ${config.chromaApiKey ? 'Chroma Cloud' : `local (${config.chromaLocalHost}:${config.chromaLocalPort})`}`);
 });
 

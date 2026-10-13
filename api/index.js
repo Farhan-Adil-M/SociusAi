@@ -8,7 +8,7 @@
 //    corpus at cold start so the deployment always opens answerable.
 
 import '../api/polyfill.js'; // must run BEFORE pdf-parse loads
-import { assertConfig } from '../server/config.js';
+import { assertConfig, config } from '../server/config.js';
 import { openAppDb } from '../server/store/db.js';
 import { createApp } from '../server/app.js';
 import { resolveVectorStore } from '../server/store/vectorProvider.js';
@@ -24,13 +24,16 @@ const db = await openAppDb({ dbPath: process.env.SQLITE_DB_PATH ?? '/tmp/socius-
 
 const vector = resolveVectorStore(db);
 
-// Cold-start seeding (fallback backend only): when the store is empty — every
-// fresh /tmp on Vercel — load the committed demo corpus so judges always land
-// on a populated, answerable library. NIM failure must not take the app down.
-if (vector.backend === 'sqlite') {
+// Cold-start seeding (fallback backend, PROTOTYPE mode only): when no Supabase
+// auth is configured the install is the single dev user, so the demo corpus is
+// seeded with userId 'default' so judges always land on a populated,
+// answerable library. In supabase mode seeding is per-user instead
+// (ensureUserSeeded at profile creation) and is deliberately SKIPPED here.
+// NIM failure must not take the app down.
+if (vector.backend === 'sqlite' && !config.supabaseUrl && !config.supabaseAnonKey) {
   try {
-    const seed = await seedDemoCorpusIfEmpty({ db, vector, ai: { embedTexts } });
-    if (seed.seeded) console.log(`[seed] demo corpus loaded (${seed.chunks} chunks, sqlite backend)`);
+    const seed = await seedDemoCorpusIfEmpty({ db, vector, ai: { embedTexts }, userId: 'default' });
+    if (seed.seeded) console.log(`[seed] demo corpus loaded (${seed.chunks} chunks, sqlite backend, dev user)`);
   } catch (err) {
     console.error('[seed] demo corpus seeding failed (app continues, features may be degraded):', err?.message ?? err);
   }

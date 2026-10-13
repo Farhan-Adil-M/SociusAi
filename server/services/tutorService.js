@@ -54,11 +54,11 @@ function buildSystemPrompt(context, approachUsed) {
 }
 
 /** Best-effort event recording; a logging failure must never fail the answer. */
-async function answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven }) {
+async function answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven, userId }) {
   try {
     // Repeated question? The route logs the CURRENT question AFTER this call,
-    // so this history holds only earlier questions.
-    const rows = await db.all("SELECT detail FROM activity WHERE type = 'question' ORDER BY id DESC LIMIT 5");
+    // so this history holds only earlier questions (this user's own).
+    const rows = await db.all("SELECT detail FROM activity WHERE type = 'question' AND user_id = ? ORDER BY id DESC LIMIT 5", userId);
     const recent = rows
       .map((r) => (typeof r.detail === 'string' && r.detail.startsWith('Asked: ') ? r.detail.slice(7) : ''))
       .filter((t) => t !== '');
@@ -67,6 +67,7 @@ async function answerContextEvents(db, { question, matchedTopic, previous, expli
         kind: 'repeated_question',
         topic: matchedTopic,
         detail: { note: 'the student asked a near-identical question recently — treat as a possible confusion signal, not a proven misconception' },
+        userId,
       });
     }
   } catch { /* observability must not break answering */ }
@@ -75,28 +76,30 @@ async function answerContextEvents(db, { question, matchedTopic, previous, expli
   try {
     // The student asked to hear this AGAIN (differently): a confusion signal.
     if (explicit === 'different') {
-      await recordEvent(db, { kind: 'explain_again', topic: matchedTopic, detail: { requested: true } });
+      await recordEvent(db, { kind: 'explain_again', topic: matchedTopic, detail: { requested: true }, userId });
     }
     // A change is logged when the approach differs from the last one recorded
     // for this topic (a saved style applying for the first time is a change:
     // from=null), or when the student explicitly requested one.
     if (approachGiven || approachUsed !== previous) {
-      await recordEvent(db, { kind: 'approach_change', topic: matchedTopic, detail: { from: previous, to: approachUsed } });
+      await recordEvent(db, { kind: 'approach_change', topic: matchedTopic, detail: { from: previous, to: approachUsed }, userId });
     }
   } catch { /* observability must not break answering */ }
 }
 
-export async function answerQuestion({ question, sourceIds = [], db, approach }, { ai, vector } = {}) {
-  const hits = await retrieve(question, { sourceIds, ai, vector });
+export async function answerQuestion({ question, sourceIds = [], db, approach, userId = 'default' }, { ai, vector } = {}) {
+  // Vector search is user-scoped first: another student's chunks can never be
+  // cited even when the request carries no sourceIds filter.
+  const hits = await retrieve(question, { sourceIds, ai, vector, userId });
 
   if (hits.length === 0) {
     return { answer: ABSTAIN_MESSAGE, citations: [], needsContent: true, model: config.nimChatModel };
   }
 
   // ---- learner-context personalisation (deterministic, db reads only) ----
-  const context = await buildLearnerContext(db, { question });
+  const context = await buildLearnerContext(db, { question, userId });
   const matchedTopic = context?.topics?.[0] ?? null;
-  const previous = await lastApproach(db, matchedTopic);
+  const previous = await lastApproach(db, matchedTopic, userId);
   const preferred = context?.style ?? null; // chooseApproach re-validates: not a saved style → ignored
   const explicit = typeof approach === 'string' && REQUESTABLE_APPROACHES.has(approach.trim()) ? approach.trim() : null;
   const approachGiven = explicit !== null;
@@ -117,7 +120,7 @@ export async function answerQuestion({ question, sourceIds = [], db, approach },
     return { answer: ABSTAIN_MESSAGE, citations: [], needsContent: true, model: config.nimChatModel };
   }
 
-  await answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven });
+  await answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven, userId });
 
   return {
     answer,

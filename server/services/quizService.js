@@ -152,9 +152,9 @@ export async function collectQuestions({ chat, topic, difficulty, evidence, coun
   return accepted;
 }
 
-export async function generateQuiz({ topic, questionCount = 5, difficulty, sourceIds = [] }, { db, ai, vector }) {
+export async function generateQuiz({ topic, questionCount = 5, difficulty, sourceIds = [], userId = 'default' }, { db, ai, vector }) {
   const chat = ai?.chatCompletion ?? chatCompletion;
-  const hits = await retrieve(topic, { sourceIds, k: 8, minScore: 0, ai, vector });
+  const hits = await retrieve(topic, { sourceIds, k: 8, minScore: 0, ai, vector, userId });
   const weakEvidence = hits.every((hit) => (hitScore(hit) ?? 0) < config.ragMinSimilarity);
 
   if (hits.length === 0) {
@@ -176,8 +176,8 @@ export async function generateQuiz({ topic, questionCount = 5, difficulty, sourc
     const createdAt = nowIso();
     await db.batch([
       {
-        sql: 'INSERT INTO quizzes (id, topic, difficulty, question_count, created_at) VALUES (?, ?, ?, ?, ?)',
-        args: [quizId, topic.trim(), difficulty, accepted.length, createdAt],
+        sql: 'INSERT INTO quizzes (id, user_id, topic, difficulty, question_count, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [quizId, userId, topic.trim(), difficulty, accepted.length, createdAt],
       },
       ...accepted.map((q, idx) => ({
         sql: 'INSERT INTO quiz_questions (quiz_id, idx, text, choices_json, correct_choice_id, explanation, citations_json) VALUES (?, ?, ?, ?, ?, ?, ?)',

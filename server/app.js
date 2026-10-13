@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
+import { createUserAuth } from './middleware/auth.js';
 import { chatCompletion } from './services/nimChat.js';
 import { embedTexts, embedQuery } from './services/embeddings.js';
 import { healthRouter } from './routes/health.js';
@@ -20,10 +21,13 @@ import { resolveVectorStore } from './store/vectorProvider.js';
 
 const FRONTEND_DIR = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../frontend');
 
-export async function createApp({ db, ai, vector } = {}) {
+export async function createApp({ db, ai, vector, auth } = {}) {
   const services = {
     ai: { chatCompletion, embedTexts, embedQuery, ...ai },
     vector: { ...resolveVectorStore(db), ...vector },
+    // Per-user auth: the real Supabase-jwt verifier by default; tests may
+    // pass a stub ({ getUserFromRequest }) to explore two users / anonymous.
+    auth: auth ?? createUserAuth(),
   };
   const ctx = { db, ...services };
 

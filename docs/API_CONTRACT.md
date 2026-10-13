@@ -589,3 +589,26 @@ After a **successful session-scoped tutor answer** (`sessionId` given, `needsCon
 ## `GET /api/health` — engine metadata
 
 `checks.sqlite.backend` (`"node"` | `"libsql"`) names the active structured-database engine. `checks.limits.maxUploadMb` (the configured upload cap in MB — documented here in this v1.5 section; it was specced alongside serverless work, not as a v1.4 addition) stays.
+
+---
+
+# v1.6 — Real user accounts, per-user ownership, dual auth modes (2026-10-13)
+
+**Identity:** Supabase Auth issues the account (browser client handles signup/sign-in/refresh; tokens stay in the browser's own auth storage). The **backend verifies each request's `Authorization: Bearer <supabase access token>`** and derives the acting user id **only** from that verification — user IDs supplied in bodies are never trusted.
+
+**Modes (server-selected by configuration):**
+- **`supabase`** (SUPABASE_ envs present + Supabase DB URL): private data lives in Supabase Postgres (`public.profiles` + `user_id` on every user-owned table; RLS enabled as defense-in-depth — the Node path additionally enforces `user_id = verified id` in every query).
+- **`prototype`** (no Supabase envs — local `npm start` without accounts): everything keeps working with the fixed dev user `'default'`; data stays in Local `node:sqlite`/today's engines. Documented limitation (banana-lead — single shared profile), shown as prototype in the UI.
+
+**New error code:** `401 UNAUTHENTICATED` — `{ error:{ code:"UNAUTHENTICATED", message:"Sign in to use this endpoint."}}` on every **private** endpoint without a valid token (all endpoints except `GET /api/health`; `GET /api/health` additionally carries `checks.auth.mode`).
+
+**Ownership rules (both modes):**
+- Every private read/write filters/pins `user_id = verified id`; cross-account IDs → `404`-style not-found (never leaked data).
+- Session/source scoping composes with ownership (a user's session cannot touch another user's material — enforced at the resolution step as before).
+- Vector retrieval filters by owner too (Chroma metadata `ownerId`; fallback store column `user_id`) — one user's material can never be cited into another user's answer.
+- Events (quiz results, card marks, tutor signals) are per-user.
+- New users are seeded with the demo corpus on first profile creation (`origin: 'seed'`, citable like any material).
+
+**Profile endpoints**: row identity is the verified user id (no more `'default'`-only rows in supabase mode); GET/PATCH/DELETE semantics unchanged and now user-scoped.
+
+**Schema v7:** node-engine additive migration (user_id columns + backed-up composite-PK rebuilds of `learner_topics`/`learner_subjects`); pg schema (`server/store/pg-schema.sql`) applied by `npm run migrate:supabase` — both stamp `schema_version` 7. `ON CONFLICT` targets updated to the new keys.

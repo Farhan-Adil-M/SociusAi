@@ -83,15 +83,17 @@ export function buildPptx(pageTexts = ['Recursion uses a base case to stop.', 'A
 }
 
 /**
- * startApp({ ai, vector, db }) — spin a test app against a throwaway sqlite
- * file and a real HTTP port. Pass `{ db }` to inject a custom/pre-built
+ * startApp({ ai, vector, db, auth }) — spin a test app against a throwaway
+ * sqlite file and a real HTTP port. Pass `{ db }` to inject a custom/pre-built
  * database handle (e.g. the fault-injection wrappers); otherwise one is
- * created from a fresh temp dir. Returns `close()` for teardown.
+ * created from a fresh temp dir. `auth` flows straight into createApp's
+ * auth override (used by tests/two-users.test.js to fake two users).
+ * Returns `close()` for teardown.
  */
-export async function startApp({ ai = makeAi(), vector = fakeVector(), db } = {}) {
+export async function startApp({ ai = makeAi(), vector = fakeVector(), db, auth } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'socius-test-'));
   const appDb = db ?? await openDb(path.join(dir, 'app.db'));
-  const app = await createApp({ db: appDb, ai, vector });
+  const app = await createApp({ db: appDb, ai, vector, auth });
   const server = app.listen(0);
   await once(server, 'listening');
   return {

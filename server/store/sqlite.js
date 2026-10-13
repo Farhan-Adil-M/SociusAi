@@ -38,9 +38,9 @@ export function parseJsonObject(text, fallback = {}) {
   }
 }
 
-export async function logActivity(db, type, topic, detail, sessionId = null) {
-  await db.run('INSERT INTO activity (type, topic, detail, at, session_id) VALUES (?, ?, ?, ?, ?)',
-    type, topic ?? null, detail, nowIso(), sessionId);
+export async function logActivity(db, type, topic, detail, sessionId = null, userId = 'default') {
+  await db.run('INSERT INTO activity (type, topic, detail, at, session_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+    type, topic ?? null, detail, nowIso(), sessionId, userId);
 }
 
 // ---- app-level metadata (researched values that must survive restarts) ----
@@ -56,4 +56,73 @@ export async function setMeta(db, key, value) {
 
 export async function delMeta(db, key) {
   await db.run('DELETE FROM app_meta WHERE key = ?', key);
+}
+
+// ---- per-user profile row (one row per user; id IS the verified userId) ----
+//
+// SQLite keeps the established learner_profile columns. Postgres mirrors the
+// same data onto the Supabase `profiles` table (onboarding_state instead of
+// state, onboarding_json holds the transcript, and purpose has its own
+// column) so both engines surface the identical normalized row shape below.
+const isPgEngine = (db) => db?.kind === 'pg';
+
+function normalizePgProfile(row) {
+  const fields = parseJsonObject(row.fields_json);
+  if (row.purpose != null) fields.purpose = row.purpose; // dedicated pg column wins
+  return {
+    id: row.id,
+    state: row.onboarding_state,
+    transcript_json: row.onboarding_json,
+    fields_json: JSON.stringify(fields),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export async function loadProfileRow(db, userId) {
+  if (isPgEngine(db)) {
+    const row = await db.get('SELECT * FROM public.profiles WHERE id = ?', userId);
+    return row ? normalizePgProfile(row) : null;
+  }
+  return await db.get('SELECT * FROM learner_profile WHERE id = ?', userId) ?? null;
+}
+
+/**
+ * Whole-row write (onboarding turn, skip, manual-first PATCH). `row` carries
+ * the caller's already-validated values as { state, transcriptJson,
+ * fieldsJson }. On pg, purpose is mirrored into its dedicated column; on
+ * SQLite the purpose stays inside fields_json as before.
+ */
+export async function saveProfileRow(db, userId, { state = 'new', transcriptJson = '[]', fieldsJson = '{}' }) {
+  const purpose = parseJsonObject(fieldsJson).purpose ?? null;
+  if (isPgEngine(db)) {
+    await db.run(
+      `INSERT INTO public.profiles (id, onboarding_state, onboarding_json, fields_json, purpose, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET
+         onboarding_state = excluded.onboarding_state,
+         onboarding_json = excluded.onboarding_json,
+         fields_json = excluded.fields_json,
+         purpose = excluded.purpose,
+         updated_at = excluded.updated_at`,
+      userId, state, transcriptJson, fieldsJson, purpose, nowIso(), nowIso(),
+    );
+    return;
+  }
+  const existing = await db.get('SELECT id FROM learner_profile WHERE id = ?', userId);
+  if (existing) {
+    await db.run('UPDATE learner_profile SET state = ?, transcript_json = ?, fields_json = ?, updated_at = ? WHERE id = ?',
+      state, transcriptJson, fieldsJson, nowIso(), userId);
+  } else {
+    await db.run('INSERT INTO learner_profile (id, state, transcript_json, fields_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      userId, state, transcriptJson, fieldsJson, nowIso(), nowIso());
+  }
+}
+
+export async function deleteProfileRow(db, userId) {
+  if (isPgEngine(db)) {
+    await db.run('DELETE FROM public.profiles WHERE id = ?', userId);
+    return;
+  }
+  await db.run('DELETE FROM learner_profile WHERE id = ?', userId);
 }
