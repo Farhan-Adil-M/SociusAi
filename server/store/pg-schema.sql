@@ -172,6 +172,13 @@ create table if not exists public.app_meta (
   key   text primary key,
   value text not null
 );
+-- Global app state (embed-model parity etc.), not user data: RLS ON with
+-- NO policy = default-deny for the REST surface; the privileged Node
+-- backend basal connection has its own NON-RLS role and reads it fine.
+-- (app_meta RLS note: has global values only; users need nothing here.)
+
+alter table public.app_meta enable row level security; -- default-deny for REST
+create index if not exists quiz_attempts_user on public.quiz_attempts(user_id);
 
 -- ------------------------------------------------------------------
 -- Defense-in-depth RLS: the Node backend connects with a privileged

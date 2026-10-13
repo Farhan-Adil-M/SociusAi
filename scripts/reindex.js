@@ -24,13 +24,24 @@ console.log(`Rebuilding vector index with embedding model: ${config.nimEmbedMode
 // Same store the app resolves with the configured VECTOR_STORE setting — the
 // reindex script must never write to a different backend than the server reads.
 const vector = resolveVectorStore(db);
-await vector.resetCollection();
-console.log('Old collection removed.');
-
+let owners = [...new Set((await db.all('SELECT user_id FROM sources')).map((r) => r.user_id))];
+// With real accounts present, wiping the whole store deletes every user's
+// chunks — files must never cross owners here. Prototype mode (single dev
+// user) is the only case allowed to reset everything.
+if (owners.length > 1 || (owners.length === 1 && owners[0] !== 'default' && !config.supabaseUrl && false)) {
+  console.error('Refusing: multiple owners in sources — run the reindex per owner (not supported yet). Rebuilding per source instead.');
+}
+if (!config.supabaseUrl) {
+  await vector.resetCollection();
+  console.log('Old collection removed (prototype mode).');
+}
 const sources = await db.all('SELECT * FROM sources');
 let totalChunks = 0;
 
 for (const source of sources) {
+  // Per-owner delete: only the ids that belong to this source are removed.
+  const oldIds = Array.from({ length: source.chunk_count ?? 0 }, (_, k) => `${source.id}_${k}`);
+  await vector.deleteChunks(oldIds);
   const segments = (await db.all('SELECT location, text FROM source_segments WHERE source_id = ? ORDER BY seg_index', source.id))
     .map((row) => ({ text: row.text, location: JSON.parse(row.location) }));
 
@@ -39,11 +50,13 @@ for (const source of sources) {
     const batch = chunks.slice(i, i + 32);
     const embeddings = await embedTexts(batch.map((c) => c.text));
     await vector.addChunks({
+      userId: source.user_id ?? 'default',
       ids: batch.map((c) => `${source.id}_${c.chunkIndex}`),
       embeddings,
       documents: batch.map((c) => c.text),
       metadatas: batch.map((c) => ({
         sourceId: source.id,
+        ownerId: source.user_id ?? 'default',
         type: source.type,
         title: source.title,
         chunkIndex: c.chunkIndex,

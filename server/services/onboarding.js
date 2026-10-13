@@ -16,7 +16,7 @@ import { parseJsonLoose } from './quizService.js';
 import { UNTRUSTED_RULE } from './prompts.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
-import { loadProfileRow, saveProfileRow } from '../store/sqlite.js';
+import { nowIso, loadProfileRow, saveProfileRow  } from '../store/sqlite.js';
 // Shared v1.4 enums come from constants.js — the single source of truth
 // (routes never get imported from services).
 import { PURPOSES, EXPLANATION_STYLES } from '../constants.js';
@@ -259,7 +259,7 @@ export async function turnOnboarding(db, rawMessage, { ai, userId = 'default' } 
       { sql: 'DELETE FROM learner_subjects WHERE user_id = ?', args: [userId] },
       ...subjects.map((s) => ({
         sql: 'INSERT INTO learner_subjects (user_id, subject, familiarity, confidence, source, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [userId, s.subject, s.familiarity, s.confidence, s.source, now],
+        args: [userId, s.subject, s.familiarity, s.confidence, s.source, nowIso()],
       })),
     ], 'write');
   }

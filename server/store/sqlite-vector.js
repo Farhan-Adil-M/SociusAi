@@ -24,7 +24,7 @@ export function createSqliteVectorStore(db) {
   async function addChunks({ ids, embeddings, documents, metadatas, userId = 'default' }) {
     // user_id is written EXPLICITLY (pg mode forbids relying on the default).
     await db.batch(ids.map((id, i) => ({
-      sql: 'INSERT OR REPLACE INTO vector_chunks (id, user_id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?, ?)',
+      sql: 'INSERT INTO vector_chunks (id, user_id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET user_id = excluded.user_id, source_id = excluded.source_id, text = excluded.text, embedding_json = excluded.embedding_json, metadata_json = excluded.metadata_json',
       args: [id, userId, metadatas[i]?.sourceId ?? null, documents[i] ?? '', JSON.stringify(embeddings[i]), JSON.stringify(metadatas[i] ?? {})],
     })), 'write');
   }
@@ -129,12 +129,12 @@ export async function seedDemoCorpusIfEmpty({ db, vector, ai, userId = 'default'
   const now = new Date().toISOString();
   await db.batch([
     {
-      sql: `INSERT OR IGNORE INTO sources (id, user_id, type, title, url, page_count, slide_count, chunk_count, created_at, origin)
-        VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, 'seed')`,
+      sql: `INSERT INTO sources (id, user_id, type, title, url, page_count, slide_count, chunk_count, created_at, origin)
+        VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, 'seed') ON CONFLICT DO NOTHING`,
       args: [SEED_SOURCE_ID, userId, seed.source?.type ?? 'pdf', seed.source?.title ?? 'Socius AI demo corpus', seed.pages.length, chunks.length, now],
     },
     ...segments.map((segment, i) => ({
-      sql: 'INSERT OR IGNORE INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)',
+      sql: 'INSERT INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
       args: [SEED_SOURCE_ID, i, JSON.stringify(segment.location ?? {}), segment.text],
     })),
   ], 'write');

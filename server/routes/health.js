@@ -23,7 +23,12 @@ export function healthRouter({ db, ai, vector }) {
     }
 
     const checks = { sqlite: { ok: false, message: '' }, chroma: { ok: false, message: '' }, nim: { ok: false, message: '' } };
-    const authMode = config.supabaseUrl ? 'supabase' : 'prototype'; // public fact, read by the frontend
+    const authMode = config.supabaseUrl && config.supabaseAnonKey ? 'supabase' : 'prototype'; // public facts read by the browser
+    // Publish the PUBLIC auth config only (URL + anon key are safe in the
+    // browser; no service-role or DB credentials ever leave the server).
+    const authPublic = config.supabaseUrl && config.supabaseAnonKey
+      ? { mode: 'supabase', supabaseUrl: config.supabaseUrl, supabaseAnonKey: config.supabaseAnonKey }
+      : { mode: 'prototype' };
 
     try {
       await db.get('SELECT 1 AS ok');
@@ -69,7 +74,7 @@ export function healthRouter({ db, ai, vector }) {
     // checks.limits.maxUploadMb to show the real upload cap instead of a
     // hardcoded number.
     const status = Object.values(checks).every((c) => c.ok) ? 'ok' : 'degraded';
-    checks.auth = { mode: authMode };
+    checks.auth = authPublic;
     checks.limits = { maxUploadMb: config.maxUploadMb };
 
     const payload = {

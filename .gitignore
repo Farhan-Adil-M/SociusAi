@@ -20,3 +20,7 @@ __pycache__/
 *.log
 .DS_Store
 .vercel/
+
+# E2E test credentials (never commit)
+.env.e2e
+/tmp-token-cache/
