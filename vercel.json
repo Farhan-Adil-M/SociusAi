@@ -3,7 +3,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
-      "includeFiles": "node_modules/pdf-parse/**"
+      "includeFiles": ["node_modules/pdf-parse/**", "data/demo-seed.json"]
     }
   },
   "rewrites": [

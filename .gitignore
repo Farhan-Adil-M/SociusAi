@@ -4,8 +4,9 @@ node_modules/
 # Secrets and local config
 .env
 
-# Runtime data
-data/
+# Runtime data (keep the committed demo seed — the Vercel build needs it)
+data/*
+!data/demo-seed.json
 
 # Python venv for local ChromaDB server (fallback only)
 .venv/

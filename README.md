@@ -64,8 +64,10 @@ vercel login  →  vercel link --yes  →  vercel deploy --prod --yes
 ```
 
 - `api/index.js` mounts the same Express app; `vercel.json` routes `/api/*` and app pages to it (60s max duration for long model calls).
-- Set these env vars in the Vercel dashboard/CLI: `NIM_API_KEY`, `NIM_BASE_URL`, `NIM_CHAT_MODEL`, `NIM_ASSESS_MODEL`, `NIM_EMBED_MODEL`, `RAG_MIN_SIMILARITY`, `RAG_RELATIVE_KEEP`, `MAX_UPLOAD_MB` (well below 4 on serverless, Vercel request-body limit), plus Chroma **Cloud** credentials (`CHROMA_API_KEY`, `CHROMA_TENANT`, `CHROMA_DATABASE`) — the local venv Chroma server cannot run on Vercel.
-- Two honest differences from the laptop: SQLite there is **ephemeral** (`/tmp` resets on cold starts — progress is not durable without a hosted DB), and uploads are capped ≈4 MB. For the full-fidelity demo, `npm start` on this laptop remains the primary environment.
+- Set these env vars in the Vercel dashboard/CLI: `NIM_API_KEY`, `NIM_BASE_URL`, `NIM_CHAT_MODEL`, `NIM_ASSESS_MODEL`, `NIM_EMBED_MODEL`, `RAG_MIN_SIMILARITY`, `RAG_RELATIVE_KEEP`, `MAX_UPLOAD_MB` (well below 4 on serverless, Vercel request-body limit).
+- **Vector store**: Chroma Cloud credentials (`CHROMA_API_KEY`, `CHROMA_TENANT`, `CHROMA_DATABASE`) are used when present — the local venv Chroma server cannot run on Vercel. Without them the app automatically falls back to a SQLite-backed vector store (`server/store/sqlite-vector.js`): the same chunks and embeddings, searched with cosine similarity in JavaScript (distance = 1 − cosine, so every evidence rule behaves identically). Force a choice with `VECTOR_STORE=chroma|sqlite`.
+- **Demo seeding**: with the fallback store, every cold start begins empty, so `api/index.js` seeds the committed demo corpus (`data/demo-seed.json`) once per instance — embeddings are computed live via NIM, so the deployment always opens with a populated, answerable library (source appears in the library as "origin: seed").
+- Two honest differences from the laptop: SQLite there is **ephemeral** (`/tmp` resets on cold starts — uploaded sources, sessions, and seeded vectors are not durable without a hosted DB), and uploads are capped ≈4 MB. For the full-fidelity demo, `npm start` on this laptop remains the primary environment.
 
 ## Test
 

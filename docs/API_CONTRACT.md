@@ -461,3 +461,20 @@ Additive, backend-only; no existing request/response shapes changed.
 **Embedding-model guard.** `npm run reindex` (and dataset ingestion, when added) record the embedding model + dimension in `app_meta` (`embed_model`, `embed_dimension`). `GET /api/health` reports the index as degraded with a reindex instruction when the configured `NIM_EMBED_MODEL` no longer matches the recorded one.
 
 Retrieval quality is measured by `tests/eval-set.json` + `scripts/eval-retrieval.mjs` (offline and live runs) — changing any retrieval constant must be accompanied by re-running those.
+
+---
+
+# v1.3 — Serverless vector fallback & demo seeding (2026-10-13)
+
+Additive, backend-only; no request/response shapes changed except one additive health field.
+
+**Two interchangeable vector backends.** The app selects its vector store through `server/store/vectorProvider.js`:
+
+- `VECTOR_STORE=chroma` (default on the laptop) — ChromaDB exactly as before (local server or Chroma Cloud via `CHROMA_*`).
+- `VECTOR_STORE=sqlite` (also auto-selected on Vercel when no Chroma Cloud key is set) — `server/store/sqlite-vector.js` stores the same chunks (text + embedding + trusted metadata) in the app database and answers queries with cosine similarity computed in JavaScript. Scoring is identical by construction: `distance = 1 − cosine`, so dedup, the evidence floor, `hitScore`, scoping, and every downstream rule behave unchanged. Interface: `addChunks`, `queryChunks`, `pingChroma`, `countChunks`, `resetCollection`, `deleteChunks`, `deleteBySource`, plus `backend: 'chroma' | 'sqlite'`.
+
+**Cold-start demo seeding (fallback only).** When the fallback store is empty, the serverless entry seeds `data/demo-seed.json` (three committed biology pages) — chunked and embedded live via NIM at boot, recorded as a normal source (`origin: 'seed'`, id `src_seed_demo`) so it appears in the library, is organizable, and is citable. Idempotent (no-op once the store holds anything); a NIM failure during seeding is logged and the app still boots.
+
+**Schema v4/v5 (both additive).** v4: `sources.license`, `sources.origin`, tables `dataset_items`, `dataset_runs` (dataset-ingestion pilot, CLI-only — no API yet). v5: `vector_chunks`.
+
+**`GET /api/health`**: `checks.chroma` gains `backend` (`"chroma"` | `"sqlite"`) so the UI can show which store is live. `checks.chroma.ok` is `true` whenever the active backend answers — a healthy fallback is a healthy vector store.

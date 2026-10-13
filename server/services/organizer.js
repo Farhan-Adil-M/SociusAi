@@ -103,10 +103,10 @@ export async function suggestOrganization(db, { sourceId, description }, { chat 
       const content = await chatFn([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
-      // Reasoning-style models can spend the budget on hidden reasoning and
-      // return empty content at small max_tokens (observed twice in the audit).
-      // Keep headroom so the JSON answer is actually emitted.
-      ], { model: config.nimChatModel, maxTokens: 1200 });
+      // Assessment-grade model: the chat model (lightning) repeatedly returned
+      // empty content live on this classification prompt; the super-120b model
+      // has been reliable at producing strict JSON all through the project.
+      ], { model: config.nimAssessModel, maxTokens: 1200 });
       suggestion = normalizeSuggestion(parseJsonLoose(content), sessions);
     }
   } catch (err) {

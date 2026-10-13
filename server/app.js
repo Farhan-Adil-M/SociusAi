@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import { chatCompletion } from './services/nimChat.js';
 import { embedTexts, embedQuery } from './services/embeddings.js';
-import { addChunks, queryChunks, pingChroma, resetCollection } from './store/vectorStore.js';
 import { healthRouter } from './routes/health.js';
 import { sourcesRouter } from './routes/sources.js';
 import { tutorRouter } from './routes/tutor.js';
@@ -17,13 +16,14 @@ import { learnerRouter } from './routes/learner.js';
 import { flashcardsRouter } from './routes/flashcards.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { decksRouter } from './routes/decks.js';
+import { resolveVectorStore } from './store/vectorProvider.js';
 
 const FRONTEND_DIR = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../frontend');
 
 export function createApp({ db, ai, vector } = {}) {
   const services = {
     ai: { chatCompletion, embedTexts, embedQuery, ...ai },
-    vector: { addChunks, queryChunks, pingChroma, resetCollection, ...vector },
+    vector: { ...resolveVectorStore(db), ...vector },
   };
   const ctx = { db, ...services };
 

@@ -124,6 +124,17 @@ export function openDb(dbPath = path.join(config.dataDir, 'app.db')) {
       reviewed_at    TEXT,
       PRIMARY KEY (deck_id, idx)
     );
+
+    -- Serverless vector fallback (v1.3): the same chunks Chroma stores, kept
+    -- in SQLite and searched by cosine similarity in JS. Used only when no
+    -- Chroma backend is reachable (e.g. Vercel without Chroma Cloud keys).
+    CREATE TABLE IF NOT EXISTS vector_chunks (
+      id             TEXT PRIMARY KEY,
+      source_id      TEXT,
+      text           TEXT NOT NULL,
+      embedding_json TEXT NOT NULL,
+      metadata_json  TEXT NOT NULL DEFAULT '{}'
+    );
   `);
 
   migrate(db, dbPath);
@@ -171,6 +182,51 @@ function migrate(db, dbPath) {
     // shape the student originally saw (no double-counting, no reshaping).
     addColumnIfMissing(db, 'quiz_attempts', 'result_json', 'result_json TEXT');
     db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '3') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run();
+  }
+
+  if (version < 4) {
+    // Dataset ingestion (v1.3): dataset sources carry licence + origin so
+    // citations can attribute public educational content properly.
+    addColumnIfMissing(db, 'sources', 'license', 'license TEXT');
+    addColumnIfMissing(db, 'sources', 'origin', "origin TEXT NOT NULL DEFAULT 'upload'");
+    db.exec(`CREATE TABLE IF NOT EXISTS dataset_items (
+      id             TEXT PRIMARY KEY,
+      dataset        TEXT NOT NULL,
+      split          TEXT NOT NULL,
+      row_idx        INTEGER NOT NULL,
+      record_key     TEXT NOT NULL UNIQUE,
+      question       TEXT NOT NULL,
+      correct_answer TEXT NOT NULL,
+      choices_json   TEXT NOT NULL DEFAULT '[]',
+      support        TEXT,
+      license        TEXT NOT NULL,
+      created_at     TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS dataset_runs (
+      id           TEXT PRIMARY KEY,
+      dataset      TEXT NOT NULL,
+      split        TEXT NOT NULL,
+      stats_json   TEXT NOT NULL DEFAULT '{}',
+      status       TEXT NOT NULL DEFAULT 'running',
+      started_at   TEXT NOT NULL,
+      finished_at  TEXT
+    );`);
+    db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '4') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run();
+  }
+
+  if (version < 5) {
+    // Vector fallback table (idempotent; the schema exec above may already
+    // have created it — this keeps older code paths safe).
+    db.exec(`CREATE TABLE IF NOT EXISTS vector_chunks (
+      id             TEXT PRIMARY KEY,
+      source_id      TEXT,
+      text           TEXT NOT NULL,
+      embedding_json TEXT NOT NULL,
+      metadata_json  TEXT NOT NULL DEFAULT '{}'
+    );`);
+    db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '5') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .run();
   }
 }

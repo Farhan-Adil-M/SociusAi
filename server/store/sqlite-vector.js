@@ -1,0 +1,129 @@
+// SQLite vector-store FALLBACK (v1.3).
+//
+// Purpose: keep Socius AI fully working where no Chroma server can run — the
+// serverless deployment on Vercel. It stores the SAME chunks (text + embedding
+// + trusted metadata) in the app database and searches them with cosine
+// similarity computed in JavaScript. This is a genuine vector search, not a
+// keyword substitute: identical interface, identical scoring semantics
+// (distance = 1 - cosine), so every evidence rule keeps working unchanged.
+//
+// Chroma remains the primary store on the laptop (local server) and on Vercel
+// with Chroma Cloud credentials — see store/vectorProvider.js.
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chunkSegments } from '../services/chunker.js';
+import { getMeta, setMeta } from './sqlite.js';
+import { config } from '../config.js';
+
+const SEED_FILE = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../data/demo-seed.json');
+const SEED_SOURCE_ID = 'src_seed_demo';
+
+export function createSqliteVectorStore(db) {
+  const stmtAll = () => db.prepare('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks');
+
+  async function addChunks({ ids, embeddings, documents, metadatas }) {
+    const insert = db.prepare('INSERT OR REPLACE INTO vector_chunks (id, source_id, text, embedding_json, metadata_json) VALUES (?, ?, ?, ?, ?)');
+    ids.forEach((id, i) => insert.run(id, metadatas[i]?.sourceId ?? null, documents[i] ?? '', JSON.stringify(embeddings[i]), JSON.stringify(metadatas[i] ?? {})));
+  }
+
+  function cosine(a, b) {
+    let dot = 0; let na = 0; let nb = 0;
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      dot += a[i] * b[i];
+      na += a[i] * a[i];
+      nb += b[i] * b[i];
+    }
+    if (na === 0 || nb === 0) return 0;
+    return dot / Math.sqrt(na * nb);
+  }
+
+  async function queryChunks({ embedding, nResults = 6, sourceIds = [] }) {
+    const rows = stmtAll().all();
+    return rows
+      .map((row) => ({
+        id: row.id,
+        text: row.text,
+        metadata: JSON.parse(row.metadata_json || '{}'),
+        distance: 1 - cosine(embedding, JSON.parse(row.embedding_json)),
+      }))
+      .filter((hit) => sourceIds.length === 0 || sourceIds.includes(hit.metadata.sourceId))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, nResults);
+  }
+
+  async function pingChroma() {
+    stmtAll().get(); // table readable = store healthy
+    return true;
+  }
+
+  async function countChunks() {
+    return db.prepare('SELECT COUNT(*) AS n FROM vector_chunks').get().n;
+  }
+
+  async function resetCollection() {
+    db.prepare('DELETE FROM vector_chunks').run();
+  }
+
+  async function deleteChunks(ids) {
+    const remove = db.prepare('DELETE FROM vector_chunks WHERE id = ?');
+    for (const id of ids) remove.run(id);
+  }
+
+  async function deleteBySource(sourceId) {
+    db.prepare('DELETE FROM vector_chunks WHERE source_id = ?').run(sourceId);
+  }
+
+  return { backend: 'sqlite', addChunks, queryChunks, pingChroma, countChunks, resetCollection, deleteChunks, deleteBySource };
+}
+
+/**
+ * Seed the fallback store with the demo corpus on an EMPTY store. Runs on the
+ * serverless deployment at cold start so judges always land on a populated,
+ * answerable library. Embeddings are computed live (model-consistent — no
+ * committed vector blobs to go stale). Idempotent: no-ops when data exists.
+ */
+export async function seedDemoCorpusIfEmpty({ db, vector, ai }) {
+  const count = await vector.countChunks();
+  if (count > 0) return { seeded: false, reason: `store already has ${count} chunks` };
+  if (!fs.existsSync(SEED_FILE)) return { seeded: false, reason: 'no seed file' };
+
+  const seed = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8'));
+  const segments = seed.pages
+    .map((page) => ({ text: page.text, location: { page: page.page } }));
+  const chunks = chunkSegments(segments);
+  if (chunks.length === 0) return { seeded: false, reason: 'seed file produced no chunks' };
+
+  const vectors = await ai.embedTexts(chunks.map((c) => c.text));
+
+  // Same embed-model bookkeeping as persistSource: record the model on first
+  // write so the health drift guard sees a coherent index.
+  if (!getMeta(db, 'embed_model') && vectors[0]) {
+    setMeta(db, 'embed_model', config.nimEmbedModel);
+    setMeta(db, 'embed_dimension', String(vectors[0].length));
+  }
+
+  await vector.addChunks({
+    ids: chunks.map((c) => `${SEED_SOURCE_ID}_${c.chunkIndex}`),
+    embeddings: vectors,
+    documents: chunks.map((c) => c.text),
+    metadatas: chunks.map((c) => ({
+      sourceId: SEED_SOURCE_ID,
+      type: seed.source?.type ?? 'pdf',
+      title: seed.source?.title ?? 'Socius AI demo corpus',
+      chunkIndex: c.chunkIndex,
+      ...(c.location?.page != null ? { page: c.location.page } : {}),
+    })),
+  });
+
+  // Make the demo source visible in the library and organisable like any other.
+  const now = new Date().toISOString();
+  db.prepare(`INSERT OR IGNORE INTO sources (id, type, title, url, page_count, slide_count, chunk_count, created_at, origin)
+    VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, 'seed')`).run(SEED_SOURCE_ID, seed.source?.type ?? 'pdf', seed.source?.title ?? 'Socius AI demo corpus', seed.pages.length, chunks.length, now);
+  const insertSegment = db.prepare('INSERT OR IGNORE INTO source_segments (source_id, seg_index, location, text) VALUES (?, ?, ?, ?)');
+  segments.forEach((segment, i) => insertSegment.run(SEED_SOURCE_ID, i, JSON.stringify(segment.location ?? {}), segment.text));
+
+  return { seeded: true, chunks: chunks.length };
+}

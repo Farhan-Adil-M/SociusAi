@@ -34,6 +34,7 @@ export function healthRouter({ db, ai, vector }) {
     try {
       await (vector?.pingChroma ?? (await import('../store/vectorStore.js')).pingChroma)();
       checks.chroma.ok = true;
+      checks.chroma.backend = vector?.backend ?? 'chroma'; // 'chroma' | 'sqlite' fallback
     } catch (err) {
       checks.chroma.message = 'Vector database unreachable. Start the local Chroma server or check CHROMA_* in .env.';
     }
