@@ -16,10 +16,64 @@ const httpError = (code, message, status) => {
 /* ------------------------------------------------------------- fixtures */
 
 const SOURCES = [
-  { id: 'src_demo01', type: 'pdf', title: 'biology-photosynthesis.pdf', sizeLabel: '14 pages', chunkCount: 42, pageCount: 14, slideCount: null, createdAt: iso(-2) },
-  { id: 'src_demo02', type: 'pptx', title: 'lecture-04-cells.pptx', sizeLabel: '28 slides', chunkCount: 56, pageCount: null, slideCount: 28, createdAt: iso(-4) },
-  { id: 'src_demo03', type: 'webpage', title: 'Khan Academy — Cell respiration', sizeLabel: 'webpage', chunkCount: 18, pageCount: null, slideCount: null, createdAt: iso(-6) },
+  { id: 'src_demo01', type: 'pdf', title: 'biology-photosynthesis.pdf', sizeLabel: '14 pages', chunkCount: 42, pageCount: 14, slideCount: null, createdAt: iso(-2), sessionId: 'ses_demo01', tags: [], orgSource: 'manual' },
+  { id: 'src_demo02', type: 'pptx', title: 'lecture-04-cells.pptx', sizeLabel: '28 slides', chunkCount: 56, pageCount: null, slideCount: 28, createdAt: iso(-4), sessionId: 'ses_demo01', tags: ['cells'], orgSource: 'ai' },
+  { id: 'src_demo03', type: 'webpage', title: 'Khan Academy — Cell respiration', sizeLabel: 'webpage', chunkCount: 18, pageCount: null, slideCount: null, createdAt: iso(-6), sessionId: null, tags: [], orgSource: 'manual' },
 ];
+
+/* -------------------------------------------------- v1.1: sessions & decks */
+
+// Mutable in-memory demo database. Mutations (creating a session, moving a
+// source, marking a card) last for the page session only — like a real
+// backend they are never presented as anything but demo data.
+const db = {
+  sessions: [
+    { id: 'ses_demo01', title: 'Biology — Cell unit', category: 'subject', description: 'First-year cell biology: structure, division and energy.', tags: ['cells', 'exam'], status: 'active', createdAt: iso(-6), updatedAt: iso(-1) },
+    { id: 'ses_demo02', title: 'Research — Photosynthesis', category: 'research', description: 'Sources and notes for the photosynthesis paper.', tags: ['photosynthesis'], status: 'active', createdAt: iso(-5), updatedAt: iso(-3) },
+    { id: 'ses_demo03', title: 'Exam prep — Semester finals', category: 'exam-prep', description: '', tags: ['finals'], status: 'active', createdAt: iso(-2), updatedAt: iso(-2) },
+  ],
+  sources: SOURCES,
+  decks: [
+    { id: 'deck_demo01', topic: 'Photosynthesis basics', sessionId: 'ses_demo01', category: 'subject', cardCount: 5, knownCount: 3, reviewCount: 1, createdAt: iso(-3), lastReviewedAt: iso(-1) },
+    { id: 'deck_demo02', topic: 'Cell respiration overview', sessionId: null, category: null, cardCount: 4, knownCount: 0, reviewCount: 0, createdAt: iso(-2), lastReviewedAt: null },
+  ],
+  deckCards: new Map(), // deckId → [{ idx, front, back, citations, status, reviewedAt }]
+  suggestions: new Map(), // sourceId → suggestion (stored server-side, like the real backend)
+};
+
+const CATEGORY_VALUES = ['subject', 'research', 'self-study', 'exam-prep', 'general'];
+
+function sessionById(id) { return db.sessions.find((session) => session.id === id) || null; }
+
+function sessionWithCounts(session) {
+  return {
+    ...session,
+    sourceCount: db.sources.filter((source) => source.sessionId === session.id).length,
+    deckCount: db.decks.filter((deck) => deck.sessionId === session.id).length,
+    lastActivityAt: db.decks
+      .filter((deck) => deck.sessionId === session.id && deck.lastReviewedAt)
+      .map((deck) => deck.lastReviewedAt)
+      .sort()
+      .pop() || null,
+  };
+}
+
+function sortSessions(list, sort) {
+  const copy = list.slice();
+  if (sort === 'alpha') return copy.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+  if (sort === 'active') return copy.sort((a, b) => String(b.lastActivityAt || '').localeCompare(String(a.lastActivityAt || '')));
+  return copy.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
+/** Throw SESSION_EMPTY when a session-scoped AI call has no material. */
+function assertSessionHasSources(sessionId) {
+  const session = sessionById(sessionId);
+  if (!session) throw httpError('SESSION_NOT_FOUND', 'That study session no longer exists.', 404);
+  const count = db.sources.filter((source) => source.sessionId === sessionId).length;
+  if (count === 0) {
+    throw httpError('SESSION_EMPTY', `No material in «${session.title}» yet. Add a file or web page first.`, 400);
+  }
+}
 
 function iso(daysAgo) {
   return new Date(Date.now() + daysAgo * 86400000).toISOString();
@@ -165,6 +219,15 @@ const PROGRESS = {
   ],
 };
 
+// Seed deck cards (after FLASHCARD_CARDS is defined, since it is a const).
+db.deckCards.set('deck_demo01', FLASHCARD_CARDS.slice(0, 5).map((card, idx) => ({
+  idx, front: card.front, back: card.back, citations: card.citations,
+  status: idx < 3 ? 'known' : idx === 3 ? 'review' : 'new', reviewedAt: idx < 4 ? iso(-1) : null,
+})));
+db.deckCards.set('deck_demo02', FLASHCARD_CARDS.slice(3, 7).map((card, idx) => ({
+  idx, front: card.front, back: card.back, citations: card.citations, status: 'new', reviewedAt: null,
+})));
+
 /* --------------------------------------------------------- mock router */
 
 const submittedQuizzes = new Map(); // quizId → stored result (409 on repeat)
@@ -172,7 +235,9 @@ const generatedQuizzes = new Map(); // quizId → { topic, questions }
 
 export async function handleMock(path, { method = 'GET', body = {} } = {}) {
   await sleep(320);
-  const route = `${method} ${path}`;
+  const [pathname, query = ''] = path.split('?');
+  const qp = new URLSearchParams(query);
+  const route = `${method} ${pathname}`;
 
   if (route === 'GET /api/health') {
     return {
@@ -185,7 +250,14 @@ export async function handleMock(path, { method = 'GET', body = {} } = {}) {
     };
   }
 
-  if (route === 'GET /api/sources') return { sources: SOURCES };
+  if (route === 'GET /api/sources') {
+    const scope = qp.get('sessionId');
+    let list = db.sources;
+    if (scope === 'unsorted') list = list.filter((source) => !source.sessionId);
+    else if (scope) list = list.filter((source) => source.sessionId === scope);
+    const unsortedSourceCount = db.sources.filter((source) => !source.sessionId).length;
+    return { sources: list, unsortedSourceCount };
+  }
 
   if (route === 'GET /api/learner/progress') return PROGRESS;
 
@@ -194,6 +266,7 @@ export async function handleMock(path, { method = 'GET', body = {} } = {}) {
     if (question.length < 3 || question.length > 300) {
       throw httpError('VALIDATION_ERROR', 'Question must be between 3 and 300 characters.', 400);
     }
+    if (body.sessionId) assertSessionHasSources(body.sessionId);
     const lower = question.toLowerCase();
     if (/mitosis|meiosis|chromosome/.test(lower)) return MITOSIS_ANSWER;
     if (/quantum|rocket|football|weather/.test(lower)) return ABSTAIN_ANSWER;
@@ -209,8 +282,29 @@ export async function handleMock(path, { method = 'GET', body = {} } = {}) {
     if (count < 3 || count > 12) {
       throw httpError('VALIDATION_ERROR', 'Count must be between 3 and 12.', 400);
     }
+    if (body.sessionId) assertSessionHasSources(body.sessionId);
     await sleep(500);
-    return { topic, cards: FLASHCARD_CARDS.slice(0, count), model: 'nvidia/nemotron-3-super-120b-a12b' };
+    const cards = FLASHCARD_CARDS.slice(0, count);
+
+    // v1.1: the deck is persisted (cards + scope), like the real backend.
+    const deckId = `deck_demo${Math.random().toString(36).slice(2, 8)}`;
+    const parent = body.sessionId ? sessionById(body.sessionId) : null;
+    db.decks.unshift({
+      id: deckId,
+      topic,
+      sessionId: body.sessionId || null,
+      category: parent ? parent.category : null,
+      cardCount: cards.length,
+      knownCount: 0,
+      reviewCount: 0,
+      createdAt: new Date().toISOString(),
+      lastReviewedAt: null,
+    });
+    db.deckCards.set(deckId, cards.map((card, idx) => ({
+      idx, front: card.front, back: card.back, citations: card.citations, status: 'new', reviewedAt: null,
+    })));
+
+    return { topic, cards, deckId, sessionId: body.sessionId || null, model: 'nvidia/nemotron-3-super-120b-a12b' };
   }
 
   if (route === 'POST /api/quiz/generate') {
@@ -222,6 +316,7 @@ export async function handleMock(path, { method = 'GET', body = {} } = {}) {
     if (questionCount < 3 || questionCount > 10) {
       throw httpError('VALIDATION_ERROR', 'questionCount must be between 3 and 10.', 400);
     }
+    if (body.sessionId) assertSessionHasSources(body.sessionId);
     await sleep(600);
     const quizId = `quiz_demo${Math.random().toString(36).slice(2, 8)}`;
     const questions = QUIZ_QUESTIONS.slice(0, questionCount);
@@ -271,6 +366,205 @@ export async function handleMock(path, { method = 'GET', body = {} } = {}) {
     };
     submittedQuizzes.set(quizId, result);
     return { result };
+  }
+
+  /* ------------------------------------------- source organisation (v1.1) */
+
+  const sourceMatch = pathname.match(/^\/api\/sources\/([^/]+)$/);
+  if (sourceMatch && method === 'PATCH') {
+    const source = db.sources.find((item) => item.id === sourceMatch[1]);
+    if (!source) throw httpError('SOURCE_NOT_FOUND', 'That study material no longer exists.', 404);
+    if (body.sessionId !== undefined && body.sessionId !== null && !sessionById(body.sessionId)) {
+      throw httpError('SESSION_NOT_FOUND', 'That study session no longer exists.', 404);
+    }
+    if (body.sessionId !== undefined) { source.sessionId = body.sessionId; source.orgSource = 'manual'; source.manualOverride = true; }
+    if (body.title !== undefined) { source.title = String(body.title).trim(); source.manualOverride = true; }
+    if (Array.isArray(body.tags)) { source.tags = body.tags.map((tag) => String(tag).trim()).filter(Boolean); source.manualOverride = true; }
+    return { source };
+  }
+
+  const suggMatch = pathname.match(/^\/api\/sources\/([^/]+)\/suggest-organization$/);
+  if (suggMatch && method === 'POST') {
+    const source = db.sources.find((item) => item.id === suggMatch[1]);
+    if (!source) throw httpError('SOURCE_NOT_FOUND', 'That study material no longer exists.', 404);
+    const active = db.sessions.filter((session) => session.status === 'active');
+    const suggestion = active.length
+      ? { matchSessionId: active[0].id, newSession: null, confidence: 'high',
+          reason: `Its content overlaps the material already in «${active[0].title}». (Demo suggestion — canned text, not a real AI judgement.)` }
+      : { matchSessionId: null,
+          newSession: { category: 'subject', title: `Study — ${source.title}`.slice(0, 80), subject: source.title, tags: [] },
+          confidence: 'low', reason: 'No existing session matches closely enough. (Demo suggestion.)' };
+    db.suggestions.set(source.id, suggestion);
+    return { sourceId: source.id, applicable: !source.manualOverride, suggestion };
+  }
+
+  const acceptMatch = pathname.match(/^\/api\/sources\/([^/]+)\/accept-suggestion$/);
+  if (acceptMatch && method === 'POST') {
+    const source = db.sources.find((item) => item.id === acceptMatch[1]);
+    if (!source) throw httpError('SOURCE_NOT_FOUND', 'That study material no longer exists.', 404);
+    const suggestion = db.suggestions.get(source.id);
+    if (!suggestion) throw httpError('VALIDATION_ERROR', 'No suggestion is stored for this material yet.', 400);
+    let session = suggestion.matchSessionId ? sessionById(suggestion.matchSessionId) : null;
+    if (!session && suggestion.newSession) {
+      session = db.sessions.find((item) => item.title.toLowerCase() === suggestion.newSession.title.toLowerCase()) || null;
+      if (!session) {
+        const now = new Date().toISOString();
+        session = { id: `ses_demo${Math.random().toString(36).slice(2, 8)}`, title: suggestion.newSession.title,
+          category: suggestion.newSession.category, description: '', tags: suggestion.newSession.tags,
+          status: 'active', createdAt: now, updatedAt: now };
+        db.sessions.unshift(session);
+      }
+    }
+    if (!session) throw httpError('VALIDATION_ERROR', 'The stored suggestion no longer applies.', 400);
+    source.sessionId = session.id;
+    source.orgSource = 'manual';
+    source.manualOverride = true;
+    return { source, session };
+  }
+
+  const deckMatch = pathname.match(/^\/api\/decks\/([^/]+)$/);
+  const cardMatch = pathname.match(/^\/api\/decks\/([^/]+)\/cards\/(\d+)$/);
+
+  if (cardMatch && method === 'PATCH') {
+    const deck = db.decks.find((item) => item.id === cardMatch[1]);
+    if (!deck) throw httpError('DECK_NOT_FOUND', 'That deck no longer exists.', 404);
+    const cards = db.deckCards.get(deck.id) || [];
+    const idx = Number(cardMatch[2]);
+    const card = cards.find((item) => item.idx === idx);
+    if (!card || !['new', 'known', 'review'].includes(body.status)) {
+      throw httpError('VALIDATION_ERROR', 'Status must be new, known or review.', 400);
+    }
+    const now = new Date().toISOString();
+    card.status = body.status;
+    card.reviewedAt = now;
+    deck.knownCount = cards.filter((item) => item.status === 'known').length;
+    deck.reviewCount = cards.filter((item) => item.status === 'review').length;
+    deck.lastReviewedAt = now;
+    return { deckId: deck.id, idx, status: card.status, lastReviewedAt: now };
+  }
+
+  if (deckMatch && method === 'GET') {
+    const deck = db.decks.find((item) => item.id === deckMatch[1]);
+    if (!deck) throw httpError('DECK_NOT_FOUND', 'That deck no longer exists.', 404);
+    const parent = deck.sessionId ? sessionById(deck.sessionId) : null;
+    return { deck: { ...deck, sessionTitle: parent ? parent.title : null }, cards: db.deckCards.get(deck.id) || [] };
+  }
+
+  if (deckMatch && method === 'DELETE') {
+    const index = db.decks.findIndex((item) => item.id === deckMatch[1]);
+    if (index === -1) throw httpError('DECK_NOT_FOUND', 'That deck no longer exists.', 404);
+    db.deckCards.delete(deckMatch[1]);
+    db.decks.splice(index, 1);
+    return null; // 204, no body
+  }
+
+  /* ------------------------------------------------ flashcard decks (v1.1) */
+
+  if (route === 'GET /api/decks') {
+    const q = (qp.get('q') || '').trim().toLowerCase();
+    const category = qp.get('category') || '';
+    const scope = qp.get('sessionId') || '';
+    const sort = qp.get('sort') || 'recent';
+    let list = db.decks.filter((deck) => {
+      const parent = deck.sessionId ? sessionById(deck.sessionId) : null;
+      if (scope === 'unsorted') return !deck.sessionId;
+      if (scope) return deck.sessionId === scope;
+      if (category) return parent && parent.category === category;
+      return true;
+    }).filter((deck) => {
+      if (!q) return true;
+      const parent = deck.sessionId ? sessionById(deck.sessionId) : null;
+      return `${deck.topic} ${parent ? parent.title : ''}`.toLowerCase().includes(q);
+    });
+    if (sort === 'alpha') list = list.slice().sort((a, b) => a.topic.localeCompare(b.topic, undefined, { sensitivity: 'base' }));
+    else if (sort === 'active') list = list.slice().sort((a, b) => String(b.lastReviewedAt || '').localeCompare(String(a.lastReviewedAt || '')));
+    else list = list.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const decks = list.map((deck) => ({
+      ...deck,
+      sessionTitle: deck.sessionId ? (sessionById(deck.sessionId) || {}).title || null : null,
+    }));
+    return { decks, unsortedDeckCount: db.decks.filter((deck) => !deck.sessionId).length };
+  }
+
+  /* ------------------------------------------------ study sessions (v1.1) */
+
+  if (route === 'GET /api/sessions') {
+    const q = (qp.get('q') || '').trim().toLowerCase();
+    const category = qp.get('category') || '';
+    const sort = qp.get('sort') || 'recent';
+    const includeArchived = qp.get('includeArchived') === '1';
+    let list = db.sessions
+      .filter((session) => includeArchived || session.status === 'active')
+      .filter((session) => !category || session.category === category)
+      .filter((session) => !q || `${session.title} ${session.category} ${session.description} ${session.tags.join(' ')}`.toLowerCase().includes(q));
+    list = sortSessions(list.map(sessionWithCounts), sort);
+    const unsortedSourceCount = db.sources.filter((source) => !source.sessionId).length;
+    return { sessions: list, unsortedSourceCount };
+  }
+
+  if (route === 'POST /api/sessions') {
+    const title = (body.title || '').trim();
+    if (title.length < 2 || title.length > 80) {
+      throw httpError('VALIDATION_ERROR', 'Title must be between 2 and 80 characters.', 400);
+    }
+    const category = body.category || 'subject';
+    if (!CATEGORY_VALUES.includes(category)) {
+      throw httpError('VALIDATION_ERROR', `Category must be one of: ${CATEGORY_VALUES.join(', ')}.`, 400);
+    }
+    const tags = Array.isArray(body.tags) ? body.tags.map((tag) => String(tag).trim()).filter(Boolean) : [];
+    if (tags.length > 8 || tags.some((tag) => tag.length > 24)) {
+      throw httpError('VALIDATION_ERROR', 'Up to 8 tags, each 1–24 characters.', 400);
+    }
+    const now = new Date().toISOString();
+    const session = {
+      id: `ses_demo${Math.random().toString(36).slice(2, 8)}`,
+      title,
+      category,
+      description: (body.description || '').trim(),
+      tags,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.sessions.unshift(session);
+    return { session: sessionWithCounts(session) };
+  }
+
+  const sessionMatch = pathname.match(/^\/api\/sessions\/([^/]+)$/);
+  if (sessionMatch) {
+    const session = sessionById(sessionMatch[1]);
+    if (!session) throw httpError('SESSION_NOT_FOUND', 'That study session no longer exists.', 404);
+
+    if (method === 'GET') {
+      const sources = db.sources
+        .filter((source) => source.sessionId === session.id)
+        .map((source) => ({ ...source }));
+      const decks = db.decks
+        .filter((deck) => deck.sessionId === session.id)
+        .map((deck) => ({ id: deck.id, topic: deck.topic, cardCount: deck.cardCount, createdAt: deck.createdAt }));
+      return { session: sessionWithCounts(session), sources, decks };
+    }
+
+    if (method === 'PATCH') {
+      const allowed = ['title', 'category', 'description', 'tags', 'status'];
+      const patch = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
+      if (Object.keys(patch).length === 0) {
+        throw httpError('VALIDATION_ERROR', 'Provide at least one field to update.', 400);
+      }
+      if (patch.title !== undefined && (String(patch.title).trim().length < 2 || String(patch.title).trim().length > 80)) {
+        throw httpError('VALIDATION_ERROR', 'Title must be between 2 and 80 characters.', 400);
+      }
+      if (patch.category !== undefined && !CATEGORY_VALUES.includes(patch.category)) {
+        throw httpError('VALIDATION_ERROR', `Category must be one of: ${CATEGORY_VALUES.join(', ')}.`, 400);
+      }
+      if (patch.status !== undefined && !['active', 'archived'].includes(patch.status)) {
+        throw httpError('VALIDATION_ERROR', 'Status must be active or archived.', 400);
+      }
+      if (patch.title !== undefined) patch.title = String(patch.title).trim();
+      if (patch.description !== undefined) patch.description = String(patch.description).trim();
+      Object.assign(session, patch, { updatedAt: new Date().toISOString() });
+      return { session: sessionWithCounts(session) };
+    }
   }
 
   if (route === 'POST /api/sources/upload' || route === 'POST /api/sources/webpage') {

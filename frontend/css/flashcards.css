@@ -17,6 +17,66 @@
 [data-setup-status]:empty { display: none; }
 [data-setup-status] { padding: 0 var(--s5) var(--s4); }
 
+/* ------------------------------------------------------------ library --- */
+
+.fc-deck {
+  text-decoration: none;
+  color: inherit;
+  align-items: center;
+}
+.fc-deck:hover { background: #FAFBFC; }
+.fc-deck-main { min-width: 0; flex: 1; }
+.fc-deck-title {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fc-deck-meta {
+  display: flex;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.fc-deck-counts { display: flex; gap: var(--s2); flex-wrap: wrap; flex: none; }
+.fc-deck-open { flex: none; }
+
+.fc-group { margin-bottom: var(--s5); }
+.fc-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  margin-bottom: var(--s2);
+  padding: 0 var(--s2);
+}
+.fc-group-title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+a.fc-group-title:hover { color: var(--blue); text-decoration: underline; }
+
+.fc-crumb { color: var(--ink-3); text-decoration: none; }
+.fc-crumb:hover { color: var(--blue); text-decoration: underline; }
+
+.fc-form-note {
+  padding: 0 var(--s5) var(--s4);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.fc-delete { color: var(--red); }
+.fc-delete[data-delete-armed] { background: var(--red-soft); }
+
 /* ------------------------------------------------------------- session */
 
 .fc-session {

@@ -48,6 +48,10 @@ const ICON_PATHS = {
   spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>',
   heart: '<path d="M12 20s-7.5-4.6-7.5-9.6A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20z"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  folder: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2.5h7A1.5 1.5 0 0 1 19 9v8.5A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z"/>',
+  pencil: '<path d="M4 20l4.5-1L19.5 8a2.1 2.1 0 0 0-3-3L5.5 16z"/><path d="M14 6.5l3.5 3.5"/>',
+  archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v10.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V8"/><path d="M10 12h4"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V4.8A.8.8 0 0 1 9.8 4h4.4a.8.8 0 0 1 .8.8V7"/><path d="M6 7l1 12.2a1.5 1.5 0 0 0 1.5 1.3h7a1.5 1.5 0 0 0 1.5-1.3L18 7"/>',
 };
 
 const TYPE_ICONS = { pdf: 'file', pptx: 'slides', webpage: 'globe' };
@@ -116,6 +120,9 @@ const CODE_FALLBACKS = {
   CHROMA_UNAVAILABLE: 'The search index is unavailable right now. Please try again shortly.',
   INTERNAL: 'Something went wrong on the server. Please try again.',
   NOT_FOUND: 'That page does not exist.',
+  SESSION_NOT_FOUND: 'That study session no longer exists. Reload the list and try again.',
+  SESSION_EMPTY: 'This session has no material yet. Add a file or web page first.',
+  DECK_NOT_FOUND: 'That deck no longer exists. Reload the library and try again.',
 };
 
 /** Turn any thrown error into a sentence we can show a student. */

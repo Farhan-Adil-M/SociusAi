@@ -92,12 +92,30 @@ function withSources(payload, sourceIds) {
   return payload;
 }
 
+/** Optional sessionId is passed through untouched (server enforces the scope). */
+function withSession(payload, sessionId) {
+  if (sessionId) payload.sessionId = sessionId;
+  return payload;
+}
+
+/** "/api/sessions?category=research&q=black" — empty params are omitted. */
+function withQuery(path, params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== '' && value !== false) {
+      search.set(key, String(value));
+    }
+  }
+  const qs = search.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
 export const api = {
   // GET /api/health
   getHealth: () => request('/api/health'),
 
-  // GET /api/sources
-  listSources: () => request('/api/sources'),
+  // GET /api/sources  (?sessionId=unsorted | ses_… filters to one place)
+  listSources: ({ sessionId } = {}) => request(withQuery('/api/sources', { sessionId })),
 
   // POST /api/sources/upload (multipart, one field: file)
   uploadSource: (file) => {
@@ -111,16 +129,22 @@ export const api = {
     request('/api/sources/webpage', { method: 'POST', body: { url, ...(title ? { title } : {}), text } }),
 
   // POST /api/tutor/ask
-  askTutor: ({ question, sourceIds }) =>
-    request('/api/tutor/ask', { method: 'POST', body: withSources({ question }, sourceIds) }),
+  askTutor: ({ question, sourceIds, sessionId }) =>
+    request('/api/tutor/ask', {
+      method: 'POST',
+      body: withSession(withSources({ question }, sourceIds), sessionId),
+    }),
 
   // POST /api/flashcards/generate
-  generateFlashcards: ({ topic, count, sourceIds }) =>
-    request('/api/flashcards/generate', { method: 'POST', body: withSources({ topic, count }, sourceIds) }),
+  generateFlashcards: ({ topic, count, sourceIds, sessionId }) =>
+    request('/api/flashcards/generate', {
+      method: 'POST',
+      body: withSession(withSources({ topic, count }, sourceIds), sessionId),
+    }),
 
   // POST /api/quiz/generate
-  generateQuiz: ({ topic, questionCount, difficulty, sourceIds }) => {
-    const payload = withSources({ topic, questionCount }, sourceIds);
+  generateQuiz: ({ topic, questionCount, difficulty, sourceIds, sessionId }) => {
+    const payload = withSession(withSources({ topic, questionCount }, sourceIds), sessionId);
     if (difficulty) payload.difficulty = difficulty;
     return request('/api/quiz/generate', { method: 'POST', body: payload });
   },
@@ -131,4 +155,68 @@ export const api = {
 
   // GET /api/learner/progress
   getProgress: () => request('/api/learner/progress'),
+
+  /* ------------------------------------------------------ study sessions */
+
+  // GET /api/sessions?category=&q=&sort=recent|alpha|active&includeArchived=
+  listSessions: ({ q, category, sort, includeArchived } = {}) =>
+    request(withQuery('/api/sessions', { q, category, sort, includeArchived })),
+
+  // POST /api/sessions
+  createSession: ({ title, category, description, tags }) =>
+    request('/api/sessions', {
+      method: 'POST',
+      body: {
+        title,
+        ...(category ? { category } : {}),
+        ...(description ? { description } : {}),
+        ...(Array.isArray(tags) && tags.length ? { tags } : {}),
+      },
+    }),
+
+  // GET /api/sessions/:id → { session, sources, decks }
+  getSession: (sessionId) =>
+    request(`/api/sessions/${encodeURIComponent(sessionId)}`),
+
+  // PATCH /api/sessions/:id — any subset of title/category/description/tags/status
+  updateSession: (sessionId, patch) =>
+    request(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'PATCH', body: patch }),
+
+  /* ---------------------------------------------------- source organisation */
+
+  // PATCH /api/sources/:id — { sessionId, title, tags } (manual move/edit)
+  updateSource: (sourceId, patch) =>
+    request(`/api/sources/${encodeURIComponent(sourceId)}`, { method: 'PATCH', body: patch }),
+
+  // POST /api/sources/:id/suggest-organization → { sourceId, applicable, suggestion }
+  suggestOrganization: (sourceId, { description } = {}) =>
+    request(`/api/sources/${encodeURIComponent(sourceId)}/suggest-organization`, {
+      method: 'POST',
+      body: description ? { description } : {},
+    }),
+
+  // POST /api/sources/:id/accept-suggestion → { source, session }
+  acceptSuggestion: (sourceId) =>
+    request(`/api/sources/${encodeURIComponent(sourceId)}/accept-suggestion`, { method: 'POST', body: {} }),
+
+  /* -------------------------------------------------------- flashcard decks */
+
+  // GET /api/decks?sessionId=&category=&q=&sort=recent|alpha|active
+  listDecks: ({ sessionId, category, q, sort } = {}) =>
+    request(withQuery('/api/decks', { sessionId, category, q, sort })),
+
+  // GET /api/decks/:deckId → { deck, cards }
+  getDeck: (deckId) =>
+    request(`/api/decks/${encodeURIComponent(deckId)}`),
+
+  // PATCH /api/decks/:deckId/cards/:idx — { status: new|known|review }
+  updateCardStatus: (deckId, idx, status) =>
+    request(`/api/decks/${encodeURIComponent(deckId)}/cards/${idx}`, {
+      method: 'PATCH',
+      body: { status },
+    }),
+
+  // DELETE /api/decks/:deckId → 204
+  deleteDeck: (deckId) =>
+    request(`/api/decks/${encodeURIComponent(deckId)}`, { method: 'DELETE' }),
 };

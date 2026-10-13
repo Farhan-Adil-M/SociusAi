@@ -8,6 +8,7 @@ import { icon, escapeHtml, errorMessage } from '../ui.js';
 
 const NAV_ITEMS = [
   { key: 'dashboard', href: 'dashboard.html', label: 'Dashboard' },
+  { key: 'library', href: 'library.html', label: 'Library' },
   { key: 'study', href: 'study.html', label: 'Study' },
   { key: 'flashcards', href: 'flashcards.html', label: 'Flashcards' },
   { key: 'quiz', href: 'quiz.html', label: 'Quiz' },

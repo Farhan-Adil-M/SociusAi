@@ -4,6 +4,7 @@
 // its citations. Loading, empty and error states are all handled per block.
 
 import { mountShell, mountHealthBanner } from '../components/shell.js';
+import { offerSuggestion } from '../components/material-import.js';
 import { api } from '../api.js';
 import {
   icon, escapeHtml, renderCitations, wireCitations,
@@ -32,6 +33,21 @@ let sending = false;
 const params = new URLSearchParams(window.location.search);
 const presetTopic = (params.get('topic') || '').trim();
 
+/* Session scope: ?session=ses_… — the tutor then only searches that
+   session's material (the backend enforces it; we pass the id through). */
+const presetSessionId = (params.get('session') || '').trim();
+let sessionContext = null; // { id, title, … } once loaded
+
+async function loadSessionContext() {
+  if (!presetSessionId) return;
+  try {
+    const data = await api.getSession(presetSessionId);
+    sessionContext = data.session;
+  } catch {
+    sessionContext = null; // fall back to all material; ask() surfaces errors
+  }
+}
+
 function suggestions() {
   const list = [
     'Summarise the key ideas in my material',
@@ -54,8 +70,10 @@ function renderSources() {
   if (sources.length === 0) {
     showEmpty(sourcesHost, {
       iconName: 'inbox',
-      title: 'No material yet',
-      text: 'Upload a PDF or PowerPoint, or paste a web page, to give the tutor something to search.',
+      title: sessionContext ? `«${sessionContext.title}» has no material yet` : 'No material yet',
+      text: sessionContext
+        ? 'Add a PDF, PowerPoint or web page below, or from the session page. The tutor searches this session only.'
+        : 'Upload a PDF or PowerPoint, or paste a web page, to give the tutor something to search.',
     });
     return;
   }
@@ -73,8 +91,8 @@ function renderSources() {
     <label class="src-option">
       <input type="checkbox" data-all checked>
       <span class="src-body">
-        <span class="src-title src-all">All material</span>
-        <span class="src-meta">Search everything you have added</span>
+        <span class="src-title src-all">${sessionContext ? 'All material in this session' : 'All material'}</span>
+        <span class="src-meta">${sessionContext ? `Everything filed under «${escapeHtml(sessionContext.title)}»` : 'Search everything you have added'}</span>
       </span>
     </label>
     ${rows.join('')}`;
@@ -102,10 +120,11 @@ function onScopeChange(event) {
 
 async function loadSources() {
   try {
-    const data = await api.listSources();
+    const data = await api.listSources(sessionContext ? { sessionId: sessionContext.id } : {});
     sources = data.sources || [];
     renderSources();
     renderIntro();
+    updateComposer();
   } catch (error) {
     showError(sourcesHost, error, { title: 'Could not load your material', onRetry: loadSources });
   }
@@ -124,7 +143,9 @@ function renderIntro() {
       ${
         sources.length === 0
           ? '<p>The tutor answers only from material you have added. Use <strong>Add material</strong> on the left, then ask your first question here.</p>'
-          : `<p>You are searching <strong>${sources.length === 1 ? '1 item' : `${sources.length} items`}</strong>. Answers are written from the retrieved passages, and each one cites the exact file, page or slide so you can verify it.</p>`
+          : sessionContext
+            ? `<p>You are searching <strong>${sources.length === 1 ? '1 item' : `${sources.length} items`}</strong> in <a href="session.html?id=${encodeURIComponent(sessionContext.id)}">«${escapeHtml(sessionContext.title)}»</a>. Answers cite the exact file, page or slide so you can verify them.</p>`
+            : `<p>You are searching <strong>${sources.length === 1 ? '1 item' : `${sources.length} items`}</strong>. Answers are written from the retrieved passages, and each one cites the exact file, page or slide so you can verify it.</p>`
       }
       <div class="study-suggest">${options}</div>
     </div>`;
@@ -188,7 +209,11 @@ function answerHtml(data) {
 function updateComposer() {
   const length = input.value.trim().length;
   countLabel.textContent = `${input.value.length} / 300`;
-  sendButton.disabled = sending || length < 3;
+  const waitingForMaterial = Boolean(sessionContext) && sources.length === 0;
+  sendButton.disabled = sending || length < 3 || waitingForMaterial;
+  input.placeholder = waitingForMaterial
+    ? `Add material to «${sessionContext.title}» first…`
+    : 'Ask a question about your material…';
 }
 
 function setSending(value) {
@@ -215,10 +240,28 @@ async function ask(question) {
   updateComposer();
 
   try {
-    const data = await api.askTutor({ question, sourceIds: selectedSourceIds() });
+    const data = await api.askTutor({
+      question,
+      sourceIds: selectedSourceIds(),
+      sessionId: sessionContext ? sessionContext.id : null,
+    });
     pending.outerHTML = answerHtml(data);
     liveRegion.textContent = 'The tutor answered.';
   } catch (error) {
+    if (error.code === 'SESSION_EMPTY') {
+      pending.outerHTML = `
+        <div class="study-add-status" style="display:block; padding:0; background:none;">
+          <div class="banner banner-info">${icon('info', { size: 16 })}
+            <span><strong>Nothing to search yet.</strong> ${escapeHtml(sessionContext ? `«${sessionContext.title}»` : 'This session')} has no material. Add a file or web page first — then questions here are answered from it.</span>
+          </div>
+          <div style="margin-top: var(--s3);">
+            <a class="btn btn-primary btn-sm" href="session.html?id=${encodeURIComponent(presetSessionId)}">Add material</a>
+          </div>
+        </div>`;
+      liveRegion.textContent = 'This session has no material yet.';
+      setSending(false);
+      return;
+    }
     const message = errorMessage(error);
     pending.outerHTML = `
       <div class="exchange-pending" style="display:block; padding:0; background: none;">
@@ -289,14 +332,31 @@ fileInput.addEventListener('change', async () => {
   addStatus.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Extracting and indexing ${escapeHtml(file.name)}…</div>`;
   try {
     const data = await api.uploadSource(file);
-    showAddStatus('info', `Added ${data.source.title} — ${data.source.sizeLabel}.`);
     fileInput.value = '';
-    await loadSources();
+    await afterImport(data.source);
   } catch (error) {
     showAddStatus('error', errorMessage(error));
     fileInput.value = '';
   }
 });
+
+/**
+ * The upload already succeeded, so organisation is never blocking:
+ * in a session, file it there; otherwise offer the AI suggestion.
+ */
+async function afterImport(source) {
+  if (sessionContext) {
+    try {
+      await api.updateSource(source.id, { sessionId: sessionContext.id });
+      showAddStatus('info', `Added ${source.title} to «${sessionContext.title}».`);
+    } catch (error) {
+      showAddStatus('error', `Added ${source.title}, but filing it into this session failed: ${errorMessage(error)}`);
+    }
+  } else {
+    await offerSuggestion(source, { host: addStatus, onOrganised: loadSources });
+  }
+  await loadSources();
+}
 
 webpageForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -310,9 +370,8 @@ webpageForm.addEventListener('submit', async (event) => {
   addStatus.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Indexing the page…</div>`;
   try {
     const data = await api.addWebpage({ url, text });
-    showAddStatus('info', `Added ${data.source.title}.`);
     webpageForm.reset();
-    await loadSources();
+    await afterImport(data.source);
   } catch (error) {
     showAddStatus('error', errorMessage(error));
   }
@@ -323,7 +382,7 @@ webpageForm.addEventListener('submit', async (event) => {
 sourcesHost.addEventListener('change', onScopeChange);
 
 renderIntro();
-loadSources();
+loadSessionContext().then(loadSources);
 
 if (presetTopic) {
   input.value = `What should I know about ${presetTopic}?`;

@@ -10,11 +10,12 @@ import { escapeHtml } from '../ui.js';
 /**
  * @param {HTMLSelectElement} select  filled with "<option value=''>All material</option>" + one per source
  * @param {HTMLElement|null}   note   receives a short availability sentence
+ * @param {Object}             options  optional { sessionId } to scope the list to one session
  * @returns {Promise<Array>} the sources that were loaded (empty on failure)
  */
-export async function populateScopeSelect(select, note = null) {
+export async function populateScopeSelect(select, note = null, { sessionId = null } = {}) {
   try {
-    const data = await api.listSources();
+    const data = await api.listSources(sessionId ? { sessionId } : {});
     const sources = data.sources || [];
     select.innerHTML = '<option value="">All material</option>' + sources
       .map((source) => `<option value="${escapeHtml(source.id)}">${escapeHtml(source.title)}</option>`)

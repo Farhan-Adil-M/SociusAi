@@ -29,7 +29,34 @@ const stageIcon = document.querySelector('[data-stage-icon]');
 if (stageIcon) stageIcon.innerHTML = icon('clipboard', { size: 20 });
 
 wireCitations(stage);
-populateScopeSelect(scopeSelect, document.querySelector('[data-scope-note]'));
+
+/* Session scope: ?session=ses_… makes the whole quiz search that session's
+   material only — the backend enforces it, this just tells the student. */
+const search = new URLSearchParams(window.location.search);
+const presetTopic = (search.get('topic') || '').trim();
+const presetSessionId = (search.get('session') || '').trim();
+let sessionContext = null;
+
+async function loadSessionContext() {
+  if (!presetSessionId) return;
+  try {
+    const data = await api.getSession(presetSessionId);
+    sessionContext = data.session;
+    const chip = document.querySelector('[data-session-chip]');
+    if (chip) {
+      chip.textContent = `Scope: ${data.session.title}`;
+      chip.href = `session.html?id=${encodeURIComponent(data.session.id)}`;
+      chip.title = 'This quiz only searches material in this session. Open the session.';
+      chip.hidden = false;
+    }
+  } catch {
+    sessionContext = null; // fall back to all material; errors surface on generate
+  }
+}
+
+loadSessionContext().then(() =>
+  populateScopeSelect(scopeSelect, document.querySelector('[data-scope-note]'),
+    { sessionId: sessionContext ? sessionContext.id : null }));
 
 const state = {
   quiz: null,     // { id, topic, difficulty, questions }
@@ -81,6 +108,7 @@ form.addEventListener('submit', async (event) => {
       questionCount: Number(countSelect.value),
       difficulty,
       sourceIds,
+      sessionId: sessionContext ? sessionContext.id : null,
     });
     const questions = data.quiz.questions;
     state.quiz = data.quiz;
@@ -94,7 +122,13 @@ form.addEventListener('submit', async (event) => {
     live.textContent = `Quiz ready: ${questions.length} questions.`;
     stage.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
-    setSetupStatus('error', errorMessage(error));
+    if (error.code === 'SESSION_EMPTY') {
+      setSetupStatus('warn', `${icon('info', { size: 16 })} <span><strong>${escapeHtml(sessionContext ? sessionContext.title : 'This session')} has no material yet.</strong>
+        Add a file or web page first — then quizzes can search it.
+        <a href="session.html?id=${encodeURIComponent(presetSessionId)}">Add material</a></span>`);
+    } else {
+      setSetupStatus('error', errorMessage(error));
+    }
   } finally {
     setGenerating(false);
   }
@@ -425,8 +459,6 @@ stage.addEventListener('click', (event) => {
 
 /* ------------------------------------------------------------------ init */
 
-const search = new URLSearchParams(window.location.search);
-const presetTopic = (search.get('topic') || '').trim();
 if (presetTopic) topicInput.value = presetTopic;
 
 render();
