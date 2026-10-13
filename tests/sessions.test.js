@@ -67,7 +67,7 @@ test('migration upgrades a real v1 database without losing rows', () => {
     assert.ok(cols.has(col), `missing column ${col}`);
   }
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='vector_chunks'").get(), 'vector_chunks table');
-  assert.equal(db.prepare("SELECT value FROM app_meta WHERE key = 'schema_version'").get().value, '5');
+  assert.equal(db.prepare("SELECT value FROM app_meta WHERE key = 'schema_version'").get().value, '6');
   assert.ok(fs.existsSync(`${dbPath}.v1.bak`), 'v1 backup copy');
   // Idempotent: re-open does not re-badge or duplicate anything.
   openDb(dbPath);

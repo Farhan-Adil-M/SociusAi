@@ -39,6 +39,9 @@ const db = {
   ],
   deckCards: new Map(), // deckId → [{ idx, front, back, citations, status, reviewedAt }]
   suggestions: new Map(), // sourceId → suggestion (stored server-side, like the real backend)
+  // v1.4 singleton learner profile — one per installation, resets with this
+  // demo database when the page reloads (same lifecycle as sessions/decks).
+  profile: { state: 'new', purpose: null, interests: [], goals: [], preferences: {}, subjects: [], updatedAt: null },
 };
 
 const CATEGORY_VALUES = ['subject', 'research', 'self-study', 'exam-prep', 'general'];
@@ -228,6 +231,250 @@ db.deckCards.set('deck_demo02', FLASHCARD_CARDS.slice(3, 7).map((card, idx) => (
   idx, front: card.front, back: card.back, citations: card.citations, status: 'new', reviewedAt: null,
 })));
 
+/* ------------------------------------- learner profile & onboarding (v1.4) */
+
+const PURPOSE_VALUES = ['exam', 'project', 'research', 'deep-understanding', 'general'];
+const STYLE_VALUES = ['step-by-step', 'examples-first', 'visual', 'concise', 'guided-questions'];
+const APPROACH_VALUES = [...STYLE_VALUES, 'simpler', 'different'];
+const FAMILIARITY_VALUES = ['none', 'basic', 'familiar', 'confident'];
+
+// Whitelist-only extraction, mirroring the contract's "off-list answers are
+// simply not stored" rule. Interests are free-form labels, so a small keyword
+// bank is enough for the scripted demo interview.
+const INTEREST_KEYWORDS = [
+  'football', 'games', 'music', 'art', 'drawing', 'reading', 'space',
+  'biology', 'chemistry', 'physics', 'history', 'maths', 'mathematics',
+  'coding', 'programming',
+];
+
+const ONBOARDING_OPENING =
+  "Hi! A quick intro so the tutor can teach your way. Your answers are saved in this app's " +
+  'database to personalise your learning, and you can view, edit, or delete them any time on the ' +
+  'Profile page. First question: which subjects or topics are you most interested in right now? ' +
+  '(Demo interview — replies are scripted.)';
+
+const ONBOARDING_FOLLOWUPS = [
+  'Noted. What are you working towards at the moment — an exam, a project, research, deep ' +
+  'understanding, or just general learning?',
+  'Got it. Last question: how do you like things explained — step-by-step, examples first, ' +
+  'visual, concise, or guided questions?',
+];
+
+const ONBOARDING_CLOSING =
+  'All set — your answers are saved. You can review or edit them any time on the Profile page, ' +
+  'or use "Restart intro" there to run this again. (Demo interview complete.)';
+
+// Scripted 3-turn interview: interests → goals/purpose → style. `turn` counts
+// processed user answers; like db, it resets when the page reloads.
+const onboarding = { turn: 0 };
+
+function freshProfile() {
+  return { state: 'new', purpose: null, interests: [], goals: [], preferences: {}, subjects: [], updatedAt: null };
+}
+
+/** GET/PATCH response shape — a defensive copy, exactly like the contract. */
+function profileView() {
+  return {
+    state: db.profile.state,
+    purpose: db.profile.purpose,
+    interests: db.profile.interests.map((item) => ({ ...item })),
+    goals: db.profile.goals.map((item) => ({ ...item })),
+    preferences: Object.fromEntries(
+      Object.entries(db.profile.preferences).map(([key, value]) => [key, { ...value }]),
+    ),
+    subjects: db.profile.subjects.map((item) => ({ ...item })),
+    updatedAt: db.profile.updatedAt,
+  };
+}
+
+function extractInterests(text) {
+  const lower = text.toLowerCase();
+  for (const keyword of INTEREST_KEYWORDS) {
+    if (lower.includes(keyword) && !db.profile.interests.some((item) => item.label === keyword)) {
+      db.profile.interests.push({ label: keyword, source: 'stated' });
+    }
+  }
+}
+
+function extractPurpose(text) {
+  const lower = text.toLowerCase();
+  if (/deep[- ]understanding|understand(ing)? (it|things|this) deeply/.test(lower)) db.profile.purpose = 'deep-understanding';
+  else if (lower.includes('exam')) db.profile.purpose = 'exam';
+  else if (lower.includes('project')) db.profile.purpose = 'project';
+  else if (lower.includes('research')) db.profile.purpose = 'research';
+  else if (lower.includes('general')) db.profile.purpose = 'general';
+}
+
+function extractExplanationStyle(text) {
+  const lower = text.toLowerCase();
+  const matches = [
+    ['step-by-step', /step[- ]by[- ]step/],
+    ['examples-first', /examples?[ -]first|examples/],
+    ['visual', /visual|diagrams?|pictures?/],
+    ['concise', /concise|short|brief/],
+    ['guided-questions', /guided[- ]questions|quiz me/],
+  ];
+  const hit = matches.find(([, regex]) => regex.test(lower));
+  if (hit) db.profile.preferences.explanationStyle = { value: hit[0], source: 'stated' };
+}
+
+function onboardingMessage(body) {
+  if (db.profile.state === 'completed') {
+    throw httpError('ONBOARDING_COMPLETE', 'Onboarding already finished.', 409);
+  }
+  if (body.message === null) {
+    onboarding.turn = 0;
+    db.profile.state = 'in_progress';
+    return { reply: ONBOARDING_OPENING, state: 'in_progress', questionsAsked: 1, done: false };
+  }
+  if (typeof body.message !== 'string') {
+    throw httpError('VALIDATION_ERROR', 'Send message as a string (1–800 characters) or null to start the interview.', 400);
+  }
+  const trimmed = body.message.trim();
+  if (trimmed.length < 1 || trimmed.length > 800) {
+    throw httpError('VALIDATION_ERROR', 'message must be between 1 and 800 characters.', 400);
+  }
+  if (db.profile.state !== 'in_progress') db.profile.state = 'in_progress';
+  return advanceInterview(trimmed);
+}
+
+function advanceInterview(message) {
+  db.profile.updatedAt = new Date().toISOString();
+  if (onboarding.turn === 0) {
+    extractInterests(message);
+    onboarding.turn = 1;
+    return { reply: ONBOARDING_FOLLOWUPS[0], state: 'in_progress', questionsAsked: 2, done: false };
+  }
+  if (onboarding.turn === 1) {
+    extractPurpose(message);
+    onboarding.turn = 2;
+    return { reply: ONBOARDING_FOLLOWUPS[1], state: 'in_progress', questionsAsked: 3, done: false };
+  }
+  extractExplanationStyle(message);
+  onboarding.turn = 3;
+  db.profile.state = 'completed';
+  return { reply: ONBOARDING_CLOSING, state: 'completed', questionsAsked: 3, done: true };
+}
+
+function patchProfile(body) {
+  const allowed = ['interests', 'goals', 'purpose', 'preferences', 'subjects'];
+  const entries = Object.entries(
+    body && typeof body === 'object' && !Array.isArray(body) ? body : {},
+  );
+  const unknown = entries.map(([key]) => key).filter((key) => !allowed.includes(key));
+  if (unknown.length > 0) {
+    throw httpError('VALIDATION_ERROR', `Unknown field(s): ${unknown.join(', ')}. Allowed: ${allowed.join(', ')}.`, 400);
+  }
+  const patch = Object.fromEntries(entries.filter(([key]) => allowed.includes(key)));
+  if (Object.keys(patch).length === 0) {
+    throw httpError('VALIDATION_ERROR', `Provide at least one field to update (${allowed.join(', ')}).`, 400);
+  }
+
+  if (patch.interests !== undefined) {
+    if (!Array.isArray(patch.interests)) {
+      throw httpError('VALIDATION_ERROR', 'interests must be an array of { label }.', 400);
+    }
+    if (patch.interests.length > 12) {
+      throw httpError('VALIDATION_ERROR', 'Up to 12 interests.', 400);
+    }
+    for (const item of patch.interests) {
+      const label = item && typeof item === 'object' ? String(item.label ?? '').trim() : '';
+      if (label.length < 1 || label.length > 40) {
+        throw httpError('VALIDATION_ERROR', 'Each interest needs a label of 1–40 characters.', 400);
+      }
+    }
+  }
+
+  if (patch.goals !== undefined) {
+    if (!Array.isArray(patch.goals)) {
+      throw httpError('VALIDATION_ERROR', 'goals must be an array of { label, deadline? }.', 400);
+    }
+    if (patch.goals.length > 6) {
+      throw httpError('VALIDATION_ERROR', 'Up to 6 goals.', 400);
+    }
+    for (const item of patch.goals) {
+      const label = item && typeof item === 'object' ? String(item.label ?? '').trim() : '';
+      if (label.length < 1 || label.length > 120) {
+        throw httpError('VALIDATION_ERROR', 'Each goal needs a label of 1–120 characters.', 400);
+      }
+      if (item.deadline !== undefined && item.deadline !== null && !/^\d{4}-\d{2}-\d{2}$/.test(String(item.deadline))) {
+        throw httpError('VALIDATION_ERROR', 'Goal deadlines must use the YYYY-MM-DD format.', 400);
+      }
+    }
+  }
+
+  if (patch.purpose !== undefined && patch.purpose !== null && !PURPOSE_VALUES.includes(patch.purpose)) {
+    throw httpError('VALIDATION_ERROR', `purpose must be one of: ${PURPOSE_VALUES.join(', ')} (or null).`, 400);
+  }
+
+  if (patch.preferences !== undefined) {
+    const prefs = patch.preferences;
+    if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+      throw httpError('VALIDATION_ERROR', 'preferences must be an object.', 400);
+    }
+    if (Object.keys(prefs).some((key) => key !== 'explanationStyle')) {
+      throw httpError('VALIDATION_ERROR', 'preferences only supports explanationStyle.', 400);
+    }
+    if (prefs.explanationStyle !== undefined && prefs.explanationStyle !== null
+        && !STYLE_VALUES.includes(prefs.explanationStyle)) {
+      throw httpError('VALIDATION_ERROR', `explanationStyle must be one of: ${STYLE_VALUES.join(', ')}.`, 400);
+    }
+  }
+
+  if (patch.subjects !== undefined) {
+    if (!Array.isArray(patch.subjects)) {
+      throw httpError('VALIDATION_ERROR', 'subjects must be an array of { subject, familiarity, confidence? }.', 400);
+    }
+    if (patch.subjects.length > 12) {
+      throw httpError('VALIDATION_ERROR', 'Up to 12 subjects.', 400);
+    }
+    for (const item of patch.subjects) {
+      const subject = item && typeof item === 'object' ? String(item.subject ?? '').trim() : '';
+      if (subject.length < 1 || subject.length > 60) {
+        throw httpError('VALIDATION_ERROR', 'Each subject needs a name of 1–60 characters.', 400);
+      }
+      if (!FAMILIARITY_VALUES.includes(item.familiarity)) {
+        throw httpError('VALIDATION_ERROR', `familiarity must be one of: ${FAMILIARITY_VALUES.join(', ')}.`, 400);
+      }
+      if (item.confidence !== undefined && item.confidence !== null
+          && (!Number.isInteger(item.confidence) || item.confidence < 1 || item.confidence > 5)) {
+        throw httpError('VALIDATION_ERROR', 'confidence must be a whole number from 1 to 5.', 400);
+      }
+    }
+  }
+
+  // Valid — replace each provided key wholesale, forcing source: "stated"
+  // (any client-sent source field is ignored, per the contract).
+  db.profile.updatedAt = new Date().toISOString();
+  if (patch.interests !== undefined) {
+    db.profile.interests = patch.interests.map((item) => ({ label: String(item.label).trim(), source: 'stated' }));
+  }
+  if (patch.goals !== undefined) {
+    db.profile.goals = patch.goals.map((item) => ({
+      label: String(item.label).trim(),
+      ...(item.deadline ? { deadline: String(item.deadline) } : {}),
+      source: 'stated',
+    }));
+  }
+  if (patch.purpose !== undefined) db.profile.purpose = patch.purpose;
+  if (patch.preferences !== undefined) {
+    db.profile.preferences = patch.preferences.explanationStyle
+      ? { explanationStyle: { value: patch.preferences.explanationStyle, source: 'stated' } }
+      : {};
+  }
+  if (patch.subjects !== undefined) {
+    db.profile.subjects = patch.subjects.map((item) => ({
+      subject: String(item.subject).trim(),
+      familiarity: item.familiarity,
+      confidence: item.confidence ?? null,
+      source: 'stated',
+    }));
+  }
+  // Direct profile editing counts as opting out of the intro (contract note).
+  if (db.profile.state === 'new') db.profile.state = 'skipped';
+  return { profile: profileView() };
+}
+
 /* --------------------------------------------------------- mock router */
 
 const submittedQuizzes = new Map(); // quizId → stored result (409 on repeat)
@@ -261,16 +508,50 @@ export async function handleMock(path, { method = 'GET', body = {} } = {}) {
 
   if (route === 'GET /api/learner/progress') return PROGRESS;
 
+  /* -------------------------------------- learner profile & onboarding (v1.4) */
+
+  if (route === 'GET /api/profile') return { profile: profileView() };
+
+  if (route === 'POST /api/onboarding/message') return onboardingMessage(body);
+
+  if (route === 'POST /api/onboarding/skip') {
+    if (db.profile.state === 'completed') {
+      throw httpError('ONBOARDING_COMPLETE', 'Onboarding already finished.', 409);
+    }
+    db.profile.state = 'skipped';
+    db.profile.updatedAt = new Date().toISOString();
+    onboarding.turn = 0;
+    return { profile: profileView() };
+  }
+
+  if (route === 'PATCH /api/profile') return patchProfile(body);
+
+  if (route === 'DELETE /api/profile') {
+    db.profile = freshProfile(); // state returns to "new", like the real backend
+    onboarding.turn = 0;
+    return null; // 204, no body
+  }
+
   if (route === 'POST /api/tutor/ask') {
     const question = (body.question || '').trim();
     if (question.length < 3 || question.length > 300) {
       throw httpError('VALIDATION_ERROR', 'Question must be between 3 and 300 characters.', 400);
     }
+    if (body.approach !== undefined && !APPROACH_VALUES.includes(body.approach)) {
+      throw httpError('VALIDATION_ERROR', `approach must be one of: ${APPROACH_VALUES.join(', ')}.`, 400);
+    }
     if (body.sessionId) assertSessionHasSources(body.sessionId);
     const lower = question.toLowerCase();
-    if (/mitosis|meiosis|chromosome/.test(lower)) return MITOSIS_ANSWER;
-    if (/quantum|rocket|football|weather/.test(lower)) return ABSTAIN_ANSWER;
-    return PHOTOSYNTHESIS_ANSWER;
+    let answer;
+    if (/mitosis|meiosis|chromosome/.test(lower)) answer = MITOSIS_ANSWER;
+    else if (/quantum|rocket|football|weather/.test(lower)) answer = ABSTAIN_ANSWER;
+    else answer = PHOTOSYNTHESIS_ANSWER;
+    // v1.4: approachUsed appears only when the learner sent an approach or a
+    // personalisation preference exists (contract: "present only when…").
+    const approachUsed = body.approach !== undefined
+      ? body.approach
+      : (db.profile.preferences.explanationStyle || {}).value || null;
+    return approachUsed ? { ...answer, approachUsed } : answer;
   }
 
   if (route === 'POST /api/flashcards/generate') {

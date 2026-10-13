@@ -4,11 +4,13 @@
 // its citations. Loading, empty and error states are all handled per block.
 
 import { mountShell, mountHealthBanner } from '../components/shell.js';
-import { offerSuggestion } from '../components/material-import.js';
+import {
+  offerSuggestion, checkUploadFile, checkWebpageInput, findDuplicateSource,
+} from '../components/material-import.js';
 import { api } from '../api.js';
 import {
   icon, escapeHtml, renderCitations, wireCitations,
-  showEmpty, showError, errorMessage,
+  showEmpty, showError, errorMessage, formatDate,
 } from '../ui.js';
 
 mountShell('study');
@@ -174,7 +176,30 @@ function append(html) {
 
 let answerCount = 0; // keeps citation detail-panel ids unique per answer block
 
-function answerHtml(data) {
+// The style chips shown under every answer send the same question again as a
+// NEW exchange with that one-off approach (v1.4 `approach` enum).
+const STYLE_CHIPS = ['step-by-step', 'examples-first', 'concise'];
+
+function styleRowHtml(uid) {
+  const chips = STYLE_CHIPS.map((approach) => `
+    <button type="button" class="exchange-style-chip" data-style-chip data-approach="${approach}">${approach}</button>`).join('');
+
+  return `
+    <div class="exchange-style">
+      <button type="button" class="exchange-style-btn" data-explain
+              title="Ask the tutor again to explain this a different way">
+        ${icon('refresh', { size: 12 })} Explain differently
+      </button>
+      <button type="button" class="exchange-style-btn" data-style-toggle
+              aria-expanded="false" aria-controls="style-${uid}"
+              title="Ask again with a specific teaching style">
+        ${icon('spark', { size: 12 })} Style ${icon('chevronDown', { size: 10 })}
+      </button>
+      <span class="exchange-style-chips" id="style-${uid}" hidden>${chips}</span>
+    </div>`;
+}
+
+function answerHtml(data, question = '') {
   answerCount += 1;
   const paragraphs = String(data.answer || '')
     .split(/\n+/)
@@ -195,12 +220,19 @@ function answerHtml(data) {
        </div>`
     : (data.needsContent ? '' : '<p class="exchange-citations-label" style="margin-top: var(--s3);">No passages were retrieved for this answer.</p>');
 
+  // approachUsed only appears when personalisation was active (see contract v1.4)
+  const approachUsed = data.approachUsed
+    ? `<p class="exchange-approach">Approach: ${escapeHtml(data.approachUsed)}</p>`
+    : '';
+
   return `
-    <article class="exchange exchange--answer">
+    <article class="exchange exchange--answer" data-q="${escapeHtml(question)}">
       <p class="exchange-who">Tutor</p>
       <div class="exchange-a-body">${paragraphs}</div>
       ${abstain}
       ${citations}
+      ${approachUsed}
+      ${styleRowHtml(`a${answerCount}`)}
     </article>`;
 }
 
@@ -222,11 +254,18 @@ function setSending(value) {
   sendButton.disabled = value || input.value.trim().length < 3;
 }
 
-async function ask(question) {
+/** `approach` (optional) is a one-off style request for THIS answer only. */
+async function ask(question, { approach } = {}) {
+  const asked = question.trim();
+  // Small chip naming the requested style, so the compared answers are labelled.
+  const styleChip = approach
+    ? ` <span class="q-approach-chip">(as: ${escapeHtml(approach)})</span>`
+    : '';
+
   const questionBlock = append(`
     <article class="exchange exchange--question">
       <p class="exchange-who">You</p>
-      <p>${escapeHtml(question)}</p>
+      <p>${escapeHtml(asked)}${styleChip}</p>
     </article>`);
 
   const pending = append(`
@@ -241,11 +280,12 @@ async function ask(question) {
 
   try {
     const data = await api.askTutor({
-      question,
+      question: asked,
       sourceIds: selectedSourceIds(),
       sessionId: sessionContext ? sessionContext.id : null,
+      approach,
     });
-    pending.outerHTML = answerHtml(data);
+    pending.outerHTML = answerHtml(data, asked);
     liveRegion.textContent = 'The tutor answered.';
   } catch (error) {
     if (error.code === 'SESSION_EMPTY') {
@@ -263,13 +303,16 @@ async function ask(question) {
       return;
     }
     const message = errorMessage(error);
+    // Failed style sends are retried WITH their approach (data-retry-approach);
+    // plain question retries stay unchanged.
+    const approachAttr = approach ? ` data-retry-approach="${escapeHtml(approach)}"` : '';
     pending.outerHTML = `
       <div class="exchange-pending" style="display:block; padding:0; background: none;">
         <div class="banner banner-error">${icon('alert', { size: 16 })}
           <span><strong>The tutor could not answer.</strong> ${escapeHtml(message)}</span>
         </div>
         <div style="margin-top: var(--s3);">
-          <button type="button" class="btn btn-secondary btn-sm" data-retry="${escapeHtml(question)}">Ask again</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-retry="${escapeHtml(asked)}"${approachAttr}>Ask again</button>
         </div>
       </div>`;
     liveRegion.textContent = `Error: ${message}`;
@@ -283,8 +326,38 @@ transcript.addEventListener('click', (event) => {
   const retry = event.target.closest('[data-retry]');
   if (!retry) return;
   const question = retry.dataset.retry;
+  const approach = retry.dataset.retryApproach || undefined;
   retry.closest('.exchange-pending')?.remove();
-  ask(question);
+  ask(question, { approach });
+});
+
+/* Style row under each answer: "Explain differently" plus the Style chips.
+   Every action re-asks the SAME question as a NEW exchange — older answers
+   stay above for comparison. Inert while an answer is being sent. */
+transcript.addEventListener('click', (event) => {
+  if (sending) return;
+
+  const explain = event.target.closest('[data-explain]');
+  if (explain) {
+    const exchange = explain.closest('.exchange');
+    if (exchange && exchange.dataset.q) ask(exchange.dataset.q, { approach: 'different' });
+    return;
+  }
+
+  const chip = event.target.closest('[data-style-chip]');
+  if (chip) {
+    const exchange = chip.closest('.exchange');
+    if (exchange && exchange.dataset.q) ask(exchange.dataset.q, { approach: chip.dataset.approach });
+    return;
+  }
+
+  const toggle = event.target.closest('[data-style-toggle]');
+  if (toggle) {
+    const chips = document.getElementById(toggle.getAttribute('aria-controls'));
+    if (!chips) return;
+    chips.hidden = !chips.hidden;
+    toggle.setAttribute('aria-expanded', String(!chips.hidden));
+  }
 });
 
 composer.addEventListener('submit', (event) => {
@@ -321,18 +394,34 @@ function showAddStatus(kind, message) {
   addStatus.innerHTML = `<div class="banner banner-${kind}" style="font-size: var(--fs-xs); padding: var(--s2) var(--s3);">${escapeHtml(message)}</div>`;
 }
 
+/* Informational "you already added this" hint, shared with the session page's
+   import panel (same single copy of the check in material-import.js). It is
+   exact-match only and NEVER blocks: two versions of the same notes must
+   still both import. */
+const dupHost = document.createElement('div');
+dupHost.setAttribute('data-dup-hint', '');
+dupHost.setAttribute('aria-live', 'polite');
+addStatus.insertAdjacentElement('beforebegin', dupHost);
+
+function showDuplicateHint(matched) {
+  if (!matched) { dupHost.innerHTML = ''; return; }
+  dupHost.innerHTML = `
+    <div class="banner banner-info">${icon('info', { size: 16 })}
+      <span>You already added <strong>«${escapeHtml(matched.title)}»</strong> (${escapeHtml(formatDate(matched.createdAt))}) — adding it again creates a second copy of the same text.</span>
+    </div>`;
+}
+
 fileInput.addEventListener('change', async () => {
   const file = fileInput.files && fileInput.files[0];
   if (!file) return;
-  if (!/\.(pdf|pptx)$/i.test(file.name)) {
-    showAddStatus('error', 'Unsupported file — use a .pdf or .pptx.');
-    fileInput.value = '';
-    return;
-  }
+  const problem = checkUploadFile(file);
+  if (problem) { showAddStatus('error', problem); fileInput.value = ''; return; }
+  showDuplicateHint(findDuplicateSource(sources, { fileName: file.name }));
   addStatus.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Extracting and indexing ${escapeHtml(file.name)}…</div>`;
   try {
     const data = await api.uploadSource(file);
     fileInput.value = '';
+    showDuplicateHint(null);
     await afterImport(data.source);
   } catch (error) {
     showAddStatus('error', errorMessage(error));
@@ -363,19 +452,274 @@ webpageForm.addEventListener('submit', async (event) => {
   const url = document.querySelector('#webpage-url').value.trim();
   const text = document.querySelector('#webpage-text').value.trim();
 
-  if (!/^https?:\/\/\S+\.\S+/.test(url)) { showAddStatus('error', 'Enter a full web address, starting with http:// or https://.'); return; }
-  if (text.length < 50) { showAddStatus('error', `Paste at least 50 characters of page text (currently ${text.length}).`); return; }
-  if (text.length > 200000) { showAddStatus('error', 'That text is too long — 200,000 characters maximum.'); return; }
+  const problem = checkWebpageInput(url, text);
+  if (problem) { showAddStatus('error', problem); return; }
+  showDuplicateHint(findDuplicateSource(sources, { url }));
 
   addStatus.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Indexing the page…</div>`;
   try {
     const data = await api.addWebpage({ url, text });
     webpageForm.reset();
+    showDuplicateHint(null);
     await afterImport(data.source);
   } catch (error) {
     showAddStatus('error', errorMessage(error));
   }
 });
+
+/* ------------------------------------------------------ onboarding (v1.4) */
+
+const onboardPanel = document.getElementById('onboarding-panel');
+
+let offerDismissed = false; // "Not now" → offer stays gone for THIS page load only
+let onboardOpen = false;
+let onboardDone = false;
+let onboardSending = false;
+let onboardLastSent; // undefined = opening turn not sent yet; null = opening turn; string = last user reply
+let profileState = 'new';
+
+const onboardChat = () => onboardPanel.querySelector('[data-onboard-chat]');
+
+function setOnboardBusy(value) {
+  onboardSending = value;
+  const input = onboardPanel.querySelector('[data-onboard-input]');
+  const send = onboardPanel.querySelector('[data-onboard-send]');
+  const skip = onboardPanel.querySelector('[data-onboard-skip]');
+  if (input) input.disabled = value || onboardDone;
+  if (send) send.disabled = value || onboardDone || !(input && input.value.trim());
+  if (skip) skip.disabled = value;
+}
+
+function onboardScroll() {
+  const chat = onboardChat();
+  if (chat) chat.scrollTop = chat.scrollHeight;
+}
+
+function onboardBubble(kind, text) {
+  const chat = onboardChat();
+  if (!text || !chat) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = `
+    <article class="exchange exchange--${kind}">
+      <p class="exchange-who">${kind === 'answer' ? 'Tutor' : 'You'}</p>
+      <p class="${kind === 'answer' ? '' : 'onboard-bubble-q'}">${escapeHtml(text)}</p>
+    </article>`.trim();
+  const node = holder.firstElementChild;
+  chat.appendChild(node);
+  onboardScroll();
+}
+
+function onboardPending() {
+  const chat = onboardChat();
+  if (!chat) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = `
+    <div class="exchange-pending">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>${onboardLastSent === undefined || onboardLastSent === null ? 'Setting up…' : 'Thinking…'}</span>
+    </div>`.trim();
+  chat.appendChild(holder.firstElementChild);
+  onboardScroll();
+}
+
+function showOnboardError(message) {
+  const chat = onboardChat();
+  if (!chat) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = `
+    <div class="onboard-error">
+      <div class="banner banner-error">${icon('alert', { size: 16 })}
+        <span><strong>Setup hit a snag.</strong> ${escapeHtml(message)}</span>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" data-onboard-retry>Try again</button>
+    </div>`.trim();
+  chat.appendChild(holder.firstElementChild);
+  onboardScroll();
+}
+
+function renderOnboardShell(title) {
+  onboardPanel.hidden = false;
+  onboardOpen = true;
+  onboardDone = false;
+  onboardPanel.innerHTML = `
+    <div class="onboard-head">
+      <h3 class="onboard-title">${icon('spark', { size: 14 })} ${escapeHtml(title)}</h3>
+    </div>
+    <div class="onboard-chat" data-onboard-chat role="log" aria-live="polite"></div>
+    <form class="onboard-composer" data-onboard-form novalidate>
+      <label class="sr-only" for="onboard-input">Your reply</label>
+      <input class="input" id="onboard-input" data-onboard-input maxlength="800" autocomplete="off" placeholder="Type your answer…">
+      <button class="btn btn-primary btn-sm" type="submit" data-onboard-send disabled>Send</button>
+      <button class="btn btn-secondary btn-sm" type="button" data-onboard-skip>Skip setup</button>
+    </form>`;
+
+  const input = onboardPanel.querySelector('[data-onboard-input]');
+  const send = onboardPanel.querySelector('[data-onboard-send]');
+  input.addEventListener('input', () => {
+    send.disabled = onboardSending || onboardDone || input.value.trim().length === 0;
+  });
+  input.focus();
+}
+
+function showOnboardNote(html) {
+  onboardOpen = false;
+  onboardPanel.hidden = false;
+  onboardPanel.innerHTML = `<p class="onboard-note">${html}</p>`;
+}
+
+function hideOnboarding() {
+  onboardOpen = false;
+  onboardPanel.hidden = true;
+  onboardPanel.innerHTML = '';
+}
+
+function renderOffer() {
+  onboardPanel.hidden = false;
+  onboardPanel.innerHTML = `
+    <div class="onboard-card">
+      <span>Introduce yourself in ~2 minutes and the tutor will teach in your style — examples, step-by-step or straight to the point.</span>
+      <span class="onboard-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-onboard-start>${icon('spark', { size: 12 })} Start</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-onboard-later>Not now</button>
+      </span>
+    </div>`;
+}
+
+async function openOnboarding(mode) {
+  if (onboardOpen) return;
+  renderOnboardShell(mode === 'resume' ? 'Finish your intro' : 'Introduce yourself');
+  await sendOnboardTurn(null);
+}
+
+/**
+ * One onboarding turn: user reply (or null to open the interview), then the
+ * tutor's next question. `echoUser` skips re-rendering the user bubble on retry.
+ */
+async function sendOnboardTurn(message, { echoUser = true } = {}) {
+  const chat = onboardChat();
+  if (!chat || onboardSending) return;
+
+  if (message !== null) {
+    onboardLastSent = message; // kept for retry, even if this turn fails
+    if (echoUser) onboardBubble('question', message);
+  }
+
+  onboardPending();
+  setOnboardBusy(true);
+  try {
+    const data = await api.sendOnboardingMessage(message);
+    chat.querySelector('.exchange-pending')?.remove();
+    onboardBubble('answer', data.reply);
+
+    if (data.done) {
+      onboardDone = true;
+      onboardLastSent = undefined; // nothing left to retry
+      chat.appendChild(Object.assign(document.createElement('div'), {
+        className: 'onboard-error',
+        innerHTML: `<button type="button" class="btn btn-primary btn-sm" data-onboard-continue>${icon('arrowRight', { size: 12 })} Continue to studying</button>`,
+      }));
+      onboardScroll();
+      setOnboardBusy(false);
+      return;
+    }
+  } catch (error) {
+    chat.querySelector('.exchange-pending')?.remove();
+    if (error.code === 'ONBOARDING_COMPLETE') {
+      showOnboardNote('Setup already finished. Manage it on the <a href="profile.html">Profile</a> page.');
+      return;
+    }
+    // 502/504/NIM and friends: banner inside the panel with a Retry action.
+    showOnboardError(errorMessage(error));
+    setOnboardBusy(false);
+    return;
+  } finally {
+    if (onboardSending) setOnboardBusy(false);
+  }
+}
+
+function retryOnboard() {
+  if (onboardSending) return;
+  // Opening turn never landed → start the interview again; otherwise re-send
+  // the last user reply (its bubble is already in the transcript).
+  if (onboardLastSent === undefined) return sendOnboardTurn(null);
+  return sendOnboardTurn(onboardLastSent, { echoUser: false });
+}
+
+async function skipOnboardingFlow() {
+  if (onboardSending) return;
+  setOnboardBusy(true);
+  try {
+    await api.skipOnboarding();
+    showOnboardNote('Intro skipped — edit preferences anytime on the <a href="profile.html">Profile</a> page.');
+  } catch (error) {
+    setOnboardBusy(false);
+    if (error.code === 'ONBOARDING_COMPLETE') {
+      showOnboardNote('Setup already finished. Manage it on the <a href="profile.html">Profile</a> page.');
+      return;
+    }
+    showOnboardError(errorMessage(error));
+    return;
+  }
+  setOnboardBusy(false);
+}
+
+onboardPanel.addEventListener('submit', (event) => {
+  if (!event.target.matches('[data-onboard-form]')) return;
+  event.preventDefault();
+  if (onboardSending || onboardDone) return;
+  const text = onboardPanel.querySelector('[data-onboard-input]').value.trim();
+  if (text.length < 1 || text.length > 800) return;
+  const input = onboardPanel.querySelector('[data-onboard-input]');
+  input.value = '';
+  sendOnboardTurn(text);
+});
+
+onboardPanel.addEventListener('click', (event) => {
+  if (event.target.closest('[data-onboard-retry]')) {
+    event.target.closest('.onboard-error')?.remove();
+    retryOnboard();
+    return;
+  }
+  if (event.target.closest('[data-onboard-start]')) { openOnboarding('new'); return; }
+  if (event.target.closest('[data-onboard-continue]')) {
+    showOnboardNote('Teaching you your way — tweak it in the <a href="profile.html">Profile</a> page.');
+    return;
+  }
+  if (event.target.closest('[data-onboard-skip]')) { skipOnboardingFlow(); return; }
+  if (event.target.closest('[data-onboard-later]')) {
+    offerDismissed = true; // re-offer on the next visit is intended
+    hideOnboarding();
+  }
+});
+
+async function initOnboarding() {
+  let profile = null;
+  try {
+    profile = (await api.getProfile()).profile;
+  } catch {
+    return; // no profile, no nudges — tutor works as before
+  }
+  profileState = profile.state;
+  const urlOpen = params.get('onboarding') === '1';
+
+  if (profileState === 'in_progress') {
+    openOnboarding('resume'); // server kept the transcript
+  } else if (profileState === 'completed') {
+    if (urlOpen) {
+      showOnboardNote('Your profile is already set up — edit it on the <a href="profile.html">Profile</a> page.');
+    } else {
+      showOnboardNote('Teaching you your way — tweak it in the <a href="profile.html">Profile</a> page.');
+    }
+  } else if (profileState === 'skipped') {
+    if (urlOpen) {
+      showOnboardNote('Your profile is already set up — edit it on the <a href="profile.html">Profile</a> page.');
+    }
+  } else if (urlOpen) {
+    openOnboarding('new');
+  } else if (!offerDismissed) {
+    renderOffer();
+  }
+}
 
 /* ------------------------------------------------------------------ init */
 
@@ -388,3 +732,4 @@ if (presetTopic) {
   input.value = `What should I know about ${presetTopic}?`;
 }
 updateComposer();
+initOnboarding(); // v1.4 offer / setup panel — independent of material loading

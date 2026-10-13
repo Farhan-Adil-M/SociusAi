@@ -128,12 +128,12 @@ export const api = {
   addWebpage: ({ url, title, text }) =>
     request('/api/sources/webpage', { method: 'POST', body: { url, ...(title ? { title } : {}), text } }),
 
-  // POST /api/tutor/ask
-  askTutor: ({ question, sourceIds, sessionId }) =>
-    request('/api/tutor/ask', {
-      method: 'POST',
-      body: withSession(withSources({ question }, sourceIds), sessionId),
-    }),
+  // POST /api/tutor/ask — optional approach: one-off style override (v1.4)
+  askTutor: ({ question, sourceIds, sessionId, approach }) => {
+    const payload = withSession(withSources({ question }, sourceIds), sessionId);
+    if (approach) payload.approach = approach;
+    return request('/api/tutor/ask', { method: 'POST', body: payload });
+  },
 
   // POST /api/flashcards/generate
   generateFlashcards: ({ topic, count, sourceIds, sessionId }) =>
@@ -219,4 +219,30 @@ export const api = {
   // DELETE /api/decks/:deckId → 204
   deleteDeck: (deckId) =>
     request(`/api/decks/${encodeURIComponent(deckId)}`, { method: 'DELETE' }),
+
+  /* ------------------------------------------------ learner profile (v1.4) */
+
+  // GET /api/profile → { profile } (state "new" with empty arrays when unset)
+  getProfile: () => request('/api/profile'),
+
+  // POST /api/onboarding/message — { message: string (1–800) | null to start }
+  // → { reply, state, questionsAsked, done }
+  sendOnboardingMessage: (message) =>
+    request('/api/onboarding/message', {
+      method: 'POST',
+      body: message === null ? { message: null } : { message },
+    }),
+
+  // POST /api/onboarding/skip → { profile }
+  skipOnboarding: () => request('/api/onboarding/skip', { method: 'POST', body: {} }),
+
+  // PATCH /api/profile — any subset of { interests, goals, purpose,
+  // preferences, subjects }; each provided key replaces that value wholesale
+  updateProfile: (patch) =>
+    request('/api/profile', { method: 'PATCH', body: patch }),
+
+  // DELETE /api/profile → 204, no body. An empty body makes request() resolve
+  // to null (text is '' → JSON.parse is skipped → data stays null) — that is
+  // the success value here, not a failure.
+  deleteProfile: () => request('/api/profile', { method: 'DELETE' }),
 };

@@ -6,6 +6,7 @@ import { ApiError } from '../middleware/errors.js';
 import { chooseDifficulty, applyAttempt } from '../services/learner.js';
 import { generateQuiz, gradeAnswers } from '../services/quizService.js';
 import { resolveScope, assertSourcesExist } from '../services/retrieval.js';
+import { recordEvent, maybeRecordRecovery } from '../services/events.js';
 import { logActivity, nowIso } from '../store/sqlite.js';
 
 const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
@@ -84,6 +85,28 @@ export function quizRouter({ db, ai, vector }) {
         difficulty = excluded.difficulty, updated_at = excluded.updated_at,
         last_practiced_at = excluded.last_practiced_at
     `).run(update.topic, update.correct, update.total, update.difficulty, now, now);
+
+    // Observed learning events (server-side only, never touch mastery).
+    // Per-question evidence, then the quiz-level result.
+    const masteryAfter = Number(update.mastery.toFixed(4));
+    for (const item of perQuestion) {
+      recordEvent(db, {
+        kind: item.correct ? 'quiz_item_correct' : 'quiz_item_incorrect',
+        topic: quiz.topic.toLowerCase().trim(),
+        detail: { index: item.index, correct: item.correct },
+      });
+    }
+    recordEvent(db, {
+      kind: 'quiz_result',
+      topic: quiz.topic.toLowerCase().trim(),
+      detail: { quizId: quiz.id, correct, total, masteryBefore: update.before, masteryAfter, percent },
+    });
+    // Recovery check (M5): mastery improved while an approach change is still
+    // open → credit that approach. 'before' null means the very first attempt,
+    // so there is nothing to recover from.
+    if (update.before !== null) {
+      maybeRecordRecovery(db, { topic: quiz.topic.toLowerCase().trim(), masteryBefore: update.before, masteryAfter });
+    }
 
     const result = {
       score: { correct, total, percent },

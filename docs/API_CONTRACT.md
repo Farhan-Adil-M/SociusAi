@@ -478,3 +478,72 @@ Additive, backend-only; no request/response shapes changed except one additive h
 **Schema v4/v5 (both additive).** v4: `sources.license`, `sources.origin`, tables `dataset_items`, `dataset_runs` (dataset-ingestion pilot, CLI-only — no API yet). v5: `vector_chunks`.
 
 **`GET /api/health`**: `checks.chroma` gains `backend` (`"chroma"` | `"sqlite"`) so the UI can show which store is live. `checks.chroma.ok` is `true` whenever the active backend answers — a healthy fallback is a healthy vector store.
+
+---
+
+# v1.4 — Learner profile, onboarding & personalisation (2026-10-13)
+
+Additive. New error code: `ONBOARDING_COMPLETE` (409). No existing request/response shape changes except two additive fields on `POST /api/tutor/ask`. Singleton profile — the app has no authentication, so there is exactly one learner profile per installation (same scope as `learner_topics` today).
+
+## Data model (schema v6, server-internal)
+
+| Table | Purpose |
+|---|---|
+| `learner_profile` (singleton row `id='default'`) | `state`: `new \| in_progress \| completed \| skipped`; `transcript_json` (onboarding working memory, **cleared whenever state != `in_progress`**); `fields_json` = `{ interests:[{label,source}], goals:[{label,deadline?,source}], purpose, preferences:{explanationStyle:{value,source}} }` |
+| `learner_subjects` | Self-reported familiarity per subject: `{subject, familiarity: "none"\|"basic"\|"familiar"\|"confident", confidence: 1–5 \| null, source}` |
+| `learning_events` | Append-only observed evidence: `kind`, nullable `topic`, `detail_json`, `weight`, `at` |
+
+- `source` is `"stated"` (the student said it — onboarding extraction or manual edit) or `"inferred"` (the model guessed). **Clients cannot write `inferred`.**
+- Event kinds and weights: `quiz_result` / `quiz_item_correct` / `quiz_item_incorrect` = **3**; `card_known` / `card_review` = **1** (flashcard review is deliberately weaker evidence than solving an unfamiliar assessment question); `explain_again` / `repeated_question` / `approach_change` / `recovery_success` = **1**. Events are recorded **server-side only** and are not exposed through an API in v1.
+- Events never modify `learner_topics` mastery; mastery math is unchanged.
+
+## Enums (fixed)
+
+- `purpose`: `exam | project | research | deep-understanding | general` (nullable)
+- `explanationStyle`: `step-by-step | examples-first | visual | concise | guided-questions`
+- tutor `approach`: `step-by-step | examples-first | concise | visual | guided-questions | simpler | different`
+
+## `GET /api/profile`
+
+→ `200 { profile: { state, purpose, interests: [{label, source}], goals: [{label, deadline, source}], preferences: { explanationStyle: {value, source} | undefined }, subjects: [{subject, familiarity, confidence, source}], updatedAt } }`
+
+No profile row yet → `state: "new"` with empty arrays (never a 404).
+
+## `POST /api/onboarding/message`
+
+Conversational onboarding turn. One short question per reply; skipping and correcting are always allowed.
+
+Request: `{ "message": string | null }` (`null` starts the conversation; `message` 1–800 chars)
+→ `200 { reply, state, questionsAsked, done }` — `state` after this turn; `done: true` when the interview finishes (server also completes at 6 turns).
+
+Errors: `400 VALIDATION_ERROR`, `409 ONBOARDING_COMPLETE`, `502 NIM_ERROR`, `504 NIM_TIMEOUT`.
+
+Server behaviour: the opening reply states that answers are saved in the app's database to personalise learning and can be viewed/edited/deleted later; the model must not ask for sensitive personal data (name, age, contact, health, politics, religion) and off-list answers are simply not stored (whitelist-only extraction); model output is validated with bounded retries like quiz generation.
+
+## `POST /api/onboarding/skip`
+
+No body → `200 { profile }` with `state: "skipped"`, transcript cleared. `409 ONBOARDING_COMPLETE` if already completed.
+
+## `PATCH /api/profile`
+
+Body: any **subset** of `{ interests?, goals?, purpose?, preferences?, subjects? }` — each provided top-level key **replaces that value wholesale** (omitted keys are untouched).
+Shapes: `interests: [{label}]` (≤12, 1–40 chars) · `goals: [{label, deadline?}]` (≤6, label ≤120, deadline `YYYY-MM-DD`) · `purpose` enum or `null` · `preferences: {explanationStyle}` · `subjects: [{subject, familiarity, confidence?}]` (≤12, subject ≤60 chars, confidence 1–5).
+→ `200 { profile }`. Every written item gets `source: "stated"`; a client-sent `source` field is ignored. `400 VALIDATION_ERROR` on violations. PATCH on a missing row creates it with `state: "skipped"` (direct editing counts as opted-out of the intro — no onboarding nudge).
+
+## `DELETE /api/profile`
+
+No body → `204`. Deletes profile, subjects, and learning events (state returns to `new`). **Never touches** quizzes, decks, sources, sessions, or `learner_topics` mastery.
+
+## `POST /api/tutor/ask` — additive fields
+
+Request gains optional `approach` (enum above, applies to **that answer only**; it does not rewrite the saved preference).
+Response gains optional `approachUsed` (the teaching approach actually **applied**; present only when an approach was applied or requested by the client — omitted on the abstain path, where no approach could be applied. `"different"` resolves server-side to a concrete approach so the student sees what was actually used).
+
+**Guarantees (unchanged):** retrieval, evidence floor, abstain (`needsContent`), citations (from retrieved metadata only), source/session scoping, answer-key protection, and the facts-from-passages-only rule. Personalisation may affect explanation style, examples, structure, and teaching strategy only — never factual content. When no profile exists, behaviour is byte-identical to v1.3. The learner context block sent to the model is compact (server-enforced budget) and never includes the onboarding transcript or unrelated profile details.
+
+## Frontend notes (Freebuff)
+
+- Study page: when `GET /api/profile` returns `state:"new"`, show a dismissible offer ("quick intro so the tutor can teach your way") → onboarding chat (one question at a time, Skip always visible). Dismissing without Skip leaves `state:"new"` (re-offer later); Skip uses `POST /api/onboarding/skip`.
+- New **Profile** page: view/edit all fields with `stated`/`inferred` badges, "Restart intro" (= `DELETE /api/profile`, which returns state to `new`, then start onboarding again), delete profile with confirm + privacy explainer text.
+- Tutor answers: an **"Explain differently"** button sends `approach: "different"`; optional style chips send the other enum values.
+- `frontend/js/mocks/fixtures.js` must implement every new endpoint to match this section exactly.

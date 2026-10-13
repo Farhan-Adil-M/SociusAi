@@ -135,6 +135,36 @@ export function openDb(dbPath = path.join(config.dataDir, 'app.db')) {
       embedding_json TEXT NOT NULL,
       metadata_json  TEXT NOT NULL DEFAULT '{}'
     );
+
+    -- Learner profile (v1.4). Singleton row (id = 'default'); state is
+    -- new | in_progress | completed | skipped. transcript_json is the
+    -- onboarding working memory, fields_json holds interests/goals/purpose/
+    -- preferences. Subjects and observed events live in their own tables.
+    CREATE TABLE IF NOT EXISTS learner_profile (
+      id              TEXT PRIMARY KEY CHECK (id = 'default'),
+      state           TEXT NOT NULL DEFAULT 'new',   -- new | in_progress | completed | skipped
+      transcript_json TEXT NOT NULL DEFAULT '[]',
+      fields_json     TEXT NOT NULL DEFAULT '{}',
+      created_at      TEXT NOT NULL,
+      updated_at      TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learner_subjects (
+      subject     TEXT PRIMARY KEY,
+      familiarity TEXT NOT NULL,
+      confidence  INTEGER,
+      source      TEXT NOT NULL DEFAULT 'stated',
+      updated_at  TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind        TEXT NOT NULL,
+      topic       TEXT,
+      detail_json TEXT NOT NULL DEFAULT '{}',
+      weight      INTEGER NOT NULL DEFAULT 1,
+      at          TEXT NOT NULL
+    );
   `);
 
   migrate(db, dbPath);
@@ -227,6 +257,37 @@ function migrate(db, dbPath) {
       metadata_json  TEXT NOT NULL DEFAULT '{}'
     );`);
     db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '5') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run();
+  }
+
+  if (version < 6) {
+    // Learner profile, onboarding and observed learning events (v1.4).
+    // Purely additive; the schema exec above may already have created the
+    // tables — this keeps older code paths safe.
+    db.exec(`CREATE TABLE IF NOT EXISTS learner_profile (
+      id              TEXT PRIMARY KEY CHECK (id = 'default'),
+      state           TEXT NOT NULL DEFAULT 'new',   -- new | in_progress | completed | skipped
+      transcript_json TEXT NOT NULL DEFAULT '[]',
+      fields_json     TEXT NOT NULL DEFAULT '{}',
+      created_at      TEXT NOT NULL,
+      updated_at      TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS learner_subjects (
+      subject     TEXT PRIMARY KEY,
+      familiarity TEXT NOT NULL,
+      confidence  INTEGER,
+      source      TEXT NOT NULL DEFAULT 'stated',
+      updated_at  TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS learning_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind        TEXT NOT NULL,
+      topic       TEXT,
+      detail_json TEXT NOT NULL DEFAULT '{}',
+      weight      INTEGER NOT NULL DEFAULT 1,
+      at          TEXT NOT NULL
+    );`);
+    db.prepare("INSERT INTO app_meta (key, value) VALUES ('schema_version', '6') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .run();
   }
 }

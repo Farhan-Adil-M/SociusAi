@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { key: 'study', href: 'study.html', label: 'Study' },
   { key: 'flashcards', href: 'flashcards.html', label: 'Flashcards' },
   { key: 'quiz', href: 'quiz.html', label: 'Quiz' },
+  { key: 'profile', href: 'profile.html', label: 'Profile' },
 ];
 
 /** Display name entered on the login page. Empty string when signed out. */

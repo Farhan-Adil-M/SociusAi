@@ -9,7 +9,51 @@
 // the upload.
 
 import { api } from '../api.js';
-import { icon, escapeHtml, errorMessage } from '../ui.js';
+import { icon, escapeHtml, errorMessage, formatDate } from '../ui.js';
+
+/* -------------------------------------------------- shared input checks --- */
+
+// One copy of the import validation used by every import surface (this
+// component and the study page's own add panel). The limits are the backend
+// contract's (docs/API_CONTRACT.md): only .pdf/.pptx upload, webpage text
+// 50–200 000 chars. File size is NOT pre-checked here — MAX_UPLOAD_MB is a
+// backend env, so the backend's FILE_TOO_LARGE 413 is the single authority.
+export const MIN_WEBPAGE_CHARS = 50;
+export const MAX_WEBPAGE_CHARS = 200000;
+
+/** First validation error for a chosen upload file, or null when acceptable. */
+export function checkUploadFile(file) {
+  if (!/\.(pdf|pptx)$/i.test(file.name)) return 'Unsupported file — use a .pdf or .pptx.';
+  return null;
+}
+
+/** First validation error for the pasted-webpage form, or null when valid. */
+export function checkWebpageInput(url, text) {
+  if (!/^https?:\/\/\S+\.\S+/.test(url)) return 'Enter a full web address, starting with http:// or https://.';
+  if (text.length < MIN_WEBPAGE_CHARS) {
+    return `Paste at least ${MIN_WEBPAGE_CHARS} characters of page text (currently ${text.length}).`;
+  }
+  if (text.length > MAX_WEBPAGE_CHARS) return 'That text is too long — 200,000 characters maximum.';
+  return null;
+}
+
+/* ------------------------------------------------- duplicate source hint --- */
+
+/**
+ * Exact-match duplicate check for the optional import hint (never blocking):
+ * files match a source by lowercased/trimmed filename, webpages by the exact
+ * URL. No hashing or fuzzy matching — two legitimate versions still import.
+ */
+export function findDuplicateSource(sources, { fileName = '', url = '' } = {}) {
+  if (fileName) {
+    const name = String(fileName).trim().toLowerCase();
+    return sources.find((source) => (source.title || '').trim().toLowerCase() === name) || null;
+  }
+  if (url) {
+    return sources.find((source) => (source.url || '') === url) || null;
+  }
+  return null;
+}
 
 /* ------------------------------------------------------------- status --- */
 
@@ -26,7 +70,7 @@ function renderNotice(host, kind, html) {
  * @param {string|null} opts.sessionId    session to file under (null = Unsorted)
  * @param {Function}   opts.onOrganised   called with the source after any placement change
  */
-export function mountImportPanel({ host, sessionId = null, onOrganised = () => {} }) {
+export function mountImportPanel({ host, sessionId = null, onOrganised = () => {}, knownSources = () => [] }) {
   host.innerHTML = `
     <div class="imp-block">
       <label class="field-label" for="imp-file">Upload a PDF or PowerPoint</label>
@@ -41,20 +85,34 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
       <textarea class="textarea" id="imp-text" placeholder="Paste the page text here (at least 50 characters)" required></textarea>
       <button class="btn btn-secondary btn-sm" type="submit">Add web page</button>
     </form>
+    <div data-imp-dup aria-live="polite"></div>
     <div data-imp-status aria-live="polite"></div>`;
 
   const statusHost = host.querySelector('[data-imp-status]');
+  const dupHost = host.querySelector('[data-imp-dup]');
   const fileInput = host.querySelector('#imp-file');
   const form = host.querySelector('[data-imp-webpage]');
+
+  /** Info-only hint when the chosen material already exists. Never blocks. */
+  function showDuplicateHint(matched) {
+    if (!matched) { dupHost.innerHTML = ''; return; }
+    dupHost.innerHTML = `
+      <div class="banner banner-info">${icon('info', { size: 16 })}
+        <span>You already added <strong>«${escapeHtml(matched.title)}»</strong> (${escapeHtml(formatDate(matched.createdAt))}) — adding it again creates a second copy of the same text.</span>
+      </div>`;
+  }
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files && fileInput.files[0];
     if (!file) return;
-    if (!/\.(pdf|pptx)$/i.test(file.name)) {
-      renderNotice(statusHost, 'error', escapeHtml('Unsupported file — use a .pdf or .pptx.'));
+    const problem = checkUploadFile(file);
+    if (problem) {
+      renderNotice(statusHost, 'error', escapeHtml(problem));
       fileInput.value = '';
       return;
     }
+    dupHost.innerHTML = '';
+    showDuplicateHint(findDuplicateSource(knownSources(), { fileName: file.name }));
     statusHost.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Extracting and indexing ${escapeHtml(file.name)}…</div>`;
     fileInput.value = '';
     try {
@@ -71,18 +129,10 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
     const url = host.querySelector('#imp-url').value.trim();
     const text = host.querySelector('#imp-text').value.trim();
 
-    if (!/^https?:\/\/\S+\.\S+/.test(url)) {
-      renderNotice(statusHost, 'error', escapeHtml('Enter a full web address, starting with http:// or https://.'));
-      return;
-    }
-    if (text.length < 50) {
-      renderNotice(statusHost, 'error', escapeHtml(`Paste at least 50 characters of page text (currently ${text.length}).`));
-      return;
-    }
-    if (text.length > 200000) {
-      renderNotice(statusHost, 'error', escapeHtml('That text is too long — 200,000 characters maximum.'));
-      return;
-    }
+    const problem = checkWebpageInput(url, text);
+    if (problem) { renderNotice(statusHost, 'error', escapeHtml(problem)); return; }
+    dupHost.innerHTML = '';
+    showDuplicateHint(findDuplicateSource(knownSources(), { url }));
     statusHost.innerHTML = `<div class="study-add-status"><span class="spinner" aria-hidden="true"></span> Indexing the page…</div>`;
     try {
       const data = await api.addWebpage({ url, text });

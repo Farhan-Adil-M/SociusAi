@@ -82,6 +82,18 @@
 - [x] **4.7 Review Git diff and sensitive files.** Confirm `.env` and `data/` remain ignored and untracked, inspect all staged files, and ensure only intended changes are included.
 - [x] **4.8 Present a commit/push summary for approval.** Do not push until the user approves. After approval, commit in logical chunks and push normally; never force-push.
 
+## Phase 5 — Personalised learner profile & onboarding (plan approved 2026-10-13)
+
+Contract: `docs/API_CONTRACT.md` § v1.4 (frozen before implementation). Multi-subagent execution; OpenCode coordinates and commits.
+
+- [x] **M0 Contract v1.4** written and frozen (endpoints, enums, event kinds, privacy notes).
+- [x] **M1 Foundation** — schema v6 (`learner_profile`, `learner_subjects`, `learning_events`) + `GET/PATCH/DELETE /api/profile` + `server/services/events.js` (recordEvent, isRepeatedQuestion, chooseApproach, summarizeApproaches, maybeRecordRecovery) + tests. *Subagent A — DONE, 96/96 tests.*
+- [x] **M2 Onboarding** — `POST /api/onboarding/message|skip`, assess-model interview, whitelist extraction, transcript cleared on completion/skip + tests. *Subagent B — DONE (single write per turn; injection-hardened; 7 tests).*
+- [x] **M3 Personalisation** — `server/services/personalization.js` context builder (relevance filter, ≤1200-char budget) + tutor integration (`approach` param, `approachUsed`, facts-from-passages-only rule, byte-identical prompt when no profile) + tests. *Subagent C — DONE (11 tests; byte-identity proven via deepEqual).*
+- [x] **M4+M5 Learning events** — hooks in quiz answer + deck card PATCH (weights: quiz 3, flashcard/tutor 1), recovery-success evaluation feeding approach notes + tests. *Subagent D — DONE (8 tests; tutor pass-through validated live: `approachUsed` echo + 2 citations).*
+- [ ] **M6 Frontend** — onboarding chat, Profile page, "Explain differently", api.js + mocks. *api.js + fixtures DONE (subagent E, smoke-tested vs contract); README section DONE; Profile page (G) and Study page (H) in progress; polish items 3.4/3.5/3.6/3.8 queued as subagent I; webapp-testing+impeccable skills installed; Playwright/chromium staged.*
+- [ ] **M7 Integration & verification** — full `npm test`, local e2e smoke, UI click-through via webapp-testing skill (Playwright in `.venv`, installing now), live manual pass of the 11 evaluation scenarios, README note, commit/push.
+
 ## Explicitly preserve these working design decisions
 
 - Server-side quiz answer-key protection.

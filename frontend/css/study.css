@@ -211,3 +211,120 @@
   .study-send { width: 100%; min-height: 44px; }
   .study-composer-foot { flex-direction: column; gap: var(--s1); }
 }
+
+/* ------------------------------------------------ personalisation (v1.4) */
+/* Onboarding offer/panel above the composer, plus the style row under each
+   tutor answer. Reuses btn, banner and exchange vocabulary from components. */
+
+#onboarding-panel { border-top: 1px solid var(--line); background: var(--paper); }
+
+.onboard-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+.onboard-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.onboard-title svg { color: var(--blue); }
+
+/* Dismissible offer card — banner vocabulary */
+.onboard-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin: var(--s3) var(--s4);
+  padding: var(--s3) var(--s4);
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-line);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.onboard-card strong { color: var(--blue-ink); }
+.onboard-actions { display: flex; flex: none; gap: var(--s2); }
+
+/* One-line state notes (completed / skipped / already set up) */
+.onboard-note {
+  margin-block: var(--s2);
+  padding: 0 var(--s4);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.onboard-note a { color: var(--blue); text-decoration: underline; }
+
+/* Setup chat — reuses the transcript's exchange bubble classes */
+.onboard-chat { padding: var(--s3) var(--s4) 0; max-height: 250px; overflow-y: auto; }
+.onboard-chat .exchange { padding-bottom: var(--s3); margin-bottom: var(--s3); }
+.onboard-chat .exchange-a-body { font-family: var(--font-sans); font-size: var(--fs-sm); line-height: 1.6; }
+.onboard-chat .exchange-pending { padding: var(--s2) 0; background: none; }
+.onboard-bubble-q { font-size: var(--fs-sm); line-height: 1.5; }
+.onboard-error { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); padding-bottom: var(--s3); font-size: var(--fs-xs); }
+
+.onboard-composer { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4); }
+.onboard-composer .input { flex: 1; min-height: 36px; }
+
+/* Style row under every tutor answer */
+.exchange-style {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s1);
+  margin-top: var(--s3);
+  padding-top: var(--s2);
+  border-top: 1px dashed var(--line);
+}
+.exchange-style-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: none;
+  border: none;
+  border-radius: var(--r-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.exchange-style-btn:hover { color: var(--blue-ink); background: var(--blue-soft); }
+.exchange-style-chips { display: inline-flex; flex-wrap: wrap; gap: var(--s1); }
+.exchange-style-chip {
+  padding: 2px 9px;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.exchange-style-chip:hover { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-ink); }
+
+/* Requested-style chip on the question bubble, and the approach label on answers */
+.q-approach-chip {
+  display: inline-block;
+  margin-left: var(--s2);
+  padding: 1px 8px;
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-line);
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--blue-ink);
+  vertical-align: middle;
+}
+.exchange-approach { margin-top: var(--s2); font-size: var(--fs-xs); color: var(--ink-3); }

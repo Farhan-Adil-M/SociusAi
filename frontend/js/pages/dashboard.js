@@ -181,7 +181,12 @@ function renderRevision(progress) {
 
 /* ------------------------------------------------------------ activity */
 
-const ACTIVITY_ICONS = { quiz: 'clipboard', upload: 'upload', question: 'message' };
+// Reuses the icons those concepts already have elsewhere: `folder` marks
+// sessions on the Library page, `archive` marks filing/organising actions.
+const ACTIVITY_ICONS = {
+  quiz: 'clipboard', upload: 'upload', question: 'message',
+  session: 'folder', organize: 'archive',
+};
 
 function renderActivity(progress) {
   const host = document.querySelector('[data-activity]');
@@ -232,12 +237,32 @@ function renderMaterials(sources) {
     </div>`).join('')}</div>`;
 }
 
+/* ------------------------------------------------- personalisation nudge */
+
+/** One small nudge card while the profile is new or was skipped (v1.4). */
+function renderProfileNudge(profile) {
+  if (!profile || (profile.state !== 'new' && profile.state !== 'skipped')) return;
+  const anchor = document.querySelector('.dash-continue');
+  if (!anchor) return;
+  const skipped = profile.state === 'skipped';
+  anchor.insertAdjacentHTML('beforebegin', `
+    <a class="banner banner-info" href="profile.html">
+      ${icon('heart', { size: 16 })}
+      <span><strong>Personalise your learning →</strong> ${
+        skipped
+          ? 'You skipped the intro, but you can fill in your profile any time.'
+          : 'Tell Socius your interests and how to teach you — it adapts explanations and quizzes.'
+      }</span>
+    </a>`);
+}
+
 /* ------------------------------------------------------------------ load */
 
 async function load() {
-  const [progressResult, sourcesResult] = await Promise.allSettled([
+  const [progressResult, sourcesResult, profileResult] = await Promise.allSettled([
     api.getProgress(),
     api.listSources(),
+    api.getProfile(),
   ]);
 
   const sources = sourcesResult.status === 'fulfilled' ? sourcesResult.value.sources : [];
@@ -251,6 +276,8 @@ async function load() {
     renderMastery(progress, sources.length);
     renderRevision(progress);
     renderActivity(progress);
+    // Nudge only when the page itself loaded fine, never when offline/error.
+    if (profileResult.status === 'fulfilled') renderProfileNudge(profileResult.value.profile);
     return;
   }
 

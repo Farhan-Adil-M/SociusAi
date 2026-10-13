@@ -3,6 +3,7 @@
 
 import express from 'express';
 import { ApiError } from '../middleware/errors.js';
+import { recordEvent } from '../services/events.js';
 import { CATEGORIES } from './sessions.js';
 import { nowIso } from '../store/sqlite.js';
 
@@ -130,6 +131,15 @@ export function decksRouter({ db }) {
       throw new ApiError(404, 'DECK_NOT_FOUND', `Card ${idx} does not exist in the deck.`);
     }
     db.prepare('UPDATE decks SET last_reviewed_at = ? WHERE id = ?').run(now, deck.id);
+    // Observed learning event: marking a card known/reviewed is weak evidence;
+    // re-marking it new is not evidence at all, so nothing is recorded.
+    if (status !== 'new') {
+      recordEvent(db, {
+        kind: status === 'known' ? 'card_known' : 'card_review',
+        topic: deck.topic.toLowerCase().trim(),
+        detail: { deckId: deck.id, idx, status },
+      });
+    }
     res.json({ deckId: deck.id, idx, status, lastReviewedAt: now });
   });
 

@@ -133,7 +133,8 @@ function wireImportToggle(toggle) {
   toggle.addEventListener('click', () => {
     const open = importPanel.hidden;
     if (open && !importPanel.dataset.mounted) {
-      mountImportPanel({ host: importPanel, sessionId, onOrganised: () => loadOtherSessions().then(load) });
+      // knownSources feeds the optional duplicate hint (see material-import.js).
+      mountImportPanel({ host: importPanel, sessionId, knownSources: () => sources, onOrganised: () => loadOtherSessions().then(load) });
       importPanel.dataset.mounted = '1';
     }
     importPanel.hidden = !open;
@@ -163,12 +164,22 @@ function renderSources() {
   sourcesMeta.textContent = sources.length ? `${sources.length} ${sources.length === 1 ? 'item' : 'items'}` : '';
 
   if (sources.length === 0) {
-    showEmpty(sourcesHost, {
-      iconName: 'inbox',
-      title: 'Add material first',
-      text: 'The tutor, quizzes and flashcards only search what is inside this session. Add a PDF, PowerPoint or web page to get started.',
-      actions: '<button type="button" class="btn btn-primary btn-sm" data-add-empty>Add material</button>',
-    });
+    if (decks.length === 0) {
+      // Fully empty session: the primary guidance is adding material here.
+      showEmpty(sourcesHost, {
+        iconName: 'inbox',
+        title: `Add material to «${session.title}» first`,
+        text: `The Add material tools are right on this page — the button below opens them, where you can upload a PDF or PowerPoint or paste a web page directly into «${session.title}». The tutor and quiz features for this session unlock once it contains material, and flashcards can then be generated from the same sources.`,
+        actions: '<button type="button" class="btn btn-primary btn-sm" data-add-empty>Add material</button>',
+      });
+    } else {
+      showEmpty(sourcesHost, {
+        iconName: 'inbox',
+        title: 'Add material first',
+        text: 'The tutor, quizzes and flashcards only search what is inside this session. Add a PDF, PowerPoint or web page to get started.',
+        actions: '<button type="button" class="btn btn-primary btn-sm" data-add-empty>Add material</button>',
+      });
+    }
     sourcesHost.querySelector('[data-add-empty]')?.addEventListener('click', () => {
       headHost.querySelector('[data-add-toggle]')?.click();
     });

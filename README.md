@@ -5,6 +5,13 @@ Upload PDFs / PowerPoint slides / webpage text, ask questions **grounded in your
 
 Full API specification: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — the shared contract between backend (`server/`, OpenCode) and frontend (`frontend/`, Freebuff).
 
+## Learner profile & personalisation (new)
+
+- **What it is:** a short conversational intro on the Study page (interests, goals, why you're studying, preferred explanation style) that lets the tutor teach your way. The tutor still answers strictly from your own uploaded materials with citations — personalisation shapes style and examples only, never facts.
+- **Where:** the intro is offered on the Study page while unused (skippable); a **Profile** page lets you view/edit everything anytime, with `stated` vs `inferred` badges and a delete/restart button.
+- **Privacy:** preferences are stored in the app's local SQLite database to personalise learning. They are never sent anywhere except to the configured NIM model as a compact teaching context. Single-user only (no authentication — one shared profile per install, like all learner data); the profile is deleted on server reset (e.g. a Vercel deployment resets on cold start).
+- Full endpoint details: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md), § "v1.4 — Learner profile, onboarding & personalisation".
+
 ## Requirements
 
 - Node.js ≥ 22.5 (uses built-in `node:sqlite`, `node:test`, `--env-file`)

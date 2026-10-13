@@ -16,6 +16,8 @@ import { learnerRouter } from './routes/learner.js';
 import { flashcardsRouter } from './routes/flashcards.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { decksRouter } from './routes/decks.js';
+import { profileRouter } from './routes/profile.js';
+import { onboardingRouter } from './routes/onboarding.js';
 import { resolveVectorStore } from './store/vectorProvider.js';
 
 const FRONTEND_DIR = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../frontend');
@@ -39,6 +41,8 @@ export function createApp({ db, ai, vector } = {}) {
   app.use('/api/flashcards', flashcardsRouter(ctx));
   app.use('/api/sessions', sessionsRouter(ctx));
   app.use('/api/decks', decksRouter(ctx));
+  app.use('/api/profile', profileRouter(ctx));
+  app.use('/api/onboarding', onboardingRouter(ctx));
 
   // Serve the frontend built by Freebuff (same origin → no CORS anywhere).
   if (fs.existsSync(FRONTEND_DIR)) {
