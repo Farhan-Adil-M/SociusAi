@@ -117,3 +117,18 @@ When finished, report:
 - Live calls made and why.
 - Any tasks not completed and why.
 - Remaining risks and manual checks.
+
+## Phase 6 — Real accounts & hosted data (current: commits 95aa849 + 23177a4)
+
+- [x] Supabase tier-1: pg schema + RLS policies + composite PKs (migrate:supabase, stamp 7 live)
+- [x] pgEngine third engine over the facade; supabase/prototype mode split (auth middleware)
+- [x] ownership predicates wired through every private route/service (tests/two-users covers isolation)
+- [x] chroma ownerId metadata + $and filters on add + read; per-user seeded corpus with user-qualified ids
+- [x] health publishes checks.auth = { mode, supabaseUrl, supabaseAnonKey } (public-safe)
+- [x] frontend: vendored supabase client (no CDN), real/clear login + register + sign-out
+- [x] fixed: onboarding `now` crash; RLS on app_meta; quiz_attempts owner index; OR IGNORE/REPLACE removed;
+      reindex per-owner scoping (was cross-user corruption)
+- [x] two dedicated test accounts live as confirmed identities (see .env.e2e)
+- [ ] **BLOCKED (user, 1 min):** Dashboard → Auth → Providers → Email → turn **Confirm email OFF**, so real-mode
+      E2E (`node --env-file=.env --env-file=.env.e2e scripts/e2e-auth-isolation.mjs`) can prove two-user sign-in.
+- [ ] re-run the E2E script above once the settings change.
