@@ -326,6 +326,9 @@ function envMissing(name) {
  * without leaking any value.
  */
 export async function openAppDb({ dbPath, migrate = true, allowRemoteMigrate = false } = {}) {
+  // SQLITE_DB_PATH is the deployment contract for the local engine (docs; also
+  // used by the serverless entry). Explicit args always win.
+  if (!dbPath) dbPath = process.env.SQLITE_DB_PATH || undefined;
   // NOTE: config captured env values at import time as '' — empty strings are
   // "unset", so fall through with || (?? would keep the empty string).
   const remoteUrl = (config.tursoDatabaseUrl || process.env.TURSO_DATABASE_URL || '').trim();
