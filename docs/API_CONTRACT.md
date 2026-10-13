@@ -445,3 +445,19 @@ As before, plus: optional `sessionId`; response gains `deckId`, `sessionId`. The
 ### `DELETE /api/decks/:deckId`
 
 `204`. Deleting a deck removes only derived content — sources and study sessions are untouched; the frontend must double-confirm.
+
+---
+
+# v1.2 — Retrieval quality & evidence discipline (2026-10-13)
+
+Additive, backend-only; no existing request/response shapes changed.
+
+**Evidence floor for the tutor.** Retrieved chunks scoring below `RAG_MIN_SIMILARITY` (default 0.2, env-tunable) are removed before generation. When nothing survives, the tutor abstains exactly as before (`needsContent: true`, empty citations) instead of answering from unrelated passages.
+
+**Generation breadth.** Quiz and flashcard generation retrieve without the floor (a topic query on a small corpus scores lower than a full question), but the response gains `"weakEvidence": true` whenever every retrieved passage scored below the floor — the frontend should surface a "material is thin" notice rather than pretending the deck is strongly grounded.
+
+**Retrieved-passage dedup.** Repeated chunk text (chunk-overlap neighbours) is collapsed before prompts; cross-source duplicates of the same text are kept (they may legitimately appear in several sources).
+
+**Embedding-model guard.** `npm run reindex` (and dataset ingestion, when added) record the embedding model + dimension in `app_meta` (`embed_model`, `embed_dimension`). `GET /api/health` reports the index as degraded with a reindex instruction when the configured `NIM_EMBED_MODEL` no longer matches the recorded one.
+
+Retrieval quality is measured by `tests/eval-set.json` + `scripts/eval-retrieval.mjs` (offline and live runs) — changing any retrieval constant must be accompanied by re-running those.

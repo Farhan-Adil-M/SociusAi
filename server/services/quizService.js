@@ -2,7 +2,7 @@
 // grade deterministically (string comparison, no AI), update the learner model.
 
 import { chatCompletion } from './nimChat.js';
-import { retrieve, toCitation } from './retrieval.js';
+import { retrieve, toCitation, hitScore } from './retrieval.js';
 import { applyAttempt } from './learner.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
@@ -129,53 +129,57 @@ async function generateQuestionBatch({ topic, difficulty, count, evidence }, cha
 
 export async function generateQuiz({ topic, questionCount = 5, difficulty, sourceIds = [] }, { db, ai, vector }) {
   const chat = ai?.chatCompletion ?? chatCompletion;
-  const hits = await retrieve(`${topic}`, { sourceIds, k: 8, ai, vector });
+  const hits = await retrieve(topic, { sourceIds, k: 8, minScore: 0, ai, vector });
+  const weakEvidence = hits.every((hit) => (hitScore(hit) ?? 0) < config.ragMinSimilarity);
 
   if (hits.length === 0) {
-    throw new ApiError(422, 'QUIZ_CONTENT_INVALID',
-      'Not enough indexed material on this topic yet. Upload relevant material or pick another topic.');
-  }
-
-  const evidence = hits
-    .map((hit, i) => {
-      const meta = hit.metadata ?? {};
-      const where = meta.page != null ? `p.${meta.page}` : meta.slide != null ? `s.${meta.slide}` : '';
-      return `Passage ${i + 1} [${meta.title ?? 'source'}${where ? ' ' + where : ''}]:\n${hit.text}`;
-    })
-    .join('\n\n');
-
-  const accepted = [];
-  for (let attempt = 0; attempt < MAX_ATTEMPTS && accepted.length < questionCount; attempt++) {
-    const batch = await generateQuestionBatch({ topic, difficulty, count: questionCount, evidence }, chat);
-    for (const q of batch) {
-      if (accepted.length >= questionCount) break;
-      // De-duplicate by question text within the quiz.
-      if (accepted.some((a) => a.text.toLowerCase() === q.text.toLowerCase())) continue;
-      accepted.push(q);
+      throw new ApiError(422, 'QUIZ_CONTENT_INVALID',
+        'Not enough indexed material on this topic yet. Upload relevant material or pick another topic.');
     }
-  }
 
-  if (accepted.length === 0) {
-    throw new ApiError(422, 'QUIZ_CONTENT_INVALID',
-      'The quiz model could not produce valid questions from this material. Try a broader topic or upload more material.');
-  }
+    const evidence = hits
+      .map((hit, i) => {
+        const meta = hit.metadata ?? {};
+        const where = meta.page != null ? `p.${meta.page}` : meta.slide != null ? `s.${meta.slide}` : '';
+        return `Passage ${i + 1} [${meta.title ?? 'source'}${where ? ' ' + where : ''}]:\n${hit.text}`;
+      })
+      .join('\n\n');
 
-  // Persist with the answer key (server-side only).
-  const quizId = newId('quiz');
-  const createdAt = nowIso();
-  db.prepare('INSERT INTO quizzes (id, topic, difficulty, question_count, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(quizId, topic.trim(), difficulty, accepted.length, createdAt);
+    const accepted = [];
+    for (let attempt = 0; attempt < MAX_ATTEMPTS && accepted.length < questionCount; attempt++) {
+      const batch = await generateQuestionBatch({ topic, difficulty, count: questionCount, evidence }, chat);
+      for (const q of batch) {
+        if (accepted.length >= questionCount) break;
+        // De-duplicate by question text within the quiz.
+        if (accepted.some((a) => a.text.toLowerCase() === q.text.toLowerCase())) continue;
+        accepted.push(q);
+      }
+    }
 
-  const insertQuestion = db.prepare(
-    'INSERT INTO quiz_questions (quiz_id, idx, text, choices_json, correct_choice_id, explanation, citations_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
-  );
+    if (accepted.length === 0) {
+      throw new ApiError(422, 'QUIZ_CONTENT_INVALID',
+        'The quiz model could not produce valid questions from this material. Try a broader topic or upload more material.');
+    }
 
-  const responseQuestions = accepted.map((q, idx) => {
-    const citations = citationsForQuestion(hits, q.cite);
-    insertQuestion.run(quizId, idx, q.text, JSON.stringify(q.choices), q.correctChoiceId, q.explanation, JSON.stringify(citations));
-    // Strip the key before it ever reaches the response.
-    return { index: idx, text: q.text, choices: q.choices, citations };
-  });
+    // Persist with the answer key (server-side only).
+    const quizId = newId('quiz');
+    const createdAt = nowIso();
+    db.prepare('INSERT INTO quizzes (id, topic, difficulty, question_count, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(quizId, topic.trim(), difficulty, accepted.length, createdAt);
 
-  return { id: quizId, topic: topic.trim(), difficulty, questions: responseQuestions };
+    const insertQuestion = db.prepare(
+      'INSERT INTO quiz_questions (quiz_id, idx, text, choices_json, correct_choice_id, explanation, citations_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    );
+
+    const responseQuestions = accepted.map((q, idx) => {
+      const citations = citationsForQuestion(hits, q.cite);
+      insertQuestion.run(quizId, idx, q.text, JSON.stringify(q.choices), q.correctChoiceId, q.explanation, JSON.stringify(citations));
+      // Strip the key before it ever reaches the response.
+      return { index: idx, text: q.text, choices: q.choices, citations };
+    });
+
+    return {
+      id: quizId, topic: topic.trim(), difficulty, questions: responseQuestions,
+      ...(weakEvidence ? { weakEvidence: true } : {}),
+    };
 }

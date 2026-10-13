@@ -10,7 +10,8 @@
     "dev": "node --watch --env-file=.env server/index.js",
     "test": "node --test tests/",
     "e2e": "node --env-file=.env scripts/e2e-smoke.mjs",
-    "reindex": "node --env-file=.env scripts/reindex.js"
+    "reindex": "node --env-file=.env scripts/reindex.js",
+    "eval": "node --env-file=.env scripts/eval-retrieval.mjs"
   },
   "dependencies": {
     "adm-zip": "0.6.1",

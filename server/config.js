@@ -28,6 +28,10 @@ export const config = {
   nimAssessModel: optional('NIM_ASSESS_MODEL', 'nvidia/nemotron-3-super-120b-a12b'),
   nimTimeoutMs: Number(optional('NIM_TIMEOUT_MS', 45000)),
 
+  // Retrieval quality: relative cutoff + absolute sanity bound (see v1.2 notes).
+  ragMinSimilarity: Number(optional('RAG_MIN_SIMILARITY', '0.1')),
+  ragRelativeKeep: Number(optional('RAG_RELATIVE_KEEP', '0.5')),
+
   // ChromaDB — Cloud when CHROMA_API_KEY is set, otherwise the local server.
   chromaApiKey: optional('CHROMA_API_KEY', ''),
   chromaTenant: optional('CHROMA_TENANT', ''),

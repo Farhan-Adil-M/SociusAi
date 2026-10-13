@@ -2,22 +2,60 @@
 // Citations are built ONLY from stored metadata; the language model never
 // supplies filenames, pages, or slide numbers.
 
+import { config } from '../config.js';
 import { embedQuery } from './embeddings.js';
 import { queryChunks } from '../store/vectorStore.js';
 import { ApiError } from '../middleware/errors.js';
 
 const DEFAULT_K = 6;
 
-export async function retrieve(question, { sourceIds = [], k = DEFAULT_K, ai, vector } = {}) {
+/** Chroma cosine distance (0 = identical) → similarity in 0..1. */
+export function hitScore(hit) {
+  if (typeof hit?.distance !== 'number') return undefined;
+  return Math.max(0, Math.min(1, Number((1 - hit.distance).toFixed(3))));
+}
+
+/** Drop chunks that repeat already-returned text (overlap between neighbours). */
+export function dedupeHits(hits) {
+  const seen = new Set();
+  const kept = [];
+  for (const hit of hits) {
+    const signature = (hit.text ?? '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 140);
+    const key = hit.metadata?.sourceId ?? `nodoc_${signature.slice(0, 12)}`;
+    if (seen.has(key + '|' + signature)) continue;
+    seen.add(key + '|' + signature);
+    kept.push(hit);
+  }
+  return kept;
+}
+
+/** Evidence discipline (see docs/API_CONTRACT.md v1.2): a chunk counts as
+ *  evidence when it is at least RAG_MIN_SIMILARITY (absolute sanity bound) AND
+ *  at least ragRelativeKeep of the strongest hit. The relative rule is what
+ *  actually separates relevant from tangential chunks — verified live: an
+ *  unrelated question can outscore a grounded one in absolute terms on small
+ *  corpora, so only a relative cut transfers across material. */
+export function filterByEvidence(hits, minScore, relativeKeep = config.ragRelativeKeep) {
+  if (hits.length === 0) return hits;
+  const scores = hits.map((hit) => hitScore(hit) ?? -1);
+  const strongest = Math.max(...scores);
+  if (strongest <= minScore) return []; // nothing even close to evidence
+  const cutoff = Math.max(minScore, strongest * relativeKeep);
+  return hits.filter((_, i) => scores[i] >= cutoff);
+}
+
+export async function retrieve(question, { sourceIds = [], k = DEFAULT_K, minScore = config.ragMinSimilarity, ai, vector } = {}) {
   const embedFn = ai?.embedQuery ?? embedQuery;
   const queryFn = vector?.queryChunks ?? queryChunks;
 
   const embedding = await embedFn(question);
-  const hits = await queryFn({ embedding, nResults: k, sourceIds });
+  let hits = await queryFn({ embedding, nResults: k, sourceIds });
+  hits = dedupeHits(hits);
+  hits = filterByEvidence(hits, minScore);
   return hits;
 }
 
-// Chroma cosine distance: 0 = identical. Similarity shown to users: 1 - distance (clamped).
+// Chroma cosine distance: 0 = identical. Similarity shown to users: reuse hitScore.
 export function toCitation(hit) {
   const meta = hit.metadata ?? {};
   let location = null;
@@ -25,9 +63,7 @@ export function toCitation(hit) {
   else if (meta.slide != null) location = { slide: meta.slide };
   else if (meta.paragraph != null) location = { paragraph: meta.paragraph };
 
-  const score = typeof hit.distance === 'number'
-    ? Math.max(0, Math.min(1, Number((1 - hit.distance).toFixed(3))))
-    : undefined;
+  const score = hitScore(hit);
 
   return {
     sourceId: meta.sourceId ?? '',

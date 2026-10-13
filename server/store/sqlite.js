@@ -190,3 +190,15 @@ export function logActivity(db, type, topic, detail, sessionId = null) {
   db.prepare('INSERT INTO activity (type, topic, detail, at, session_id) VALUES (?, ?, ?, ?, ?)')
     .run(type, topic ?? null, detail, nowIso(), sessionId);
 }
+
+// ---- app-level metadata (researched values that must survive restarts) ----
+
+export function getMeta(db, key) {
+  const row = db.prepare('SELECT value FROM app_meta WHERE key = ?').get(key);
+  return row ? row.value : null;
+}
+
+export function setMeta(db, key, value) {
+  db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, value);
+}

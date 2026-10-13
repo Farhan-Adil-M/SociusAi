@@ -1,7 +1,7 @@
 // Flashcards: source-grounded front/back pairs generated from retrieved passages.
 
 import { chatCompletion } from './nimChat.js';
-import { retrieve, toCitation } from './retrieval.js';
+import { retrieve, toCitation, hitScore } from './retrieval.js';
 import { parseJsonLoose } from './quizService.js';
 import { config } from '../config.js';
 import { ApiError } from '../middleware/errors.js';
@@ -25,7 +25,8 @@ export function normalizeCard(raw, hits) {
 
 export async function generateFlashcards({ topic, count = 8, sourceIds = [], sessionId = null }, { ai, vector, db } = {}) {
   const chat = ai?.chatCompletion ?? chatCompletion;
-  const hits = await retrieve(topic, { sourceIds, k: 8, ai, vector });
+  const hits = await retrieve(topic, { sourceIds, k: 8, minScore: 0, ai, vector });
+  const weakEvidence = hits.every((hit) => (hitScore(hit) ?? 0) < config.ragMinSimilarity);
 
   if (hits.length === 0) {
     throw new ApiError(422, 'QUIZ_CONTENT_INVALID',
@@ -75,5 +76,5 @@ export async function generateFlashcards({ topic, count = 8, sourceIds = [], ses
     const insertCard = db.prepare('INSERT INTO deck_cards (deck_id, idx, front, back, citations_json) VALUES (?, ?, ?, ?, ?)');
     result.cards.forEach((card, idx) => insertCard.run(deckId, idx, card.front, card.back, JSON.stringify(card.citations)));
   }
-  return { ...result, deckId, sessionId };
+  return { topic, model: config.nimAssessModel, cards: result.cards, ...(weakEvidence ? { weakEvidence: true } : {}), deckId, sessionId };
 }

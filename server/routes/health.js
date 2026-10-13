@@ -3,6 +3,7 @@
 
 import express from 'express';
 import { config } from '../config.js';
+import { getMeta } from '../store/sqlite.js';
 import { chatCompletion } from '../services/nimChat.js';
 import { embedQuery } from '../services/embeddings.js';
 
@@ -40,6 +41,16 @@ export function healthRouter({ db, ai, vector }) {
       checks.nim.embeddingModel = config.nimEmbedModel;
     } catch (err) {
       checks.nim.message = err.message || 'AI provider unreachable.';
+    }
+
+    // Embedding-model guard (contract §Rebuilding): warn when the running
+    // index was built with a different model than the configured one.
+    if (checks.sqlite.ok && checks.nim.ok) {
+      const storedModel = getMeta(db, 'embed_model');
+      if (storedModel && storedModel !== config.nimEmbedModel) {
+        checks.nim.ok = false;
+        checks.nim.message = `The vector index was built with "${storedModel}" but NIM_EMBED_MODEL is "${config.nimEmbedModel}" — run npm run reindex before ingesting or asking questions.`;
+      }
     }
 
     const payload = {
