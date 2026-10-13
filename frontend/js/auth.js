@@ -5,9 +5,8 @@
 // when Supabase auth is configured. No Supabase URL or key is bundled into the
 // frontend — the browser only ever receives the PUBLIC (anon) config.
 //
-// - mode 'supabase': @supabase/supabase-js is lazy-loaded ONCE from the esm.sh
-//   CDN the first time it is needed. NOTE: this mode requires the browser to
-//   reach https://esm.sh (and Supabase). Prototype mode never loads it. The
+// - mode 'supabase': @supabase/supabase-js is lazy-loaded ONCE from
+//   Lfrontend/vendor/supabase.js (vendored in the repo — no CDN calls). The
 //   session is stored by supabase-js in localStorage (its `sb-…-auth-token`
 //   key) and is restored on every page load via auth.getSession(); refresh is
 //   handled by the library (we force one refresh after an UNAUTHENTICATED 401).
@@ -16,7 +15,7 @@
 //   `socius_user`, no tokens, no network auth. Documented limitation, retained
 //   on purpose so the app still runs with no auth backend.
 
-const SUPABASE_JS_CDN = 'https://esm.sh/@supabase/supabase-js@2';
+const SUPABASE_JS_LOCAL = '../vendor/supabase.js'; // vendored — no CDN required
 const USER_KEY = 'socius_user';
 const NOTICE_KEY = 'socius_auth_notice'; // message login.html shows once
 
@@ -70,9 +69,12 @@ async function boot() {
     mode = 'prototype';
     if (auth) {
       try {
-        // Lazy CDN load — only ever happens when the server reported Supabase.
-        const mod = await import(SUPABASE_JS_CDN);
-        client = mod.createClient(auth.supabaseUrl, auth.supabaseAnonKey);
+        // Lazy load (from the vendored file — no CDN): UMD sets a global,
+        // ESM wrappers export createClient; accept either shape.
+        const mod = await import(SUPABASE_JS_LOCAL);
+        const createClient = mod?.createClient ?? mod?.supabase?.createClient ?? globalThis.supabase?.createClient;
+        if (!createClient) throw new Error('Supabase client library failed to load');
+        client = createClient(auth.supabaseUrl, auth.supabaseAnonKey);
         const { data } = await client.auth.getSession();
         session = (data && data.session) || null;
         client.auth.onAuthStateChange((_event, next) => { session = next || null; });
@@ -181,3 +183,15 @@ export function takeAuthNotice() {
     return '';
   }
 }
+
+/** Hard gate for private pages: supabase mode + no session → login redirect.
+ *  Resolves true when the page may continue rendering. */
+export async function requireSignIn() {
+  const booted = await authReady();
+  if (booted.mode !== 'supabase') return true;           // prototype: no gate
+  if (session) return true;
+  sessionStorage.setItem(NOTICE_KEY, 'Sign in to continue.');
+  window.location.href = 'login.html?next=' + encodeURIComponent(window.location.pathname);
+  return false;
+}
+export { authReady as waitForAuth };

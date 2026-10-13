@@ -4,7 +4,7 @@
 // pages.
 
 import { api, isMockMode } from '../api.js';
-import { authReady, getHealthStatus, getUserName, signOut } from '../auth.js';
+import { authReady, getHealthStatus, getUserName, signOut, requireSignIn } from '../auth.js';
 import { icon, escapeHtml, errorMessage } from '../ui.js';
 
 const NAV_ITEMS = [
@@ -173,7 +173,9 @@ function wireSignOut(header) {
  * Inject the shared header/footer, wire the mobile menu and sign-out, and
  * resolve the system status once for the page.
  */
-export function mountShell(active) {
+export async function mountShell(active) {
+  // Application pages are private in supabase mode: no session → login.
+  if (!isMockMode()) await requireSignIn();
   const header = document.querySelector('[data-shell="header"]');
   const footer = document.querySelector('[data-shell="footer"]');
 

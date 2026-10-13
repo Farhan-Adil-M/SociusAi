@@ -45,9 +45,14 @@ export function createUserAuth() {
       if (token === '') return null;
       try {
         const { data, error } = await supabase.auth.getUser(token);
-        if (error || !data?.user?.id) return null;
+        if (error || !data?.user?.id) {
+          // One line of diagnostics when verification fails — never the token.
+          console.error('[auth] token rejected:', error?.message ?? '(no user)');
+          return null;
+        }
         return { id: data.user.id };
-      } catch {
+      } catch (err) {
+        console.error('[auth] verify threw:', err?.message ?? err);
         return null; // network/auth failure → unauthenticated, never a crash
       }
     },

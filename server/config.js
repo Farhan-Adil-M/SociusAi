@@ -16,9 +16,9 @@ export function assertConfig() {
   }
 }
 
-const supabaseUrl = optional('SUPABASE_URL', '');
-const supabaseAnonKey = optional('SUPABASE_ANON_KEY', '');
-const supabaseDbUrl = optional('SUPABASE_DB_URL', '');
+const supabaseUrl = optional('SUPABASE_URL', '').trim();
+const supabaseAnonKey = optional('SUPABASE_ANON_KEY', '').trim();
+const supabaseDbUrl = optional('SUPABASE_DB_URL', '').trim();
 const tursoDatabaseUrl = optional('TURSO_DATABASE_URL', '');
 const tursoAuthToken = optional('TURSO_AUTH_TOKEN', '');
 

@@ -101,6 +101,8 @@ function setSignupMode(next) {
  */
 function useSupabaseMode() {
   authMode = 'supabase';
+  const registerBtn = document.querySelector('[data-register]');
+  if (registerBtn) registerBtn.hidden = false; // real accounts only
   prototypeBanner.hidden = true;
   prototypeFoot.hidden = true;
   authSub.textContent = 'Sign in with your Socius AI account email and password.';
@@ -242,3 +244,15 @@ form.addEventListener('submit', (event) => {
 
   setBusy(false);
 })();
+
+// Create-account option (supabase mode): an explicit button that switches the
+// same form into signup mode (the prototype mode never shows it).
+const registerBtn = document.querySelector('[data-register]');
+if (registerBtn) {
+  registerBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (authMode !== 'supabase') return; // only exists for real accounts
+    setSignupMode(true);
+    emailInput.focus();
+  });
+}
