@@ -80,7 +80,8 @@ export function extensionRouter({ db, ai, vector, auth }) {
   });
 
   // POST /api/extension/briefing — { text, sourceIds? } →
-  //   { answer, citations, needsContent, model } (exactly what panel.js renders)
+  //   { answer, citations, needsContent, suggestions, model } (exactly what
+  //   panel.js renders)
   router.post('/briefing', async (req, res) => {
     const { text, sourceIds } = req.body ?? {};
     if (typeof text !== 'string' || text.trim().length < MIN_BRIEFING_CHARS || text.trim().length > MAX_BRIEFING_CHARS) {
@@ -97,10 +98,20 @@ export function extensionRouter({ db, ai, vector, auth }) {
       { ai, vector },
     );
     await logActivity(db, 'question', null, `Asked: ${asked.slice(0, 80)}`, null, userId);
+    // Whitelisted fields only — never raw tutor internals. When the tutor
+    // abstains, `suggestions` carries 0–4 real topic strings from the user's
+    // own material; a tutor result without the field (older build) yields [].
+    const suggestions = Array.isArray(result.suggestions)
+      ? result.suggestions
+          .filter((topic) => typeof topic === 'string' && topic.trim().length > 0)
+          .map((topic) => topic.trim())
+          .slice(0, 4)
+      : [];
     res.json({
       answer: result.answer,
       citations: result.citations,
       needsContent: result.needsContent,
+      suggestions,
       model: result.model,
     });
   });

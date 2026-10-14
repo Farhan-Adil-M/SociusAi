@@ -211,5 +211,7 @@ test('tutor abstains when every retrieved chunk falls below the evidence floor',
   const body = await res.json();
   assert.equal(body.needsContent, true);
   assert.deepEqual(body.citations, []);
-  assert.equal(body.answer.includes("couldn't find enough"), true);
+  assert.equal(body.answer.includes('not in the material you'), true); // friendly abstain copy
+  // real topics from the same scope: the deck topic first, then the source title
+  assert.deepEqual(body.suggestions, ['Cells', 'Cells 101']);
 });

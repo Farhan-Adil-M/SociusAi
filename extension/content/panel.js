@@ -14,6 +14,7 @@
   var RESPONSE_TIMEOUT_MS = 20000;
   var RELOAD_MESSAGE = 'Extension was reloaded \u2014 refresh the page.';
   var SHORT_PASSAGE_MESSAGE = 'This passage is too short for a briefing. Click a longer highlighted passage.';
+  var DEFAULT_ABSTAIN_MESSAGE = 'Not in your study materials yet \u2014 add materials on this topic in Socius AI to get a grounded briefing.';
   var SVG_NS = 'http://www.w3.org/2000/svg';
 
   var state = {
@@ -194,6 +195,23 @@
       color: var(--ink);
     }
     .citation-detail blockquote:last-child { margin-bottom: 0; }
+
+    .suggestions { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+    .suggestions-label { font-size: 12px; font-weight: 600; color: var(--blue-ink); }
+    .suggestion-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .suggestion {
+      max-width: 100%;
+      padding: 3px 8px;
+      background: var(--paper);
+      border: 1px solid var(--blue-line);
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 12px;
+      color: var(--ink-2);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .foot {
       position: sticky;
@@ -428,9 +446,16 @@
   function renderSuccess(data) {
     var frag = document.createDocumentFragment();
     if (data.needsContent) {
-      frag.appendChild(bannerBlock('banner-info',
-        'Not in your study materials yet \u2014 add materials on this topic in Socius AI to get a grounded briefing.',
-        false));
+      var topics = suggestionTopics(data.suggestions);
+      if (topics.length) {
+        // New backend: friendly abstain copy in `answer` + topic chips.
+        var block = bannerBlock('banner-info', friendlyAbstain(data.answer), false);
+        block.appendChild(suggestionsList(topics));
+        frag.appendChild(block);
+      } else {
+        // Older backend without `suggestions` — render exactly as before.
+        frag.appendChild(bannerBlock('banner-info', DEFAULT_ABSTAIN_MESSAGE, false));
+      }
     } else {
       String(data.answer || '').split(/\n{2,}/).forEach(function (paragraph) {
         var text = paragraph.trim();
@@ -455,6 +480,45 @@
       }
     });
     return p;
+  }
+
+  /* --------------------------------------------------------- suggestions */
+
+  // Topic chips shown when the tutor abstains. The panel has no question
+  // input (briefings are triggered by highlighting a passage, not typed), so
+  // these are informational labels — not buttons — and older backends that
+  // omit `suggestions` simply never reach this code path.
+
+  function friendlyAbstain(answer) {
+    var text = String(answer || '').trim();
+    return text || DEFAULT_ABSTAIN_MESSAGE;
+  }
+
+  function suggestionTopics(list) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter(function (topic) { return typeof topic === 'string' && topic.trim(); })
+      .map(function (topic) { return topic.trim(); })
+      .slice(0, 4);
+  }
+
+  function suggestionsList(topics) {
+    var wrap = document.createElement('div');
+    wrap.className = 'suggestions';
+    var label = document.createElement('span');
+    label.className = 'suggestions-label';
+    label.textContent = 'Covered in your material:';
+    var chips = document.createElement('div');
+    chips.className = 'suggestion-chips';
+    topics.forEach(function (topic) {
+      var chip = document.createElement('span');
+      chip.className = 'suggestion';
+      chip.textContent = topic;
+      chips.appendChild(chip);
+    });
+    wrap.appendChild(label);
+    wrap.appendChild(chips);
+    return wrap;
   }
 
   /* ------------------------------------------------------------- citations */

@@ -2,6 +2,7 @@
 
 AI study companion — Track D, Personalized Tutoring & Adaptive Learning.
 Upload PDFs / PowerPoint slides / webpage text, ask questions **grounded in your own materials** with verifiable citations, generate quizzes, and watch a deterministic learner model adapt question difficulty to your performance.
+When a question isn't covered by your materials, the tutor says so instead of guessing and suggests up to 4 real topics from your material to ask about next (also shown in the browser extension's briefing panel).
 
 Full API specification: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — the shared contract between backend (`server/`, OpenCode) and frontend (`frontend/`, Freebuff).
 

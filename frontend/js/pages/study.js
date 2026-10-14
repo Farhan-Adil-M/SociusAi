@@ -22,24 +22,20 @@ import {
 mountShell('study');
 mountHealthBanner(document.querySelector('[data-health]'));
 
-/* Element hosts: the redesign (demo4.1) may ship the robot-chat markup
-   (#robotChatMessages / #robotChatForm / #robotChatInput) instead of — or
-   alongside — the classic study markup. We prefer the classic study
-   containers, fall back to the demo IDs, and finally to detached elements so
-   a missing host degrades quietly instead of crashing the whole page. */
-const transcript = document.querySelector('[data-transcript]')
-  || document.getElementById('robotChatMessages')
-  || document.createElement('div');
-const composer = document.querySelector('[data-composer]')
-  || document.getElementById('robotChatForm');
-const input = document.querySelector('#question')
-  || document.getElementById('robotChatInput');
+/* Element hosts: ONE chat — [data-transcript], [data-composer] and #question.
+   A missing host degrades quietly (detached element or null) instead of
+   crashing the page; every use below is guarded. Suggestion chips live in
+   [data-suggestions] when the markup ships it, else in the transcript. */
+const transcript = document.querySelector('[data-transcript]') || document.createElement('div');
+const composer = document.querySelector('[data-composer]');
+const input = document.querySelector('#question');
 const sendButton = document.querySelector('[data-send]')
   || (composer ? composer.querySelector('button[type="submit"]') : null);
 const sendLabel = document.querySelector('[data-send-label]');
 const countLabel = document.querySelector('[data-count]');
 const liveRegion = document.querySelector('[data-live]') || document.createElement('p');
 const sourcesHost = document.querySelector('[data-sources]') || document.createElement('div');
+const suggestionsHost = document.querySelector('[data-suggestions]');
 
 wireCitations(transcript);
 
@@ -227,6 +223,46 @@ function styleRowHtml(uid) {
     </div>`;
 }
 
+/* ------------------------------------------------- suggestion chips ---
+   When the tutor is NOT covered by the selected material the backend keeps
+   `needsContent: true` and may also return up to 4 real topics from that
+   material in `suggestions`. Those render as clickable chips under the
+   answer; clicking one fills #question and reuses the normal send path. */
+
+function suggestionTopics(data) {
+  if (!data.needsContent || !Array.isArray(data.suggestions)) return [];
+  return data.suggestions
+    .filter((topic) => typeof topic === 'string' && topic.trim() !== '')
+    .slice(0, 4);
+}
+
+function clearSuggestionChips() {
+  document.querySelectorAll('[data-chips]').forEach((row) => row.remove());
+}
+
+function renderSuggestionChips(topics) {
+  clearSuggestionChips(); // one chips row per answer
+  const row = document.createElement('div');
+  row.className = 'chat-chips';
+  row.setAttribute('data-chips', '');
+  row.innerHTML = topics.map((topic) => `
+    <button type="button" class="chat-chip" data-chip aria-label="Ask about ${escapeHtml(topic)}">${escapeHtml(topic)}</button>`).join('');
+  (suggestionsHost || transcript).appendChild(row);
+  scrollToEnd();
+}
+
+/* A chip click: put the topic in #question, retire the chips row (ask()
+   clears it), then run the SAME send path as a typed question. */
+function askFromChip(topic) {
+  if (input) {
+    input.value = topic;
+    input.dispatchEvent(new Event('input')); // refreshes the counter/send state
+    sendComposerQuestion();
+    return;
+  }
+  ask(topic); // older markup without #question — send the topic directly
+}
+
 function answerHtml(data, question = '') {
   answerCount += 1;
   const paragraphs = String(data.answer || '')
@@ -235,7 +271,9 @@ function answerHtml(data, question = '') {
     .map((text) => `<p>${escapeHtml(text)}</p>`)
     .join('');
 
-  const abstain = data.needsContent
+  // Abstain answer WITH topics → the friendly answer + chips below, never the
+  // old banner as well. Without topics the banner stays exactly as before.
+  const abstain = data.needsContent && suggestionTopics(data).length === 0
     ? `<div class="banner banner-info" style="margin-bottom: var(--s3);">${icon('info', { size: 16 })}
         <span><strong>Nothing relevant found.</strong> The tutor would not guess. Add material on this topic, or ask about something your files cover.</span>
       </div>`
@@ -254,7 +292,7 @@ function answerHtml(data, question = '') {
     : '';
 
   return `
-    <article class="exchange exchange--answer" data-q="${escapeHtml(question)}">
+    <article class="exchange exchange--answer chat-msg chat-msg--bot" data-q="${escapeHtml(question)}">
       <p class="exchange-who">Tutor</p>
       <div class="exchange-a-body">${paragraphs}</div>
       ${abstain}
@@ -293,6 +331,7 @@ function setSending(value) {
 
 /** `approach` (optional) is a one-off style request for THIS answer only. */
 async function ask(question, { approach } = {}) {
+  clearSuggestionChips(); // a new question (typed, chip, retry or style) retires the old chips
   if (introRequired()) { // belt & braces: composer is disabled, this stops programmatic paths too
     openOnboarding(profileState === 'in_progress' ? 'resume' : 'new');
     return;
@@ -304,7 +343,7 @@ async function ask(question, { approach } = {}) {
     : '';
 
   const questionBlock = append(`
-    <article class="exchange exchange--question">
+    <article class="exchange exchange--question chat-msg chat-msg--user">
       <p class="exchange-who">You</p>
       <p>${escapeHtml(asked)}${styleChip}</p>
     </article>`);
@@ -327,11 +366,13 @@ async function ask(question, { approach } = {}) {
       approach,
     });
     pending.outerHTML = answerHtml(data, asked);
+    const topics = suggestionTopics(data);
+    if (topics.length > 0) renderSuggestionChips(topics);
     liveRegion.textContent = 'The tutor answered.';
   } catch (error) {
     if (error.code === 'SESSION_EMPTY') {
       pending.outerHTML = `
-        <div class="study-add-status" style="display:block; padding:0; background:none;">
+        <div class="study-add-status chat-msg chat-msg--bot" style="display:block; padding:0; background:none;">
           <div class="banner banner-info">${icon('info', { size: 16 })}
             <span><strong>Nothing to search yet.</strong> ${escapeHtml(sessionContext ? `«${sessionContext.title}»` : 'This session')} has no material. Add a file or web page first — then questions here are answered from it.</span>
           </div>
@@ -348,7 +389,7 @@ async function ask(question, { approach } = {}) {
     // plain question retries stay unchanged.
     const approachAttr = approach ? ` data-retry-approach="${escapeHtml(approach)}"` : '';
     pending.outerHTML = `
-      <div class="exchange-pending" style="display:block; padding:0; background: none;">
+      <div class="exchange-pending chat-msg chat-msg--bot" style="display:block; padding:0; background: none;">
         <div class="banner banner-error">${icon('alert', { size: 16 })}
           <span><strong>The tutor could not answer.</strong> ${escapeHtml(message)}</span>
         </div>
@@ -401,12 +442,18 @@ transcript.addEventListener('click', (event) => {
   }
 });
 
-composer?.addEventListener('submit', (event) => {
-  event.preventDefault();
+/* The ONE ask path: the composer submit and the suggestion chips both land
+   here, so validation + ask() live in exactly one place. */
+function sendComposerQuestion() {
   if (!input) return;
   const question = input.value.trim();
   if (question.length < 3 || question.length > 300 || sending) return;
   ask(question);
+}
+
+composer?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  sendComposerQuestion();
 });
 
 input?.addEventListener('input', updateComposer);
@@ -417,66 +464,20 @@ input?.addEventListener('keydown', (event) => {
   }
 });
 
-/* ---------------------------------------------------- robot chat panel ---
-   The redesign's floating robot chat (demo4.1 lines 848–912): the greeting
-   button (#robotGreeting) toggles #robotChatPanel, #robotChatClose closes it,
-   and the tutor view's "Open study chat" button (#tutorOpenChatBtn) opens it.
-   Every element is optional — without the panel markup this block is a no-op. */
-const robotPanel = document.getElementById('robotChatPanel');
-const robotGreeting = document.getElementById('robotGreeting');
-const robotClose = document.getElementById('robotChatClose');
-const tutorOpenChat = document.getElementById('tutorOpenChatBtn');
-const robotInput = document.getElementById('robotChatInput');
-
-function setRobotChatOpen(open) {
-  if (!robotPanel) return;
-  robotPanel.hidden = !open;
-  robotGreeting?.setAttribute('aria-expanded', String(open));
-  if (open) (robotInput || input)?.focus?.();
-}
-
-if (robotPanel) {
-  if (robotGreeting) {
-    robotGreeting.hidden = false; // the demo only reveals it in its own dashboard mode
-    robotGreeting.addEventListener('click', () => setRobotChatOpen(robotPanel.hidden));
-  }
-  robotClose?.addEventListener('click', () => {
-    setRobotChatOpen(false);
-    robotGreeting?.focus();
-  });
-  tutorOpenChat?.addEventListener('click', () => setRobotChatOpen(true));
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !robotPanel.hidden) {
-      setRobotChatOpen(false);
-      robotGreeting?.focus();
-    }
+/* Suggestion chips render in [data-suggestions] (new markup) or — when that
+   host is missing — inside the transcript; wire the same host we render to. */
+function wireSuggestionChips(host) {
+  host?.addEventListener('click', (event) => {
+    const chip = event.target.closest('[data-chip]');
+    if (chip && chip.textContent) askFromChip(chip.textContent.trim());
   });
 }
+wireSuggestionChips(suggestionsHost || transcript);
 
-// When the page ships BOTH composers (classic study composer + robot panel
-// form), the panel's form is a second way to ask the same tutor. When only
-// the robot form exists it IS the composer and is wired above.
-if (robotPanel && composer !== document.getElementById('robotChatForm')) {
-  document.getElementById('robotChatForm')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const field = document.getElementById('robotChatInput');
-    const question = (field ? field.value : '').trim();
-    if (question.length < 3 || question.length > 300 || sending) return;
-    if (field) field.value = '';
-    // The exchange renders in the main transcript — bring it into view.
-    document.querySelector('.study-workspace')?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
-    ask(question);
-  });
-}
-
-/* Personalised greeting in the chat panel and tutor stage, when present. */
-const chatUserName = document.getElementById('chatUserName');
+/* Personalised greeting in the tutor hero (#tutorHiName), when present. */
 const tutorHiName = document.getElementById('tutorHiName');
 const userName = (currentUser() || '').trim();
-if (userName) {
-  if (chatUserName) chatUserName.textContent = userName;
-  if (tutorHiName) tutorHiName.textContent = userName;
-}
+if (userName && tutorHiName) tutorHiName.textContent = userName;
 
 /* --------------------------------------------------------- add material */
 
@@ -636,7 +637,7 @@ function onboardBubble(kind, text) {
   if (!text || !chat) return;
   const holder = document.createElement('div');
   holder.innerHTML = `
-    <article class="exchange exchange--${kind}">
+    <article class="exchange exchange--${kind} chat-msg chat-msg--${kind === 'answer' ? 'bot' : 'user'}">
       <p class="exchange-who">${kind === 'answer' ? 'Tutor' : 'You'}</p>
       <p class="${kind === 'answer' ? '' : 'onboard-bubble-q'}">${escapeHtml(text)}</p>
     </article>`.trim();
@@ -834,7 +835,7 @@ sourcesHost.addEventListener('change', onScopeChange);
 renderIntro();
 loadSessionContext().then(loadSources);
 
-if (presetTopic) {
+if (presetTopic && input) {
   input.value = `What should I know about ${presetTopic}?`;
 }
 updateComposer();

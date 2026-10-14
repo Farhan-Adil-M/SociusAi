@@ -2700,129 +2700,6 @@ input:focus-visible {
    AI Study Buddy Widget (Robot Chat)
    ========================================================================== */
 
-.robot-greeting {
-  position: fixed;
-  right: 22px;
-  bottom: 18px;
-  z-index: 30;
-  display: flex;
-  width: 88px;
-  height: 94px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  animation: none;
-  transition: filter 180ms ease;
-}
-
-.robot-greeting:hover {
-  filter: drop-shadow(0 8px 12px rgba(43, 84, 61, 0.3));
-  animation: none;
-}
-
-.robot-greeting:hover .robot-avatar svg {
-  animation: none;
-}
-
-.robot-greeting:focus-visible,
-.robot-chat-close:focus-visible,
-.robot-chat-form button:focus-visible {
-  outline: 2px solid var(--sage);
-  outline-offset: 3px;
-}
-
-.robot-chat-panel {
-  position: fixed;
-  right: 24px;
-  bottom: 84px;
-  z-index: 31;
-  display: flex;
-  width: min(350px, calc(100vw - 32px));
-  max-height: min(480px, calc(100dvh - 110px));
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--card-bg);
-  box-shadow: var(--shadow-lg);
-  color: var(--text);
-}
-
-.robot-chat-panel[hidden],
-.robot-greeting[hidden] {
-  display: none !important;
-}
-
-.robot-chat-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(135deg, #1d2620, #161e19);
-  color: #faf7f2;
-}
-
-.robot-chat-header h2 {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: 1rem;
-  font-weight: 600;
-  color: #faf7f2;
-}
-
-.robot-chat-header p {
-  margin: 2px 0 0;
-  color: #b5ac9e;
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 0.72rem;
-}
-
-.robot-chat-close {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  margin-left: auto;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #faf7f2;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: background 180ms ease;
-}
-
-.robot-chat-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.robot-chat-messages {
-  display: flex;
-  min-height: 120px;
-  flex: 1;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  padding: 16px;
-  background: var(--card-bg-warm);
-}
-
-.robot-chat-message {
-  max-width: 88%;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
 .assistant-message {
   align-self: flex-start;
   border: 1px solid var(--border);
@@ -2837,66 +2714,6 @@ input:focus-visible {
   border-bottom-right-radius: 3px;
   background: var(--terracotta);
   color: #faf7f2;
-}
-
-.robot-chat-form {
-  display: flex;
-  gap: 8px;
-  padding: 12px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--card-bg);
-}
-
-.robot-chat-form input {
-  min-width: 0;
-  flex: 1;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--card-bg-warm);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.78rem;
-}
-
-.robot-chat-form input:focus {
-  border-color: var(--terracotta);
-  outline: none;
-}
-
-.robot-chat-form input::placeholder {
-  color: #9c9488;
-}
-
-.robot-chat-form button {
-  display: grid;
-  width: 38px;
-  flex: 0 0 38px;
-  place-items: center;
-  border: 0;
-  border-radius: 7px;
-  background: var(--terracotta);
-  color: #faf7f2;
-  cursor: pointer;
-}
-
-.robot-chat-form button:hover {
-  background: var(--terracotta-hover);
-}
-
-.robot-chat-form button svg {
-  width: 17px;
-  height: 17px;
-  fill: currentColor;
-}
-
-.robot-chat-note {
-  margin: 0;
-  padding: 0 13px 8px;
-  color: var(--muted);
-  font-size: 0.64rem;
-  text-align: center;
-  background: var(--card-bg);
 }
 
 .visually-hidden {
@@ -2923,24 +2740,6 @@ input:focus-visible {
   width: 34px;
   height: 34px;
   overflow: visible;
-}
-
-.robot-greeting .robot-avatar {
-  width: 86px;
-  height: 86px;
-  flex-basis: 86px;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.robot-greeting .robot-avatar svg {
-  width: 86px;
-  height: 86px;
-  overflow: visible;
-  filter: drop-shadow(0 6px 4px rgba(28, 23, 18, 0.25));
 }
 
 .robot-antenna,
@@ -3237,16 +3036,6 @@ input:focus-visible {
 
   .profile-summary {
     max-width: 112px;
-  }
-
-  .robot-greeting {
-    right: 14px;
-    bottom: 14px;
-  }
-
-  .robot-chat-panel {
-    right: 12px;
-    bottom: 72px;
   }
 
   .subjects-grid-expand {
@@ -4255,10 +4044,6 @@ body.is-transitioning .main-panel {
   animation: rise-up 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) 0.38s both;
 }
 
-.robot-greeting.is-entering {
-  animation: rise-up 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) 0.4s both;
-}
-
 /* --- 5. Invalid login: gentle shake — no navigation, no transition --- */
 .login-card.login-shake {
   animation: login-shake 0.42s ease;
@@ -4505,19 +4290,6 @@ body.is-transitioning .main-panel {
 }
 
 /* --- AI Tutor: the robot zooms in, says hi, fills the page --------------- */
-.tutor-stage {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 30px 20px 24px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(121, 200, 160, 0.14), transparent 62%),
-    var(--card-bg);
-}
 
 .tutor-robot {
   width: clamp(150px, 24vw, 230px);
@@ -4542,33 +4314,12 @@ body.is-transitioning .main-panel {
   font-size: 1.05rem;
 }
 
-.tutor-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 18px;
-}
-
-.tutor-stage.is-intro .tutor-robot {
-  animation: robot-zoom-in 520ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
-}
-
 .tutor-hi.is-intro {
   animation: hi-pop 420ms cubic-bezier(0.2, 0.8, 0.25, 1) 280ms both;
 }
 
 /* While the tutor page is open the chat takes the page and the floating
    bubble steps aside — the big robot IS the page now. */
-body[data-active-view="tutor"] .robot-chat-panel {
-  right: 50%;
-  bottom: 24px;
-  transform: translateX(50%);
-  width: min(760px, calc(100vw - 40px));
-  max-height: min(70vh, 660px);
-}
-
-body[data-active-view="tutor"] .robot-greeting {
-  display: none !important;
-}
 
 /* --- Learning Progress -------------------------------------------------- */
 .progress-stats {
@@ -4674,24 +4425,6 @@ body[data-active-view="tutor"] .robot-greeting {
 /* --- Accessibility: instant, blur-free swap when reduced motion is on ---- */
 @media (prefers-reduced-motion: reduce) {
 
-  .pt-exit,
-  .pt-enter,
-  .frame.is-entering,
-  .frame.is-entering .sidebar,
-  .frame.is-entering .topbar,
-  .frame.is-entering .top-action-grid,
-  .frame.is-entering .middle-grid,
-  .frame.is-entering .continue-learning-section,
-  .robot-greeting.is-entering,
-  .tutor-stage.is-intro .tutor-robot,
-  .tutor-hi.is-intro,
-  .login-card.login-shake {
-    animation: none !important;
-    animation-delay: 0s !important;
-    opacity: 1 !important;
-    transform: none !important;
-    filter: none !important;
-  }
 }
 
 /* ==========================================================================

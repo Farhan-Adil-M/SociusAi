@@ -3,16 +3,23 @@
 // v1.4 (M3): the learner profile may personalise style/structure — facts still
 // come only from the passages. With no usable learner context and no explicit
 // approach, the prompt is byte-identical to the earlier version.
+// Abstains are friendly and offer REAL next topics from the same source scope
+// (see topicSuggestions.js); the successful-answer shape is unchanged.
 
 import { chatCompletion } from './nimChat.js';
 import { retrieve, toCitation } from './retrieval.js';
+import { fetchTopicSuggestions } from './topicSuggestions.js';
 import { wrapPassages, UNTRUSTED_RULE } from './prompts.js';
 import { config } from '../config.js';
 import { APPROACH_ORDER, chooseApproach, isRepeatedQuestion, lastApproach, recordEvent } from './events.js';
 import { buildLearnerBlock, buildLearnerContext, describeApproach } from './personalization.js';
 
-const ABSTAIN_MESSAGE = "I couldn't find enough in your study materials to answer that. "
-  + 'Try adding material on this topic, or ask about something covered in your sources.';
+// Abstain copy: friendly, short, honest. When the student's material has real
+// topics to offer, the message invites them to pick one; when it does not, it
+// keeps the advice line instead — never promise options we don't have.
+const ABSTAIN_OPENING = "Oh — looks like that's not in the material you've selected. ";
+const ABSTAIN_OFFER = 'Want to learn about one of these instead?';
+const ABSTAIN_ADVICE = 'Try adding material on this topic, or ask about something covered in your sources.';
 const MODEL_ABSTAIN_TOKEN = 'EVIDENCE_INSUFFICIENT';
 
 // Approach values a client may request (the contract enum; `simpler` and
@@ -87,13 +94,26 @@ async function answerContextEvents(db, { question, matchedTopic, previous, expli
   } catch { /* observability must not break answering */ }
 }
 
+// The response BOTH refusal paths return: every existing abstain field plus
+// deterministic `suggestions` (0-4 real topics from the same source scope).
+// Suggestions are best-effort — a failed lookup must never turn an honest
+// abstain into a 500, so it degrades to an empty list and the advice line.
+async function abstainAnswer(db, sourceIds, userId) {
+  let suggestions = [];
+  try {
+    suggestions = await fetchTopicSuggestions(db, sourceIds, userId);
+  } catch { /* the abstain itself must still answer */ }
+  const answer = suggestions.length > 0 ? ABSTAIN_OPENING + ABSTAIN_OFFER : ABSTAIN_OPENING + ABSTAIN_ADVICE;
+  return { answer, citations: [], needsContent: true, model: config.nimChatModel, suggestions };
+}
+
 export async function answerQuestion({ question, sourceIds = [], db, approach, userId = 'default' }, { ai, vector } = {}) {
   // Vector search is user-scoped first: another student's chunks can never be
   // cited even when the request carries no sourceIds filter.
   const hits = await retrieve(question, { sourceIds, ai, vector, userId });
 
   if (hits.length === 0) {
-    return { answer: ABSTAIN_MESSAGE, citations: [], needsContent: true, model: config.nimChatModel };
+    return abstainAnswer(db, sourceIds, userId);
   }
 
   // ---- learner-context personalisation (deterministic, db reads only) ----
@@ -117,7 +137,7 @@ export async function answerQuestion({ question, sourceIds = [], db, approach, u
   // passages did not cover the question — abstain honestly instead of trusting
   // outside knowledge it may have used anyway.
   if (answer.trim().toUpperCase() === MODEL_ABSTAIN_TOKEN) {
-    return { answer: ABSTAIN_MESSAGE, citations: [], needsContent: true, model: config.nimChatModel };
+    return abstainAnswer(db, sourceIds, userId);
   }
 
   await answerContextEvents(db, { question, matchedTopic, previous, explicit, approachUsed, approachGiven, userId });

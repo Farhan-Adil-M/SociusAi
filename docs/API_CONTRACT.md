@@ -190,16 +190,47 @@ Source-grounded question answering.
   "answer": "Mitosis produces two identical cells…",
   "citations": [ { "sourceId": "src_a1b2c3", "type": "pdf", "title": "chapter3.pdf", "url": null, "location": { "page": 12 }, "excerpt": "…", "score": 0.81 } ],
   "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
-  "needsContent": false
+  "needsContent": false,
+  "suggestions": []
 }
 ```
 
 - Citations come from retrieval (max 6, deduplicated by chunk).
-- If retrieved passages are insufficient, the tutor abstains:
-  `200` with `"answer": "I couldn't find enough in your study materials to answer that. Try adding material on this topic, or ask about a topic covered in your sources.", "citations": [], "needsContent": true`.
+- If retrieved passages are insufficient, the tutor abstains: `200` with `"citations": []`, `"needsContent": true`, a friendly abstain `answer`, and `"suggestions"` listing up to 4 real topics from the selected material (e.g. `"suggestions": ["Topic A", "Topic B"]`) that the learner can ask about instead.
+- `suggestions`: always an array; only meaningful when `needsContent` is true (0–4 short topic strings drawn from the user's own material, never model-invented; `[]` otherwise). Clients may ignore it safely.
 - Conversation history is not required for v1; each question is answered independently.
 
 **Errors:** 400 `VALIDATION_ERROR`, 404 `SOURCE_NOT_FOUND`, 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`, 504 `NIM_TIMEOUT`.
+
+---
+
+### POST /api/extension/briefing
+
+A grounded briefing for one page passage — the tutor without a session, used by the browser extension's floating panel. Auth required (v1.6).
+
+**Request:**
+
+```json
+{ "text": "The highlighted passage (60–1500 chars)", "sourceIds": ["src_a1b2c3"] }
+```
+
+`text`: 60–1500 chars. `sourceIds` optional filter (all sources if omitted).
+
+**Response 200:**
+
+```json
+{
+  "answer": "…",
+  "citations": [ { "sourceId": "src_a1b2c3", "type": "pdf", "title": "chapter3.pdf", "url": null, "location": { "page": 12 }, "excerpt": "…", "score": 0.81 } ],
+  "needsContent": false,
+  "suggestions": [],
+  "model": "nvidia/nemotron-3.5-lightning-30b-a3b"
+}
+```
+
+Same answering core as `POST /api/tutor/ask`, including the honest abstain: when `needsContent` is true, `answer` is a friendly abstain message and `suggestions` lists 0–4 real topics from the user's material — the same field and meaning as the tutor ask response (`[]` when the briefing is grounded). The panel shows the message plus the suggested topics.
+
+**Errors:** 400 `VALIDATION_ERROR`, 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`, 504 `NIM_TIMEOUT`.
 
 ---
 
