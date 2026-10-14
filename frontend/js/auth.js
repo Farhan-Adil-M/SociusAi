@@ -39,6 +39,42 @@ async function inMockMode() {
   }
 }
 
+/**
+ * Session handoff from the browser extension's "Open Socius AI" button.
+ * The extension opens `#socius_session=<base64(JSON)>` carrying its own
+ * Supabase session ({ access_token, refresh_token }); we adopt it so the
+ * visitor lands signed in. The fragment never reaches any server (fragments
+ * stay in the browser) and the URL is cleaned immediately — same pattern as
+ * an OAuth implicit-flow callback.
+ *
+ * Runs at MODULE LOAD (not inside boot()) so that whichever page the button
+ * opens — landing, study, or dashboard — the fragment is always consumed and
+ * cleaned. boot() later picks the stashed tokens up and validates them.
+ * Returns the tokens or null.
+ */
+let pendingHandoff = null;
+
+function takeHandoffSession() {
+  try {
+    const hash = window.location.hash || '';
+    if (!hash.startsWith('#')) return null;
+    const params = new URLSearchParams(hash.slice(1));
+    const raw = params.get('socius_session');
+    if (!raw) return null;
+    params.delete('socius_session');
+    const rest = params.toString();
+    history.replaceState(null, '', window.location.pathname + window.location.search + (rest ? `#${rest}` : ''));
+    const parsed = JSON.parse(atob(raw));
+    if (typeof parsed?.access_token !== 'string' || typeof parsed?.refresh_token !== 'string') return null;
+    return { access_token: parsed.access_token, refresh_token: parsed.refresh_token };
+  } catch {
+    return null; // malformed fragment: ignore, never crash the boot
+  }
+}
+
+// Consume the handoff fragment at import time (see takeHandoffSession).
+pendingHandoff = takeHandoffSession();
+
 /** One raw /api/health read (plain fetch — must not recurse through api.js). */
 async function readHealth() {
   const response = await fetch('/api/health', {
@@ -64,6 +100,8 @@ async function readHealth() {
 /** Resolve the mode and (in Supabase mode) restore the saved session. */
 async function boot() {
   if (await inMockMode()) return { mode: 'prototype' }; // mock pages need no auth
+  const handoff = pendingHandoff; // stashed + cleaned at module load (see takeHandoffSession)
+  pendingHandoff = null;
   try {
     const auth = await readHealth();
     mode = 'prototype';
@@ -75,6 +113,13 @@ async function boot() {
         const createClient = mod?.createClient ?? mod?.supabase?.createClient ?? globalThis.supabase?.createClient;
         if (!createClient) throw new Error('Supabase client library failed to load');
         client = createClient(auth.supabaseUrl, auth.supabaseAnonKey);
+        if (handoff) {
+          // Extension handoff: setSession validates the tokens (and refreshes
+          // them when expired); on any failure we simply fall back to whatever
+          // session already exists on this device.
+          const adopted = await client.auth.setSession(handoff);
+          if (adopted.error) console.warn('[auth] extension session handoff rejected:', adopted.error.message);
+        }
         const { data } = await client.auth.getSession();
         session = (data && data.session) || null;
         client.auth.onAuthStateChange((_event, next) => { session = next || null; });

@@ -9,7 +9,7 @@
 (() => {
   'use strict';
 
-  const DEFAULTS = { enabled: true, apiUrl: 'http://localhost:3000' };
+  const DEFAULTS = { enabled: true, apiUrl: 'https://socius-ai.vercel.app' };
   const BLOCK_SELECTOR = 'p, li, blockquote, dd, dt, td, th, h2, h3, figcaption';
   const SKIP_SELECTOR = 'nav, header, footer, aside, form, script, style, noscript, [role="navigation"]';
   const PANEL_HOST_ATTR = 'data-socius-panel';

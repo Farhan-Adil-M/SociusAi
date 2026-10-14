@@ -118,6 +118,33 @@ export async function queryChunks({ embedding, nResults = 6, sourceIds = [], use
   }
 }
 
+// Batch variant for the extension highlighter: one collection.query call for
+// MANY page sentences instead of one HTTP round-trip each. Returns one hit
+// array per query embedding, same hit shape as queryChunks.
+export async function queryChunksBatch({ embeddings, nResults = 1, userId }) {
+  userId = requireOwner(userId);
+  if (!Array.isArray(embeddings) || embeddings.length === 0) return [];
+  try {
+    const collection = await getCollection();
+    const where = userId ? { ownerId: userId } : null;
+    const res = await collection.query({
+      queryEmbeddings: embeddings,
+      nResults,
+      ...(where ? { where } : {}),
+      include: ['documents', 'metadatas', 'distances'],
+    });
+    // Chroma returns one nested array per query embedding.
+    return (res.ids ?? []).map((ids, qi) => ids.map((id, hi) => ({
+      id,
+      text: res.documents[qi][hi],
+      metadata: res.metadatas[qi][hi] ?? {},
+      distance: res.distances?.[qi]?.[hi],
+    })));
+  } catch (err) {
+    throw chromaError(err);
+  }
+}
+
 // For ingestion compensation (2.5): remove a specific set of chunk ids so a
 // failed persistence never leaves searchable orphan vectors behind.
 export async function deleteChunks(ids) {

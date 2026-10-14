@@ -10,8 +10,10 @@ import { createUserAuth } from './middleware/auth.js';
 import { chatCompletion } from './services/nimChat.js';
 import { embedTexts, embedQuery } from './services/embeddings.js';
 import { healthRouter } from './routes/health.js';
+import { authRouter } from './routes/auth.js';
 import { sourcesRouter } from './routes/sources.js';
 import { tutorRouter } from './routes/tutor.js';
+import { extensionRouter } from './routes/extension.js';
 import { quizRouter } from './routes/quiz.js';
 import { learnerRouter } from './routes/learner.js';
 import { decksRouter, flashcardsRouter } from './routes/decks.js';
@@ -36,8 +38,10 @@ export async function createApp({ db, ai, vector, auth } = {}) {
   app.use(express.json({ limit: '1mb' }));
 
   app.use('/api/health', healthRouter(ctx));
+  app.use('/api/auth', authRouter(ctx));
   app.use('/api/sources', sourcesRouter(ctx));
   app.use('/api/tutor', tutorRouter(ctx));
+  app.use('/api/extension', extensionRouter(ctx));
   app.use('/api/quiz', quizRouter(ctx));
   app.use('/api/learner', learnerRouter(ctx));
   app.use('/api/flashcards', flashcardsRouter(ctx));

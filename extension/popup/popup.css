@@ -284,3 +284,62 @@ body {
   font-size: var(--fs-xs);
   color: var(--ink-3);
 }
+
+/* Account (sign-in) section */
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s3);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+.account-title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+#login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.account-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.account-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.btn-secondary {
+  flex: none;
+  min-height: 32px;
+  padding: 0 var(--s3);
+  border-color: var(--line-strong);
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--canvas-2); color: var(--ink); }

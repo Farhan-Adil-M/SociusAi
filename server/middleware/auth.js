@@ -40,6 +40,23 @@ export function createUserAuth() {
 
   return {
     mode: 'supabase',
+    // Used by routes/auth.js (the extension's login/refresh). Thin wrappers:
+    // same client, same non-persisting policy; callers receive the raw
+    // supabase-js { data, error } shape and own the error mapping.
+    async signInWithPassword({ email, password }) {
+      try {
+        return await supabase.auth.signInWithPassword({ email, password });
+      } catch (err) {
+        return { data: { session: null, user: null }, error: { message: err?.message ?? 'sign-in failed' } };
+      }
+    },
+    async refreshSession(refreshToken) {
+      try {
+        return await supabase.auth.refreshSession({ refresh_token: refreshToken });
+      } catch (err) {
+        return { data: { session: null }, error: { message: err?.message ?? 'refresh failed' } };
+      }
+    },
     async getUserFromRequest(req) {
       const header = req.headers?.authorization ?? '';
       const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';

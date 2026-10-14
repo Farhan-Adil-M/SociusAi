@@ -43,6 +43,13 @@ export const config = {
   ragMinSimilarity: Number(optional('RAG_MIN_SIMILARITY', '0.1')),
   ragRelativeKeep: Number(optional('RAG_RELATIVE_KEEP', '0.5')),
 
+  // Extension highlighter: minimum cosine similarity for a page sentence to
+  // earn a highlight. Calibrated live (2026-10-14): the embedding model is
+  // anisotropic — unrelated sentences still score ~0.70-0.72 against a small
+  // corpus while near-verbatim study text scores ~0.92, so 0.80 separates
+  // them. Tunable per deployment without a code change.
+  extensionMinSimilarity: Number(optional('EXTENSION_MIN_SIMILARITY', '0.8')),
+
   // ChromaDB — Cloud when CHROMA_API_KEY is set, otherwise the local server.
   chromaApiKey: optional('CHROMA_API_KEY', ''),
   chromaTenant: optional('CHROMA_TENANT', ''),

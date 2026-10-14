@@ -30,6 +30,10 @@ export function fakeVector() {
       const pool = sourceIds.length ? store.filter((s) => sourceIds.includes(s.metadata.sourceId)) : store;
       return pool.slice(0, nResults).map((s) => ({ ...s, distance: 0.2 }));
     },
+    queryChunksBatch: async ({ embeddings, nResults = 6, sourceIds = [] }) => {
+      const pool = sourceIds.length ? store.filter((s) => sourceIds.includes(s.metadata.sourceId)) : store;
+      return embeddings.map(() => pool.slice(0, nResults).map((s) => ({ id: s.id, text: s.text, metadata: s.metadata, distance: 0.2 })));
+    },
     pingChroma: async () => true,
     resetCollection: async () => { store.length = 0; },
   };

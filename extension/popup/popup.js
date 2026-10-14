@@ -6,8 +6,8 @@
 
 const DEFAULTS = {
   enabled: true,
-  siteUrl: 'http://localhost:3000',
-  apiUrl: 'http://localhost:3000'
+  siteUrl: 'https://socius-ai.vercel.app/dashboard.html',
+  apiUrl: 'https://socius-ai.vercel.app'
 };
 
 const HEALTH_TIMEOUT_MS = 4000;
@@ -65,6 +65,15 @@ function cacheElements() {
   els.statusDot = document.getElementById('status-dot');
   els.statusText = document.getElementById('status-text');
   els.openBtn = document.getElementById('open-app-btn');
+  els.accountSection = document.getElementById('account-section');
+  els.loginForm = document.getElementById('login-form');
+  els.loginEmail = document.getElementById('login-email');
+  els.loginPassword = document.getElementById('login-password');
+  els.loginBtn = document.getElementById('login-btn');
+  els.loginError = document.getElementById('login-error');
+  els.accountSignedIn = document.getElementById('account-signed-in');
+  els.accountEmail = document.getElementById('account-email');
+  els.logoutBtn = document.getElementById('logout-btn');
 }
 
 /* ---------- settings form ---------- */
@@ -163,6 +172,73 @@ async function handleToggleChange() {
   }
 }
 
+/* ---------- account (sign in/out via the background worker) ---------- */
+
+let authMode = 'prototype'; // from /api/health checks.auth.mode
+let account = { signedIn: false, email: '' };
+let serverKnown = false; // true once the background worker has confirmed the server speaks supabase
+
+// Message the background worker; null on orphaned-runtime failures.
+function sendRuntime(message) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(response ?? null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+// The account section only exists in supabase mode — a local prototype
+// server has nothing to sign into.
+function renderAccount() {
+  // The signed-in row is always trustworthy (the worker owns the session), so
+  // it shows regardless of the health probe. The sign-in FORM additionally
+  // waits for serverKnown — signing in is only meaningful against a supabase
+  // server, and this avoids flashing it on a prototype/unreachable one.
+  const show = account.signedIn || (serverKnown && authMode === 'supabase');
+  els.accountSection.hidden = !show;
+  if (!show) return;
+  els.loginForm.hidden = account.signedIn;
+  els.accountSignedIn.hidden = !account.signedIn;
+  els.accountEmail.textContent = account.email;
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  els.loginError.hidden = true;
+  const email = els.loginEmail.value.trim();
+  const password = els.loginPassword.value;
+  if (!email || !password) {
+    els.loginError.textContent = 'Enter your email and password.';
+    els.loginError.hidden = false;
+    return;
+  }
+  els.loginBtn.disabled = true;
+  const result = await sendRuntime({ type: 'login', email, password });
+  els.loginBtn.disabled = false;
+  if (result && result.ok) {
+    if (result.prototype) authMode = 'prototype'; // dev server: no auth exists
+    else account = { signedIn: true, email: result.email || email };
+    els.loginPassword.value = '';
+    renderAccount();
+    return;
+  }
+  els.loginError.textContent =
+    (result && result.error && result.error.message) || 'Sign-in failed. Try again.';
+  els.loginError.hidden = false;
+}
+
+async function handleLogout() {
+  await sendRuntime({ type: 'logout' });
+  account = { signedIn: false, email: '' };
+  els.loginPassword.value = '';
+  renderAccount();
+}
+
 /* ---------- connection status ---------- */
 
 function setStatus(state) {
@@ -203,6 +279,11 @@ async function checkConnection(apiUrl) {
       return;
     }
     const body = await response.json().catch(() => null);
+    if (body && body.checks && body.checks.auth && body.checks.auth.mode) {
+      authMode = body.checks.auth.mode;
+      serverKnown = true;
+      renderAccount(); // supabase server → the sign-in UI can appear
+    }
     setStatus(body && body.status === 'ok' ? 'connected' : 'degraded');
   } catch (err) {
     setStatus('unreachable');
@@ -214,8 +295,9 @@ async function checkConnection(apiUrl) {
 /* ---------- open app ---------- */
 
 async function handleOpenApp() {
-  const settings = await loadSettings();
-  chrome.tabs.create({ url: settings.siteUrl });
+  // Through the background worker so the tab carries the #socius_session
+  // handoff fragment, exactly like the briefing panel's button does.
+  await sendRuntime({ type: 'openSite' });
   window.close();
 }
 
@@ -227,6 +309,12 @@ async function init() {
   els.toggle.addEventListener('change', handleToggleChange);
   els.form.addEventListener('submit', handleSave);
   els.openBtn.addEventListener('click', handleOpenApp);
+  els.loginForm.addEventListener('submit', handleLoginSubmit);
+  els.logoutBtn.addEventListener('click', handleLogout);
+
+  const clearLoginError = () => { els.loginError.hidden = true; };
+  els.loginEmail.addEventListener('input', clearLoginError);
+  els.loginPassword.addEventListener('input', clearLoginError);
 
   const clearFeedbackFor = (input, errorEl) => () => {
     errorEl.hidden = true;
@@ -241,6 +329,12 @@ async function init() {
   els.siteInput.value = settings.siteUrl;
   els.apiInput.value = settings.apiUrl;
 
+  // Current sign-in state (kept by the background worker), then the server.
+  const state = await sendRuntime({ type: 'getState' });
+  if (state && state.ok && state.auth) {
+    account = { signedIn: Boolean(state.auth.signedIn), email: state.auth.email || '' };
+  }
+  renderAccount();
   checkConnection(settings.apiUrl);
 }
 

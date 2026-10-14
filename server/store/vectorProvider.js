@@ -26,6 +26,7 @@ export function resolveVectorStore(db) {
     backend: 'chroma',
     addChunks: chroma.addChunks,
     queryChunks: chroma.queryChunks,
+    queryChunksBatch: chroma.queryChunksBatch,
     pingChroma: chroma.pingChroma,
     countChunks: chroma.countChunks,
     resetCollection: chroma.resetCollection,

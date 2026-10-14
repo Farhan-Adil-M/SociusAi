@@ -66,6 +66,24 @@ export function createSqliteVectorStore(db) {
       .slice(0, nResults);
   }
 
+  // Batch variant for the extension highlighter: the rows load ONCE and every
+  // query embedding is scored against them in-process. Same hit shape.
+  async function queryChunksBatch({ embeddings, nResults = 1, userId }) {
+    userId = requireOwner(userId);
+    if (!Array.isArray(embeddings) || embeddings.length === 0) return [];
+    const rows = await db.all('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks WHERE user_id = ?', userId);
+    const chunks = rows.map((row) => ({
+      id: row.id,
+      text: row.text,
+      metadata: JSON.parse(row.metadata_json || '{}'),
+      vec: JSON.parse(row.embedding_json),
+    }));
+    return embeddings.map((embedding) => chunks
+      .map((chunk) => ({ id: chunk.id, text: chunk.text, metadata: chunk.metadata, distance: 1 - cosine(embedding, chunk.vec) }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, nResults));
+  }
+
   async function pingChroma() {
     await db.get('SELECT id, source_id, text, embedding_json, metadata_json FROM vector_chunks LIMIT 1'); // table readable = store healthy
     return true;
@@ -87,7 +105,7 @@ export function createSqliteVectorStore(db) {
     await db.run('DELETE FROM vector_chunks WHERE source_id = ?', sourceId);
   }
 
-  return { backend: 'sqlite', addChunks, queryChunks, pingChroma, countChunks, resetCollection, deleteChunks, deleteBySource };
+  return { backend: 'sqlite', addChunks, queryChunks, queryChunksBatch, pingChroma, countChunks, resetCollection, deleteChunks, deleteBySource };
 }
 
 /**
