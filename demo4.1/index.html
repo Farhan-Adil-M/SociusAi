@@ -1,0 +1,3307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LearnMate AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="doodle-ui.js" defer></script>
+</head>
+
+<body>
+  <!-- Doodle art sprite: hand-drawn line-art set used as the site-wide theme -->
+  <svg class="doodle-sprite" aria-hidden="true" focusable="false">
+    <symbol id="dd-cloud" viewBox="0 0 120 100">
+      <path d="M34 68 A20 20 0 0 1 40 38 A24 24 0 0 1 78 32 A22 22 0 0 1 96 68 Z" />
+      <path d="M46 78 l-5 13" />
+      <path d="M64 78 l-5 13" />
+      <path d="M82 78 l-5 13" />
+    </symbol>
+    <symbol id="dd-bolt" viewBox="0 0 80 110">
+      <path d="M50 6 L20 58 H42 L32 104 L62 50 H40 Z" />
+    </symbol>
+    <symbol id="dd-umbrella" viewBox="0 0 100 106">
+      <path d="M10 54 A40 40 0 0 1 90 54 Q77 70 65 54 Q52 70 40 54 Q27 70 10 54 Z" />
+      <path d="M50 54 V84 C50 96 34 98 30 88" />
+    </symbol>
+    <symbol id="dd-flower" viewBox="0 0 110 110">
+      <circle cx="82" cy="55" r="13" />
+      <circle cx="68.5" cy="78.4" r="13" />
+      <circle cx="41.5" cy="78.4" r="13" />
+      <circle cx="28" cy="55" r="13" />
+      <circle cx="41.5" cy="31.6" r="13" />
+      <circle cx="68.5" cy="31.6" r="13" />
+      <circle cx="55" cy="55" r="14" />
+      <circle cx="49" cy="52" r="3" fill="currentColor" stroke="none" />
+      <circle cx="61" cy="52" r="3" fill="currentColor" stroke="none" />
+      <path d="M47 61 Q55 69 63 61" />
+    </symbol>
+    <symbol id="dd-heart" viewBox="0 0 100 96">
+      <path d="M50 84 C14 60 8 38 20 28 C32 18 46 24 50 36 C54 24 68 18 80 28 C92 38 86 60 50 84 Z" />
+      <circle cx="39" cy="44" r="3.5" fill="currentColor" stroke="none" />
+      <circle cx="61" cy="44" r="3.5" fill="currentColor" stroke="none" />
+      <path d="M37 55 Q50 67 63 55" />
+    </symbol>
+    <symbol id="dd-rocket" viewBox="0 0 100 118">
+      <path d="M50 8 C62 20 70 36 70 56 V74 H30 V56 C30 36 38 20 50 8 Z" />
+      <circle cx="50" cy="42" r="9" />
+      <path d="M30 58 L16 84 L30 74" />
+      <path d="M70 58 L84 84 L70 74" />
+      <path d="M42 76 C43 90 46 100 50 110 C54 100 57 90 58 76" />
+    </symbol>
+    <symbol id="dd-badge" viewBox="0 0 110 118">
+      <path d="M38 82 L30 114 L52 104 L55 115 L58 104 L80 114 L72 82" />
+      <circle cx="55" cy="52" r="34" />
+      <text x="55" y="48" text-anchor="middle" font-family="Verdana, Arial, sans-serif" font-size="15" font-weight="700"
+        letter-spacing="1" fill="currentColor" stroke="none">GOOD</text>
+      <text x="55" y="68" text-anchor="middle" font-family="Verdana, Arial, sans-serif" font-size="15" font-weight="700"
+        letter-spacing="1" fill="currentColor" stroke="none">JOB!</text>
+    </symbol>
+    <symbol id="dd-star" viewBox="0 0 100 100">
+      <path d="M50 8 L62 37 L93 40 L70 62 L76 92 L50 77 L24 92 L30 62 L7 40 L38 37 Z" />
+    </symbol>
+    <symbol id="dd-sparkle" viewBox="0 0 100 100">
+      <path d="M50 6 C55 30 70 45 94 50 C70 55 55 70 50 94 C45 70 30 55 6 50 C30 45 45 30 50 6 Z" fill="currentColor"
+        stroke="none" />
+    </symbol>
+    <symbol id="dd-squiggle" viewBox="0 0 112 60">
+      <path d="M8 44 Q24 8 40 44 Q56 80 72 44 Q88 8 104 44" />
+    </symbol>
+    <symbol id="dd-plus" viewBox="0 0 60 60">
+      <path d="M30 10 V50 M10 30 H50" />
+    </symbol>
+    <symbol id="dd-temple" viewBox="0 0 120 100">
+      <path d="M60 6 L6 34 L114 34 Z" />
+      <path d="M10 40 H110" />
+      <path
+        d="M14 40 h12 M20 40 V80 M14 80 h12 M34 40 h12 M40 40 V80 M34 80 h12 M54 40 h12 M60 40 V80 M54 80 h12 M74 40 h12 M80 40 V80 M74 80 h12 M94 40 h12 M100 40 V80 M94 80 h12" />
+      <path d="M6 80 H114 M4 88 H116 M2 96 H118" />
+    </symbol>
+    <symbol id="dd-arch" viewBox="0 0 100 100">
+      <path d="M12 96 V44 A38 38 0 0 1 88 44 V96" />
+      <path d="M8 44 H92" />
+      <path d="M34 96 V56 A16 16 0 0 1 66 56 V96" />
+      <path d="M50 12 V24" />
+      <path d="M4 96 H96" />
+    </symbol>
+    <symbol id="dd-dome" viewBox="0 0 100 100">
+      <circle cx="50" cy="14" r="3" />
+      <path d="M50 17 V26" />
+      <path d="M45 36 V26 H55 V36" />
+      <path d="M43 26 H57" />
+      <path d="M20 64 A30 30 0 0 1 80 64" />
+      <path d="M34 63 Q38 46 47 37" />
+      <path d="M66 63 Q62 46 53 37" />
+      <path d="M14 64 H86" />
+      <path d="M20 64 V94 M80 64 V94" />
+      <path d="M32 74 h8 v12 h-8 z M46 74 h8 v12 h-8 z M60 74 h8 v12 h-8 z" />
+      <path d="M8 96 H92" />
+    </symbol>
+    <symbol id="dd-clocktower" viewBox="0 0 70 120">
+      <circle cx="35" cy="4" r="2.5" />
+      <path d="M35 6.5 V12" />
+      <path d="M35 12 L16 40 H54 Z" />
+      <path d="M14 40 H56 V66 H14 Z" />
+      <circle cx="35" cy="53" r="9" />
+      <path d="M35 53 V47 M35 53 L39 56" />
+      <path d="M22 66 V112 M48 66 V112" />
+      <path d="M22 82 H48 M22 98 H48" />
+      <path d="M31 112 V105 a4 4 0 0 1 8 0 V112" />
+      <path d="M16 112 H54" />
+    </symbol>
+    <symbol id="dd-townhouse" viewBox="0 0 70 100">
+      <path d="M6 26 L35 8 L64 26" />
+      <path d="M4 26 H66" />
+      <path d="M10 26 V96 M60 26 V96" />
+      <path d="M10 52 H60 M10 74 H60" />
+      <path d="M18 32 h12 v14 h-12 z M40 32 h12 v14 h-12 z" />
+      <path d="M18 57 h12 v11 h-12 z M40 57 h12 v11 h-12 z" />
+      <path d="M27 96 V82 a8 8 0 0 1 16 0 V96" />
+      <path d="M4 96 H66" />
+    </symbol>
+    <symbol id="dd-church" viewBox="0 0 80 110">
+      <path d="M17 6 L6 34 H28 Z" />
+      <path d="M8 34 V96 M26 34 V96" />
+      <path d="M4 34 H30" />
+      <path d="M13 46 h8 v10 h-8 z" />
+      <path d="M26 60 L52 40 L78 60" />
+      <path d="M74 60 V96" />
+      <path d="M41 86 V74 A9 9 0 0 1 59 74 V86 Z" />
+      <path d="M4 96 H76" />
+    </symbol>
+  </svg>
+
+  <!-- ======================================================================
+       GLOBAL ARCHITECTURE BACKDROP
+       One continuous row of connected buildings that sits BEHIND every screen
+       of the site (welcome gate, sign-in page and every dashboard page).
+       Purely decorative (aria-hidden). The row is generated by buildSkyline()
+       in the inline script so it always spans the full viewport width, and a
+       second copy is placed inside .app-shell for the signed-in pages.
+       ====================================================================== -->
+  <div class="global-skyline" id="globalSkyline" aria-hidden="true">
+    <div class="global-skyline-row"></div>
+  </div>
+
+  <!-- Pre-login Welcome Gate: shown first; SIGN IN reveals the actual login page -->
+  <section class="welcome-gate" id="welcomeGate" aria-label="Welcome">
+    <div class="welcome-card">
+
+      <div class="welcome-left">
+        <span class="welcome-brand">
+          <span class="welcome-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2.5 2 7.8l10 5.1 8-4.1v5.7h2V7.8L12 2.5Zm-7 8.2v6.1l7 3.6 7-3.6v-6.1l-7 3.6-7-3.6Z" />
+            </svg>
+          </span>
+          <span>LearnMate AI</span>
+        </span>
+        <div class="welcome-copy-block">
+          <h1>Welcome Back</h1>
+          <p>To keep connected with us please login with your personal info</p>
+          <button class="welcome-signin-btn" id="welcomeSignInBtn" type="button">Sign in</button>
+        </div>
+      </div>
+      <!-- The buildings that used to sit inside this card now live in the
+           full-screen .global-skyline backdrop so they read as one tall,
+           connected skyline behind the whole page. -->
+    </div>
+  </section>
+
+  <main class="login-page" id="loginPage" hidden>
+    <section class="login-visual" aria-label="LearnMate AI introduction">
+      <a class="login-brand" href="#" aria-label="LearnMate AI home">
+        <span class="login-brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2.5 2 7.8l10 5.1 8-4.1v5.7h2V7.8L12 2.5Zm-7 8.2v6.1l7 3.6 7-3.6v-6.1l-7 3.6-7-3.6Z" />
+          </svg>
+        </span>
+        <span>LearnMate AI</span>
+      </a>
+      <div class="visual-copy">
+        <p class="visual-eyebrow">YOUR PERSONAL STUDY SPACE</p>
+        <h1>Learn<br />brighter.</h1>
+        <p>Make every study session count with a learning space built around you.</p>
+      </div>
+      <div class="visual-art" aria-hidden="true">
+        <div class="art-orbit orbit-one"></div>
+        <div class="art-orbit orbit-two"></div>
+        <div class="art-spark spark-one">✦</div>
+        <div class="art-spark spark-two">✧</div>
+        <div class="art-book">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="art-plant">
+          <i></i><i></i><i></i><b></b>
+        </div>
+      </div>
+      <svg class="vintage-art login-watermark" aria-hidden="true">
+        <use href="#dd-temple" />
+      </svg>
+      <svg class="doodle lv-doodle lv-star" aria-hidden="true">
+        <use href="#dd-star" />
+      </svg>
+      <svg class="doodle lv-doodle lv-bolt" aria-hidden="true">
+        <use href="#dd-bolt" />
+      </svg>
+      <svg class="doodle lv-doodle lv-heart" aria-hidden="true">
+        <use href="#dd-heart" />
+      </svg>
+      <svg class="doodle lv-doodle lv-sparkle" aria-hidden="true">
+        <use href="#dd-sparkle" />
+      </svg>
+      <p class="visual-caption">A little progress every day adds up.</p>
+    </section>
+    <section class="login-card" aria-labelledby="loginTitle">
+      <div class="login-intro">
+        <p class="login-eyebrow">WELCOME BACK</p>
+        <h1 id="loginTitle">Sign in</h1>
+        <p>Enter your details to continue to your learning dashboard.</p>
+      </div>
+      <form class="login-form" id="loginForm">
+        <label for="studentName">Name</label>
+        <input id="studentName" name="name" type="text" placeholder="Your name" autocomplete="name" required />
+
+        <label for="studentEmail">Gmail address</label>
+        <input id="studentEmail" name="email" type="email" placeholder="you@gmail.com" autocomplete="email"
+          pattern=".+@gmail[.]com" title="Enter a valid Gmail address ending in @gmail.com" required />
+
+        <!-- Inline validation error: shown only when the form is invalid,
+             so the transition never starts on bad details. -->
+        <p class="validation-message" id="loginFormError" role="alert" hidden>
+          Please enter your name and a valid Gmail address (ending in @gmail.com).
+        </p>
+
+        <button class="login-submit" type="submit">Continue</button>
+        <p class="login-note">Demo sign-in only. No password is required.</p>
+      </form>
+    </section>
+  </main>
+
+  <div class="frame" id="dashboardPage" hidden>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-row">
+          <div class="brand-mark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2.5 3.5 7l8.5 4.5L20.5 7 12 2.5Zm-7 6.4 7 3.7 7-3.7v5.3L12 17.9 5 14.2V8.9Z" />
+              <path d="M7 11.5v3.2l5 2.7 5-2.7v-3.2l-5 2.7-5-2.7Z" />
+            </svg>
+          </div>
+          <div class="brand-name">LearnMate AI</div>
+        </div>
+
+        <nav class="side-menu">
+
+          <button class="menu-item" type="button" data-view="overview">
+            <span class="icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M6 4.5h9.5L18 7v12.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5Zm9 0V7h2.5v.5H15Zm-8 5.5h9v1.5h-9V10Zm0 3.5h9v1.5h-9v-1.5Z" />
+              </svg>
+            </span>
+            Overview
+          </button>
+          <button class="menu-item" type="button" data-view="materials">
+            <span class="icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M6 4.5h9.5L18 7v12.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5Zm9 0V7h2.5v.5H15Zm-8 5.5h9v1.5h-9V10Zm0 3.5h9v1.5h-9v-1.5Z" />
+              </svg>
+            </span>
+            My Materials
+          </button>
+          <button class="menu-item" type="button" data-view="tutor">
+            <span class="icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M12 2.5a7.5 7.5 0 0 1 7.5 7.5v4.4l1.8 4.1H2.7l1.8-4.1V10A7.5 7.5 0 0 1 12 2.5Zm0 19a2.7 2.7 0 0 1-2.7-2.7h5.4A2.7 2.7 0 0 1 12 21.5Z" />
+              </svg>
+            </span>
+            AI Tutor
+          </button>
+          <button class="menu-item" type="button" data-view="assessments">
+            <span class="icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M7 3.5h10a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Zm1.5 4h7v1.5h-7V7.5Zm0 3.5h7v1.5h-7v-1.5Zm0 3.5h4.5v1.5H8.5v-1.5Z" />
+              </svg>
+            </span>
+            Assessments
+          </button>
+          <button class="menu-item" type="button" data-view="progress">
+            <span class="icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M8 3.5h8a2 2 0 0 1 2 2V6h1.5A1.5 1.5 0 0 1 21 7.5v11A1.5 1.5 0 0 1 19.5 20H4.5A1.5 1.5 0 0 1 3 18.5v-11A1.5 1.5 0 0 1 4.5 6H6V5.5a2 2 0 0 1 2-2Zm2 2.5h4V5h-4v1Z" />
+                <path d="M6.5 10.5h11v3h-11v-3Z" />
+              </svg>
+            </span>
+            Learning Progress
+          </button>
+          <button class="menu-item" type="button" data-view="planner">
+            <span class="icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M7 2.5h10a2 2 0 0 1 2 2V6l-2 1.5V4.5H9V6L7 4.5V4.5A2 2 0 0 1 9 2.5Zm-2 5h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Zm5 2.5h4v2h-4v-2Zm-1 4.5h6v2H9v-2Z" />
+              </svg>
+            </span>
+            Study Planner
+          </button>
+        </nav>
+
+        <div class="sidebar-skyline" aria-hidden="true">
+          <svg class="vintage-art">
+            <use href="#dd-arch" />
+          </svg>
+          <svg class="vintage-art">
+            <use href="#dd-dome" />
+          </svg>
+          <svg class="vintage-art">
+            <use href="#dd-clocktower" />
+          </svg>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="menu-item bottom-item">
+            <span class="icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17Zm0 2a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 2.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm0 4.75a1.25 1.25 0 0 1 1.25 1.25V16h-2.5v-1.5a1.25 1.25 0 0 1 1.25-1.25Z" />
+              </svg>
+            </span>
+            Settings
+          </button>
+          <button class="menu-item sign-out-btn" id="signOutButton" type="button">
+            <span class="icon" aria-hidden="true">↪</span>
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div class="welcome-copy">
+            <h1>Good afternoon, <span id="dashboardName">Alex</span></h1>
+            <h2>Let's make today's study session count.<svg class="doodle doodle-inline" aria-hidden="true">
+                <use href="#dd-sparkle" />
+              </svg></h2>
+          </div>
+          <div class="topbar-tools">
+            <label class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M10.5 3.5a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm8.3 18.2-4.2-4.2 1.4-1.4 4.2 4.2-1.4 1.4Z" />
+              </svg>
+              <input id="dashboardSearch" type="search" aria-label="Search courses and actions"
+                placeholder="Search courses, topics, or actions..." />
+            </label>
+            <button class="bell-btn" id="notificationBellBtn" type="button" aria-label="Study Reminder Notifications"
+              title="Study Reminder Notifications (Click to configure or toggle)">
+              <span class="bell-icon-inner">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M12 2.5a5 5 0 0 1 5 5v3.1l2.3 5.4H4.7l2.3-5.4V7.5a5 5 0 0 1 5-5Zm0 19a2.5 2.5 0 0 1-2.5-2.5h5A2.5 2.5 0 0 1 12 21.5Z" />
+                </svg>
+                <span class="bell-status-dot is-active" id="bellStatusDot" title="Notifications: ON"></span>
+              </span>
+            </button>
+            <div class="profile-summary" title="Signed-in profile">
+              <div class="avatar" id="profileAvatar" aria-hidden="true">A</div>
+              <span id="profileEmail"></span>
+            </div>
+          </div>
+        </header>
+
+        <!-- Inactivity Alert Banner (Shown if inactive for 3 days or when triggered) -->
+        <aside class="inactivity-alert-banner" id="inactivityAlertBanner" role="region"
+          aria-label="Study reminder alert" hidden>
+          <div class="inactivity-alert-main">
+            <div class="inactivity-alert-icon-box" aria-hidden="true">🔔</div>
+            <div class="inactivity-alert-copy">
+              <div class="inactivity-alert-badge">3 Days Inactivity Reminder</div>
+              <h3 class="inactivity-alert-title">It's been a long time to see your dashboard and stuff!</h3>
+              <p class="inactivity-alert-desc" id="inactivityBannerDesc">
+                You have 4 incomplete study topics waiting across Biology and DLCO. Let's resume where you left off.
+              </p>
+            </div>
+          </div>
+          <div class="inactivity-alert-actions">
+            <button type="button" class="inactivity-resume-btn" id="resumeIncompleteTopicsBtn">Review Incomplete
+              Work</button>
+            <button type="button" class="inactivity-dismiss-btn" id="dismissInactivityBannerBtn"
+              aria-label="Dismiss reminder">✕</button>
+          </div>
+        </aside>
+
+        <!-- Topside Action Buttons/Boxes -->
+        <!-- ==================================================================
+             ROUTED PAGE STACK
+             Each sidebar entry maps to exactly one .app-view below. All of them
+             are driven by the single PageTransition controller in the script, so
+             every navigation zooms/fades/blurs out of the current page and the
+             next page zooms in — the same way, everywhere.
+             ================================================================== -->
+        <div class="app-view-stack" id="appViewStack">
+
+          <!-- PAGE 1 · Overview — total progress + activity across sessions -->
+          <section class="app-view" data-view="overview" id="viewOverview" aria-label="Overview">
+
+        <section class="top-action-grid" aria-label="Key study tools">
+          <!-- 1. Files Option -->
+          <article class="top-action-box files-box" id="openFilesBox" role="button" tabindex="0" aria-expanded="false"
+            data-view="materials" title="Open My Materials to add &amp; view files">
+            <div class="action-box-head">
+              <div class="mini-icon blue">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M7 3.5h10a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Zm1 3.5h8v1.5H8V7Zm0 3h8v1.5H8v-1.5Zm0 3h5.5v1.5H8v-1.5Z" />
+                </svg>
+              </div>
+              <span class="action-tag">Files Option</span>
+            </div>
+            <div class="action-box-title">Study Materials & PDFs</div>
+            <div class="action-box-value"><span id="filesCountBadge">4 files</span></div>
+            <div class="action-box-cta">Manage files <span>→</span></div>
+
+            <!-- The upload panel that used to expand inside this card now lives
+                 on its own page: .app-view[data-view="materials"]. -->
+          </article>
+
+
+          <!-- 2. Quiz Option -->
+          <article class="top-action-box quiz-box" id="openQuizBox" role="button" tabindex="0" data-view="assessments"
+            title="Open the practice quiz">
+            <div class="action-box-head">
+              <div class="mini-icon violet">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 18.5V5.5h14v13H5Zm3-9h8v2H8v-2Zm0 4h8v2H8v-2Z" />
+                </svg>
+              </div>
+              <span class="action-tag">Quiz Option</span>
+            </div>
+            <div class="action-box-title">Practice Assessments</div>
+            <div class="action-box-value"><span id="quizAccuracyDisplay">78%</span> accuracy</div>
+            <div class="action-box-cta">Take a quiz <span>→</span></div>
+          </article>
+
+          <!-- 3. Recommended Next Step Option -->
+          <article class="top-action-box recommend-box" id="openRecommendBox" role="button" tabindex="0"
+            title="Click to view recommended study step">
+            <div class="action-box-head">
+              <div class="mini-icon green">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M12 2.5a9.5 9.5 0 1 1 0 19 9.5 9.5 0 0 1 0-19Zm0 2.5a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm-1.5 2.5h3v7h-3V7.5Zm-2 5h7v3h-7v-3Z" />
+                </svg>
+              </div>
+              <span class="action-tag">Recommended Step</span>
+            </div>
+            <div class="action-box-title">Revise Photosynthesis</div>
+            <div class="action-box-value">Biology · 8 min revision</div>
+            <div class="action-box-cta">Review topic <span>→</span></div>
+          </article>
+        </section>
+
+        <!-- Middle Section: Topics Mastered & Your Learning Progress (Working!) -->
+        <section class="middle-grid">
+          <!-- Your learning progress -->
+          <article class="chart-card">
+            <div class="section-head">
+              <div>
+                <h2>Your learning progress</h2>
+                <p class="section-subtext">Interactive mastery curve across study sessions</p>
+              </div>
+              <div class="chart-actions">
+                <button type="button" class="timeframe-toggle-btn" id="timeframeBtn">Last 7 days</button>
+              </div>
+            </div>
+
+            <div class="chart-wrap">
+              <div class="chart-legend">
+                <span class="swatch"></span>
+                <span>Mastery Rate</span>
+                <span class="chart-summary-badge" id="chartAvgBadge">Avg: 76%</span>
+              </div>
+              <svg viewBox="0 0 560 230" role="img" aria-label="Progress chart" id="progressChartSvg">
+                <defs>
+                  <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#b64828" stop-opacity="0.2" />
+                    <stop offset="100%" stop-color="#b64828" stop-opacity="0.02" />
+                  </linearGradient>
+                </defs>
+                <g class="grid-lines">
+                  <line x1="40" y1="20" x2="520" y2="20" />
+                  <line x1="40" y1="65" x2="520" y2="65" />
+                  <line x1="40" y1="110" x2="520" y2="110" />
+                  <line x1="40" y1="155" x2="520" y2="155" />
+                  <line x1="40" y1="200" x2="520" y2="200" />
+                </g>
+                <g class="chart-area">
+                  <path id="chartAreaPath"
+                    d="M40 162 L120 148 L200 152 L280 128 L360 115 L440 102 L520 85 L520 200 L40 200 Z"
+                    fill="url(#chartFill)" />
+                  <polyline id="chartPolyline" points="40,162 120,148 200,152 280,128 360,115 440,102 520,85" />
+                </g>
+                <g class="chart-points" id="chartPointsGroup">
+                  <circle cx="40" cy="162" r="4.5" data-val="52%" data-label="Mon" />
+                  <circle cx="120" cy="148" r="4.5" data-val="61%" data-label="Tue" />
+                  <circle cx="200" cy="152" r="4.5" data-val="58%" data-label="Wed" />
+                  <circle cx="280" cy="128" r="4.5" data-val="72%" data-label="Thu" />
+                  <circle cx="360" cy="115" r="4.5" data-val="78%" data-label="Fri" />
+                  <circle cx="440" cy="102" r="4.5" data-val="84%" data-label="Sat" />
+                  <circle cx="520" cy="85" r="4.5" data-val="91%" data-label="Sun" />
+                </g>
+                <g class="axis-labels" id="chartAxisLabels">
+                  <text x="40" y="218">Mon</text>
+                  <text x="120" y="218">Tue</text>
+                  <text x="200" y="218">Wed</text>
+                  <text x="280" y="218">Thu</text>
+                  <text x="360" y="218">Fri</text>
+                  <text x="440" y="218">Sat</text>
+                  <text x="520" y="218">Sun</text>
+                </g>
+                <g class="y-labels">
+                  <text x="6" y="204">0%</text>
+                  <text x="2" y="159">25%</text>
+                  <text x="2" y="114">50%</text>
+                  <text x="2" y="69">75%</text>
+                  <text x="0" y="24">100%</text>
+                </g>
+              </svg>
+              <div class="chart-tooltip" id="chartTooltip" hidden></div>
+            </div>
+          </article>
+
+          <!-- Topics mastered (Working Interactive Tracker) -->
+          <article class="stat-card mastered-card">
+            <div class="section-head">
+              <div>
+                <h2>Topics mastered</h2>
+                <p class="section-subtext">Click any topic to toggle its mastered status</p>
+              </div>
+              <span class="mastered-pill-badge" id="masteredFraction">6 of 10</span>
+            </div>
+
+            <div class="meter-box">
+              <div class="meter"><span id="masteredProgressBar" style="width: 60%"></span></div>
+              <div class="meter-meta">
+                <span id="masteredPercentText">60% mastered</span>
+                <span id="masteredRemainingText">4 topics in progress</span>
+              </div>
+            </div>
+
+            <div class="topics-checklist" id="topicsChecklist" aria-label="Topics checklist">
+              <!-- Dynamically populated / interactive topic items in JS -->
+            </div>
+          </article>
+        </section>
+
+        <!-- Continue learning with SINGLE BOX named "Subjects" -->
+        <section class="continue-learning-section">
+          <div class="section-header-row">
+            <h2>Continue learning</h2>
+            <span class="header-note">Click the subjects box below to view all enrolled courses</span>
+          </div>
+
+          <!-- Single Box named Subjects -->
+          <article class="subjects-master-box" id="subjectsMasterBox" role="button" tabindex="0" aria-expanded="false"
+            title="Click to view all subjects">
+            <div class="subjects-master-main">
+              <div class="subjects-hero-badge">
+                <span class="subjects-hero-icon" aria-hidden="true">📖</span>
+                <div>
+                  <h3 class="subjects-hero-title">Subjects</h3>
+                  <p class="subjects-hero-desc">Enrolled curriculum: Science, Biology, English, Physics, DLCO, ADSA,
+                    OOPS/Java, UHV and more.</p>
+                </div>
+              </div>
+              <button type="button" class="subjects-toggle-trigger" id="subjectsToggleBtn">
+                <span id="subjectsToggleLabel">Click to open subjects</span>
+                <span class="subjects-arrow" id="subjectsArrow">▾</span>
+              </button>
+            </div>
+
+            <div class="subjects-pills-row" id="subjectsPillsRow">
+              <span class="subj-tag">Science</span>
+              <span class="subj-tag">Biology</span>
+              <span class="subj-tag">English</span>
+              <span class="subj-tag">Physics</span>
+              <span class="subj-tag">DLCO</span>
+              <span class="subj-tag">ADSA</span>
+              <span class="subj-tag">OOPS / Java</span>
+              <span class="subj-tag">UHV</span>
+            </div>
+
+            <!-- Expandable container showing all subjects -->
+            <div class="subjects-grid-expand" id="subjectsGridExpand" hidden>
+              <!-- Cards for all subjects rendered here -->
+            </div>
+          </article>
+        </section>
+
+          </section>
+          <!-- /Overview -->
+
+          <!-- PAGE 2 · My Materials — the upload box now lives here, not on the home page -->
+          <section class="app-view" data-view="materials" id="viewMaterials" aria-label="My Materials" hidden>
+            <header class="view-head">
+              <p class="view-eyebrow">MY MATERIALS</p>
+              <h2>Study materials &amp; PDFs</h2>
+              <p class="view-desc">Add your PDFs, notes and documents here — they stay available from this page.</p>
+            </header>
+
+            <div class="view-panel">
+              <div class="files-expand-panel" id="filesExpandPanel" hidden>
+                <div class="upload-interface" id="uploadInterface">
+                  <h3 class="upload-panel-heading">Upload study materials</h3>
+                  <p class="upload-panel-desc">Add your PDFs, notes, documents, and other study materials here.</p>
+
+                  <div class="file-upload-card file-selection-box" id="fileDropZone" role="button" tabindex="0"
+                    aria-label="Choose files to upload" title="Click here to choose files">
+                    <input type="file" id="fileUploadInput" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" hidden />
+                    <div class="upload-icon-wrap" aria-hidden="true">
+                      <span class="folder-icon">📁</span>
+                    </div>
+                    <div class="upload-copy">
+                      <button type="button" class="upload-browse-btn" id="browseFilesBtn">Click here to choose
+                        files</button>
+                      <p class="upload-hint">PDF, DOC and other files</p>
+                    </div>
+                  </div>
+
+                  <p class="validation-message" id="uploadValidationMessage" hidden>Please select at least one file to
+                    upload.</p>
+
+                  <div class="pending-files-section">
+                    <h3 class="files-subheading">Selected files (<span id="pendingFilesCount">0</span>)</h3>
+                    <div class="pending-files-list" id="pendingFilesList">
+                      <div class="empty-files-placeholder">
+                        <p>No new files selected.</p>
+                      </div>
+                    </div>
+                    <div class="button-row modal-action-row">
+                      <button type="button" class="button primary-button" id="uploadFilesBtn">Upload Files</button>
+                      <button type="button" class="button secondary-button" id="viewUploadedFilesBtn">View Uploaded
+                        Files</button>
+                    </div>
+
+                    <div class="upload-confirmation" id="uploadConfirmation" hidden>
+                      <h3>Confirm upload</h3>
+                      <p class="confirmation-desc">The following files will be uploaded:</p>
+                      <ul class="confirmation-file-list" id="confirmationFileList"></ul>
+                      <div class="button-row">
+                        <button type="button" class="button primary-button" id="confirmUploadBtn">Confirm Upload</button>
+                        <button type="button" class="button secondary-button" id="cancelUploadBtn">Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p class="upload-status-message" id="uploadStatusMessage" role="status" hidden></p>
+                </div>
+
+                <div class="uploaded-files-panel" id="uploadedFilesPanel" hidden>
+                  <div class="uploaded-files-header">
+                    <h3>Uploaded documents (<span id="modalFilesCount">4</span>)</h3>
+                    <button type="button" class="button secondary-button" id="closeUploadedFilesBtn">Close</button>
+                  </div>
+                  <div class="uploaded-files-list" id="uploadedFilesList" role="list"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <!-- /My Materials -->
+
+          <!-- PAGE 3 · AI Tutor — the robot zooms in, says hi and takes over the page -->
+          <section class="app-view" data-view="tutor" id="viewTutor" aria-label="AI Tutor" hidden>
+            <header class="view-head view-head-center">
+              <p class="view-eyebrow">AI TUTOR</p>
+              <h2>Meet LearnMate, your study buddy</h2>
+              <p class="view-desc">Ask about Biology, DLCO, ADSA, OOPS / Java, Physics, English or UHV.</p>
+            </header>
+
+            <div class="tutor-stage">
+              <div class="tutor-hi" id="tutorHi" aria-hidden="true">
+                Hi <span id="tutorHiName">there</span>! <span class="tutor-hi-wave">👋</span>
+              </div>
+              <div class="tutor-robot" id="tutorRobot" aria-hidden="true">
+                <svg viewBox="0 0 64 64">
+                  <path class="robot-antenna" d="M32 8v7" />
+                  <circle class="robot-antenna-tip" cx="32" cy="6" r="3.5" />
+                  <path class="robot-ear" d="M12 27H8v9h5m38-9h5v9h-5" />
+                  <path class="robot-arm" d="M17 40 11 46m36-6 6 6" />
+                  <circle class="robot-hand" cx="10" cy="48" r="3" />
+                  <circle class="robot-hand" cx="54" cy="48" r="3" />
+                  <path class="robot-leg" d="M25 53v5m14-5v5" />
+                  <path class="robot-foot" d="M21 59h8m6 0h8" />
+                  <path class="robot-body" d="M21 39h22a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Z" />
+                  <path class="robot-body-panel" d="M27 44h10v7H27z" />
+                  <circle class="robot-body-light" cx="32" cy="47.5" r="1.5" />
+                  <rect class="robot-head" x="13" y="15" width="38" height="29" rx="11" />
+                  <rect class="robot-face" x="18" y="21" width="28" height="17" rx="7" />
+                  <circle class="robot-eye" cx="26" cy="28" r="2.3" />
+                  <circle class="robot-eye" cx="38" cy="28" r="2.3" />
+                  <path class="robot-smile" d="M28 33q4 4 8 0" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="tutor-actions">
+              <button type="button" class="button primary-button" id="tutorOpenChatBtn">Open study chat</button>
+            </div>
+          </section>
+          <!-- /AI Tutor -->
+
+          <!-- PAGE 4 · Assessments — the practice quiz, now a full page -->
+          <section class="app-view" data-view="assessments" id="viewAssessments" aria-label="Assessments" hidden>
+            <header class="view-head">
+              <p class="view-eyebrow">ASSESSMENTS</p>
+              <h2>Practice assessments</h2>
+              <p class="view-desc">Test your recall across Science, DLCO, Java OOP and Biology.</p>
+            </header>
+
+            <div class="editorial-modal-backdrop" id="quizModalBackdrop" hidden>
+              <div class="editorial-modal quiz-modal-wrap" role="dialog" aria-labelledby="quizModalTitle"
+                aria-modal="true">
+                <header class="editorial-modal-header">
+                  <div>
+                    <span class="modal-eyebrow">Interactive Assessment</span>
+                    <h2 id="quizModalTitle">Subject Practice Quiz</h2>
+                    <p class="modal-desc">Test your recall across Science, DLCO, Java OOP, and Biology.</p>
+                  </div>
+                  <button class="modal-close-btn" id="closeQuizModalBtn" type="button"
+                    aria-label="Back to overview">×</button>
+                </header>
+
+                <div class="modal-content">
+                  <div class="quiz-subject-tabs" id="quizSubjectTabs">
+                    <button type="button" class="quiz-tab active" data-subject="all">All Subjects</button>
+                    <button type="button" class="quiz-tab" data-subject="biology">Biology</button>
+                    <button type="button" class="quiz-tab" data-subject="dlco">DLCO</button>
+                    <button type="button" class="quiz-tab" data-subject="oops">OOPS / Java</button>
+                    <button type="button" class="quiz-tab" data-subject="physics">Physics</button>
+                  </div>
+
+                  <div class="quiz-card-box" id="quizQuestionBox">
+                    <div class="quiz-meta-row">
+                      <span class="quiz-subject-badge" id="quizSubjectBadge">Biology</span>
+                      <span class="quiz-q-counter" id="quizQCounter">Question 1 of 5</span>
+                    </div>
+
+                    <h3 class="quiz-q-title" id="quizQuestionTitle">What is the primary function of chlorophyll in
+                      photosynthesis?
+                    </h3>
+
+                    <div class="quiz-options-list" id="quizOptionsList">
+                      <!-- Dynamically rendered options -->
+                    </div>
+
+                    <div class="quiz-feedback-box" id="quizFeedbackBox" hidden></div>
+
+                    <div class="quiz-footer-actions">
+                      <button type="button" class="quiz-next-btn" id="quizNextBtn" disabled>Next Question →</button>
+                      <div class="quiz-score-pill">Session Accuracy: <strong id="quizSessionScore">100%</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <!-- /Assessments -->
+
+          <!-- PAGE 5 · Learning Progress — mastery + activity across all sessions -->
+          <section class="app-view" data-view="progress" id="viewProgress" aria-label="Learning Progress" hidden>
+            <header class="view-head">
+              <p class="view-eyebrow">LEARNING PROGRESS</p>
+              <h2>Your learning progress</h2>
+              <p class="view-desc">Total mastery and your activity across every study session.</p>
+            </header>
+
+            <div class="progress-stats">
+              <article class="top-action-box stat-box">
+                <div class="action-box-head">
+                  <span class="action-tag">Mastery</span>
+                </div>
+                <div class="action-box-title"><span id="progressMasteredFraction">6 of 10</span></div>
+                <div class="action-box-value"><span id="progressMasteredPercent">60% mastered</span></div>
+              </article>
+              <article class="top-action-box stat-box">
+                <div class="action-box-head">
+                  <span class="action-tag">Quiz accuracy</span>
+                </div>
+                <div class="action-box-title"><span id="progressAccuracy">78%</span></div>
+                <div class="action-box-value">average across sessions</div>
+              </article>
+              <article class="top-action-box stat-box">
+                <div class="action-box-head">
+                  <span class="action-tag">Files</span>
+                </div>
+                <div class="action-box-title"><span id="progressFilesCount">4 files</span></div>
+                <div class="action-box-value">uploaded study materials</div>
+              </article>
+            </div>
+
+            <div class="view-panel">
+              <div class="section-head">
+                <div>
+                  <h3 class="upload-panel-heading">Topics mastered</h3>
+                  <p class="upload-panel-desc">Click any topic to toggle its mastered status.</p>
+                </div>
+                <span class="mastered-pill-badge" id="progressMasteredBadge">6 of 10</span>
+              </div>
+              <div class="meter"><span id="progressMasteredBar" style="width: 60%"></span></div>
+              <div class="topics-checklist" id="progressTopicsList" aria-label="Topics mastery checklist"></div>
+            </div>
+          </section>
+          <!-- /Learning Progress -->
+
+          <!-- PAGE 6 · Study Planner — a session-by-session plan built from your topics -->
+          <section class="app-view" data-view="planner" id="viewPlanner" aria-label="Study Planner" hidden>
+            <header class="view-head">
+              <p class="view-eyebrow">STUDY PLANNER</p>
+              <h2>Your study planner</h2>
+              <p class="view-desc">A session-by-session plan generated from the topics you are still working on.</p>
+            </header>
+
+            <div class="planner-grid" id="plannerGrid"></div>
+
+            <div class="view-panel planner-note">
+              <p class="upload-panel-desc">Sessions are rebuilt whenever you change a topic on the
+                <button type="button" class="inline-link" data-view="progress">Learning Progress</button> page.</p>
+            </div>
+          </section>
+          <!-- /Study Planner -->
+
+        </div>
+        <!-- /app-view-stack -->
+      </main>
+    </div>
+  </div>
+  <section class="robot-chat-panel" id="robotChatPanel" aria-label="LearnMate study chat" hidden>
+    <header class="robot-chat-header">
+      <div class="robot-avatar" aria-hidden="true">
+        <svg viewBox="0 0 64 64">
+          <path class="robot-antenna" d="M32 8v7" />
+          <circle class="robot-antenna-tip" cx="32" cy="6" r="3.5" />
+          <path class="robot-ear" d="M12 27H8v9h5m38-9h5v9h-5" />
+          <path class="robot-arm" d="m17 43-5 6m35-6 5 6" />
+          <path class="robot-leg" d="M25 53v4m14-4v4" />
+          <path class="robot-body" d="M21 39h22a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Z" />
+          <path class="robot-body-panel" d="M27 44h10v7H27z" />
+          <circle class="robot-body-light" cx="32" cy="47.5" r="1.5" />
+          <rect class="robot-head" x="13" y="15" width="38" height="29" rx="11" />
+          <rect class="robot-face" x="18" y="21" width="28" height="17" rx="7" />
+          <circle class="robot-eye" cx="26" cy="28" r="2.3" />
+          <circle class="robot-eye" cx="38" cy="28" r="2.3" />
+          <path class="robot-smile" d="M28 33q4 4 8 0" />
+        </svg>
+      </div>
+      <div>
+        <h2>LearnMate AI</h2>
+        <p>Your study buddy</p>
+      </div>
+      <button class="robot-chat-close" id="robotChatClose" type="button" aria-label="Close chat">×</button>
+    </header>
+    <div class="robot-chat-messages" id="robotChatMessages" aria-live="polite" aria-relevant="additions">
+      <div class="robot-chat-message assistant-message">Hi <span id="chatUserName">there</span>! What are you studying
+        today?</div>
+    </div>
+    <form class="robot-chat-form" id="robotChatForm">
+      <label class="visually-hidden" for="robotChatInput">Message LearnMate AI</label>
+      <input id="robotChatInput" type="text" placeholder="Ask a study question..." autocomplete="off" required />
+      <button type="submit" aria-label="Send message">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 20.5 21 12 3 3.5v6.6l12 1.9-12 1.9v6.6Z" />
+        </svg>
+      </button>
+    </form>
+    <p class="robot-chat-note">Study chat preview · Sample replies</p>
+  </section>
+  <button class="robot-greeting" id="robotGreeting" type="button" aria-expanded="false" aria-controls="robotChatPanel"
+    aria-label="Open study chat" hidden>
+    <span class="robot-avatar" aria-hidden="true">
+      <svg viewBox="0 0 64 64">
+        <path class="robot-antenna" d="M32 8v7" />
+        <circle class="robot-antenna-tip" cx="32" cy="6" r="3.5" />
+        <path class="robot-ear" d="M12 27H8v9h5m38-9h5v9h-5" />
+        <path class="robot-arm" d="M17 40 11 46m36-6 6 6" />
+        <circle class="robot-hand" cx="10" cy="48" r="3" />
+        <circle class="robot-hand" cx="54" cy="48" r="3" />
+        <path class="robot-leg" d="M25 53v5m14-5v5" />
+        <path class="robot-foot" d="M21 59h8m6 0h8" />
+        <path class="robot-body" d="M21 39h22a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Z" />
+        <path class="robot-body-panel" d="M27 44h10v7H27z" />
+        <circle class="robot-body-light" cx="32" cy="47.5" r="1.5" />
+        <rect class="robot-head" x="13" y="15" width="38" height="29" rx="11" />
+        <rect class="robot-face" x="18" y="21" width="28" height="17" rx="7" />
+        <circle class="robot-eye" cx="26" cy="28" r="2.3" />
+        <circle class="robot-eye" cx="38" cy="28" r="2.3" />
+        <path class="robot-smile" d="M28 33q4 4 8 0" />
+      </svg>
+    </span>
+  </button>
+
+  <!-- The practice quiz now lives on its own page:
+       .app-view[data-view="assessments"] -->
+
+  <!-- Recommended Step Review Modal -->
+  <div class="editorial-modal-backdrop" id="recommendModalBackdrop" hidden>
+    <div class="editorial-modal" role="dialog" aria-labelledby="recommendModalTitle" aria-modal="true">
+      <header class="editorial-modal-header">
+        <div>
+          <span class="modal-eyebrow">Study Recommendation</span>
+          <h2 id="recommendModalTitle">Revise Photosynthesis</h2>
+          <p class="modal-desc">Biology · Cell Structure & Energy Transfer (8 min sprint)</p>
+        </div>
+        <button class="modal-close-btn" id="closeRecommendModalBtn" type="button" aria-label="Close modal">×</button>
+      </header>
+
+      <div class="modal-content">
+        <div class="review-sheet">
+          <div class="review-section">
+            <h4>1. Light-Dependent Reactions (Thylakoid Membrane)</h4>
+            <p>Photons strike chlorophyll molecules in Photosystem II, exciting electrons and splitting water into
+              oxygen, protons, and electrons. The electron transport chain pumps protons into the lumen, generating ATP
+              and NADPH.</p>
+          </div>
+          <div class="review-section">
+            <h4>2. Light-Independent Reactions / Calvin Cycle (Stroma)</h4>
+            <p>RuBisCO fixes carbon dioxide onto RuBP (Ribulose 1,5-bisphosphate). Using ATP and NADPH from light
+              reactions, 3-PGA is reduced to G3P to synthesize glucose.</p>
+          </div>
+          <div class="review-actions-row">
+            <button type="button" class="primary-btn" id="startPhotosynthesisQuizBtn">Take Photosynthesis Quiz</button>
+            <button type="button" class="secondary-btn" id="markPhotosynthesisMasteredBtn">Mark Topic as
+              Mastered</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifications & Inactivity Study Reminders Modal -->
+  <div class="editorial-modal-backdrop" id="notificationsModalBackdrop" hidden>
+    <div class="editorial-modal notifications-modal-wrap" role="dialog" aria-labelledby="notificationsModalTitle"
+      aria-modal="true">
+      <header class="editorial-modal-header">
+        <div>
+          <span class="modal-eyebrow">Study Reminders & Desktop Alerts</span>
+          <h2 id="notificationsModalTitle">Inactivity & Closed-App Alerts</h2>
+          <p class="modal-desc">Turn on or off automated notifications when the website is closed or unopened for 3
+            days.</p>
+        </div>
+        <button class="modal-close-btn" id="closeNotificationsModalBtn" type="button"
+          aria-label="Close modal">×</button>
+      </header>
+
+      <div class="modal-content">
+        <!-- Master Switch Card -->
+        <div class="notif-toggle-card">
+          <div class="notif-toggle-info">
+            <div class="notif-toggle-title-row">
+              <h3>Background Study Notifications</h3>
+              <span class="notif-status-pill is-on" id="notifStatusPill">Active (ON)</span>
+            </div>
+            <p>
+              When this website is totally closed, send a system message notification after
+              <strong>3 days of inactivity</strong> to recommend reviewing your incomplete work.
+            </p>
+          </div>
+          <button type="button" class="notif-master-switch is-active" id="notifMasterSwitch" role="switch"
+            aria-checked="true" aria-label="Toggle notifications">
+            <span class="switch-knob"></span>
+          </button>
+        </div>
+
+        <!-- Inactivity Policy & Incomplete Topics -->
+        <div class="notif-policy-card">
+          <div class="policy-header">
+            <span class="policy-badge">Inactivity Rule: 3 Days</span>
+            <span class="policy-sub">Triggers when website is closed or untouched for 3 days</span>
+          </div>
+
+          <div class="notif-message-preview-box">
+            <div class="preview-header">
+              <span class="preview-icon">🔔</span>
+              <span class="preview-app-title">LearnMate AI · Study Reminder</span>
+              <span class="preview-time">After 3 days</span>
+            </div>
+            <p class="preview-body" id="notifPreviewMessage">
+              "It's been a long time to see your dashboard and stuff! You have 4 incomplete topics waiting. Time to
+              get back on track!"
+            </p>
+          </div>
+
+          <!-- Dynamic Incomplete Work Summary -->
+          <div class="incomplete-work-summary">
+            <div class="incomplete-work-head">
+              <h4>Incomplete Topics to Recommend (<span id="incompleteTopicsCount">4</span>)</h4>
+              <span class="incomplete-work-hint">Synced live from Topics Mastered</span>
+            </div>
+            <div class="incomplete-topics-tags" id="incompleteTopicsTags">
+              <!-- Dynamically populated from topicsMasteredState -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions: Test Real Notification & Simulate 3 Days -->
+        <div class="notif-actions-box">
+          <div class="notif-action-row">
+            <div>
+              <strong>Test Desktop Message Notification</strong>
+              <p>Sends a real browser notification right now so you can verify how it appears.</p>
+            </div>
+            <button type="button" class="primary-btn notif-btn-sm" id="testDesktopNotificationBtn">Send Test
+              Message</button>
+          </div>
+
+          <div class="notif-action-row">
+            <div>
+              <strong>Simulate 3 Days Inactivity Trigger</strong>
+              <p>Simulates the exact notification and dashboard banner after being away for 3 days.</p>
+            </div>
+            <button type="button" class="secondary-btn notif-btn-sm" id="simulate3DaysBtn">Simulate 3 Days</button>
+          </div>
+        </div>
+
+        <div class="notif-permission-note" id="notifPermissionNote">
+          <span class="info-icon">💡</span>
+          <span id="notifPermissionText">Clicking 'Send Test Message' will prompt for browser notification permissions
+            if not already granted.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="dashboardToast" role="status" aria-live="polite" hidden></div>
+  <script>
+    // Elements & Navigation
+    const loginForm = document.querySelector("#loginForm");
+    const loginPage = document.querySelector("#loginPage");
+    const dashboardPage = document.querySelector("#dashboardPage");
+    const studentNameInput = document.querySelector("#studentName");
+    const studentEmailInput = document.querySelector("#studentEmail");
+    const dashboardName = document.querySelector("#dashboardName");
+    const profileEmail = document.querySelector("#profileEmail");
+    const profileAvatar = document.querySelector("#profileAvatar");
+    const chatUserName = document.querySelector("#chatUserName");
+    const signOutButton = document.querySelector("#signOutButton");
+    const dashboardSearch = document.querySelector("#dashboardSearch");
+    const toast = document.querySelector("#dashboardToast");
+    let toastTimer;
+    let chatReplyTimer;
+
+    // Robot Chat
+    const robotGreeting = document.querySelector("#robotGreeting");
+    const robotChatPanel = document.querySelector("#robotChatPanel");
+    const robotChatClose = document.querySelector("#robotChatClose");
+    const robotChatForm = document.querySelector("#robotChatForm");
+    const robotChatInput = document.querySelector("#robotChatInput");
+    const robotChatMessages = document.querySelector("#robotChatMessages");
+
+    robotChatPanel.hidden = true;
+    robotGreeting.hidden = true;
+
+    // Welcome Gate (pre-login screen) — pressing SIGN IN reveals the login page
+    const welcomeGate = document.querySelector("#welcomeGate");
+    const welcomeSignInBtn = document.querySelector("#welcomeSignInBtn");
+
+    // =========================================================================
+    // GLOBAL PAGE TRANSITION SYSTEM — the single, centralised controller that
+    // every navigation in this site travels through (welcome gate → sign-in →
+    // dashboard → each sidebar page → browser back/forward).
+    //
+    //   LEAVING  : the current page zooms in a little, then out, while it fades
+    //              away with a soft blur. It stays visible until it finishes.
+    //   ENTERING : the next page starts at scale(1.08), transparent and blurred,
+    //              then settles to scale(1), sharp and fully opaque.
+    //
+    // Durations mirror the `pt-exit` / `pt-enter` keyframes in style.css and
+    // stay inside the 350–600ms budget. Reduced motion collapses both to 0ms.
+    // =========================================================================
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const loginFormError = document.querySelector("#loginFormError");
+    const loginCard = document.querySelector(".login-card");
+
+    const EXIT_MS = 420;          // pt-exit  in style.css
+    const ENTER_MS = 520;         // pt-enter in style.css
+    const DASH_ENTER_MS = 1200;   // staggered dashboard reveal after sign-in
+    const SAFETY_MS = 160;        // timer fallback, always a touch longer than
+                                  // the animation so animationend wins.
+
+    // One transition at a time — this is what stops double navigation,
+    // stacked animations and conflicting page swaps.
+    let isTransitioning = false;
+
+    function prefersReducedMotion() {
+      return reducedMotionQuery.matches;
+    }
+
+    function transitionMs(ms) {
+      return prefersReducedMotion() ? 0 : ms;
+    }
+
+    // Fallback budget: under reduced motion everything resolves immediately,
+    // otherwise it is always longer than the animation so nothing hangs.
+    function fallbackMs(ms) {
+      return prefersReducedMotion() ? 0 : ms + SAFETY_MS;
+    }
+
+    function wait(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, transitionMs(ms)));
+    }
+
+    // Runs `done` when `element` finishes its own animation, or after
+    // `fallbackMs` — whichever comes first (so a page can never get stuck).
+    function afterAnimation(element, fallback, done) {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        element.removeEventListener("animationend", onAnimationEnd);
+        window.clearTimeout(safetyTimer);
+        done();
+      };
+      // Ignore animationend events bubbling up from children.
+      const onAnimationEnd = (event) => {
+        if (event.target === element) finish();
+      };
+      element.addEventListener("animationend", onAnimationEnd);
+      const safetyTimer = window.setTimeout(finish, fallback);
+    }
+
+    // --- the two reusable halves of EVERY transition --------------------------
+    // Leave: zoom in → zoom out + fade + blur, then resolve.
+    function playExit(element, ms) {
+      return new Promise((resolve) => {
+        if (!element) {
+          resolve();
+          return;
+        }
+        element.classList.add("pt-exit");
+        afterAnimation(element, fallbackMs(ms), () => {
+          element.classList.remove("pt-exit");
+          resolve();
+        });
+      });
+    }
+
+    // Enter: scale(1.08) + blurred + transparent → scale(1) + sharp + opaque.
+    function playEnter(element, ms, extraClasses, useTimer) {
+      return new Promise((resolve) => {
+        if (!element) {
+          resolve();
+          return;
+        }
+        const classes = ["pt-enter"].concat(extraClasses || []);
+        classes.forEach((cls) => element.classList.add(cls));
+        const finish = () => {
+          classes.forEach((cls) => element.classList.remove(cls));
+          resolve();
+        };
+        // `useTimer` is used when child elements stagger for longer than the
+        // parent's own animation (the dashboard reveal).
+        if (useTimer) window.setTimeout(finish, transitionMs(ms));
+        else afterAnimation(element, fallbackMs(ms), finish);
+      });
+    }
+
+    // Show the inline error + gentle shake. No transition is started.
+    function showLoginError() {
+      if (loginFormError) loginFormError.hidden = false;
+      if (loginCard) {
+        loginCard.classList.remove("login-shake");
+        void loginCard.offsetWidth; // restart the keyframes
+        loginCard.classList.add("login-shake");
+      }
+    }
+
+    function hideLoginError() {
+      if (loginFormError) loginFormError.hidden = true;
+      if (loginCard) loginCard.classList.remove("login-shake");
+    }
+
+    // Native constraint validation fires `invalid` per field (it does not
+    // bubble, so listen in the capture phase) → surface our own message too.
+    loginForm.addEventListener(
+      "invalid",
+      () => {
+        showLoginError();
+      },
+      true
+    );
+
+    // Clear the error as soon as the visitor edits the form again.
+    loginForm.addEventListener("input", hideLoginError);
+
+    // Lock page scrolling while an exit animation plays (prevents any
+    // scrollbar flash from the subtle zoom).
+    function setScrollLocked(locked) {
+      document.body.classList.toggle("is-transitioning", locked);
+    }
+
+    // =========================================================================
+    // ROUTER — pages, sidebar menu, browser history. Everything internal goes
+    // through navigateTo(), so the exact same animation plays on every hop.
+    // =========================================================================
+    const appShell = document.querySelector(".app-shell");
+    const mainPanel = document.querySelector(".main-panel");
+    const appViewStack = document.querySelector("#appViewStack");
+    const sideMenu = document.querySelector(".side-menu");
+
+    const VIEW_IDS = ["overview", "materials", "tutor", "assessments", "progress", "planner"];
+    const viewElements = Object.create(null);
+    VIEW_IDS.forEach((id) => {
+      viewElements[id] = appViewStack.querySelector('.app-view[data-view="' + id + '"]');
+    });
+
+    let activeView = "overview";
+    let isDashboardLive = false;   // only true once the visitor is signed in
+    let pendingRequest = null;     // a click or back/forward that arrived mid-animation
+    // `fromHistory` records where the queued request came from: requests that
+    // originate from the URL must not rewrite it, but a queued *click* must —
+    // otherwise a rapid double-click leaves the page and the URL disagreeing,
+    // and the very next Back press becomes a no-op.
+
+    // Per-page side effects, run exactly when a page is swapped in or out.
+    const viewHooks = {
+      overview: {},
+      materials: {
+        enter() {
+          isFilesExpandedState = true;
+          setFilesExpanded(true);
+        },
+        leave() {
+          isFilesExpandedState = false;
+          setFilesExpanded(false);
+        }
+      },
+      tutor: {
+        enter() {
+          setRobotChatOpen(true);
+          replayTutorIntro();
+        },
+        leave() {
+          setRobotChatOpen(false);
+        }
+      },
+      assessments: {
+        enter() {
+          quizModalBackdrop.hidden = false;
+          renderQuizQuestion();
+        },
+        leave() {
+          quizModalBackdrop.hidden = true;
+        }
+      },
+      progress: {
+        enter() {
+          renderProgressPage();
+        }
+      },
+      planner: {
+        enter() {
+          renderStudyPlan();
+        }
+      }
+    };
+
+    function syncMenu(viewId) {
+      sideMenu.querySelectorAll(".menu-item[data-view]").forEach((item) => {
+        const isActive = item.getAttribute("data-view") === viewId;
+        item.classList.toggle("active", isActive);
+        if (isActive) item.setAttribute("aria-current", "page");
+        else item.removeAttribute("aria-current");
+      });
+    }
+
+    // Hash URLs (#/overview, #/materials …) give us browser Back/Forward for
+    // free and work on file:// as well as http://.
+    function viewFromHash() {
+      const raw = (window.location.hash || "").replace(/^#\/?/, "").trim();
+      return VIEW_IDS.indexOf(raw) !== -1 ? raw : null;
+    }
+
+    // Creates a history entry → Back and Forward navigate between pages.
+    function writeHash(viewId) {
+      const target = "#/" + viewId;
+      if (window.location.hash !== target) window.location.hash = target;
+    }
+
+    // State only, no animation — used to reset to a clean Overview.
+    function activateView(viewId, options) {
+      const opts = options || {};
+      VIEW_IDS.forEach((id) => {
+        viewElements[id].hidden = id !== viewId;
+      });
+      activeView = viewId;
+      document.body.dataset.activeView = viewId;
+      syncMenu(viewId);
+      if (!opts.skipHooks && viewHooks[viewId] && viewHooks[viewId].enter) {
+        viewHooks[viewId].enter();
+      }
+    }
+
+    // The one entry point for page-to-page navigation.
+    async function navigateTo(viewId, options) {
+      const opts = options || {};
+      if (!viewElements[viewId]) return false;
+      if (!isDashboardLive) return false;          // never navigate before sign-in
+      if (viewId === activeView && !opts.force) return false;
+      if (isTransitioning) {                       // never stack transitions
+        pendingRequest = { view: viewId, fromHistory: opts.updateHistory === false };
+        return false;
+      }
+
+      const fromView = viewElements[activeView];
+      const toView = viewElements[viewId];
+
+      isTransitioning = true;
+      setScrollLocked(true);
+
+      try {
+        // 1 — the current page zooms out, fades and blurs away.
+        if (fromView && fromView !== toView) await playExit(fromView, EXIT_MS);
+
+        // 2 — swap pages (leave hook → hide → show → enter hook).
+        if (viewHooks[activeView] && viewHooks[activeView].leave) viewHooks[activeView].leave();
+        if (fromView) fromView.hidden = true;
+        activeView = viewId;
+        document.body.dataset.activeView = viewId;
+        toView.hidden = false;
+        if (mainPanel) mainPanel.scrollTop = 0;
+        syncMenu(viewId);
+        // Written in the SAME synchronous block as activeView, so the echo
+        // hashchange can never observe a hash that disagrees with the page.
+        if (opts.updateHistory !== false) writeHash(viewId);
+        if (viewHooks[viewId] && viewHooks[viewId].enter) viewHooks[viewId].enter();
+
+        // 3 — the next page zooms in, un-blurs and fades into place.
+        await playEnter(toView, ENTER_MS);
+      } finally {
+        // Always release, so a failed animation can never wedge the app.
+        isTransitioning = false;
+        setScrollLocked(false);
+        drainPending();
+      }
+      return true;
+    }
+
+    // Serve a back/forward request that arrived while a transition was running.
+    function drainPending() {
+      if (!pendingRequest) return;
+      const request = pendingRequest;
+      pendingRequest = null;
+      if (request.view === activeView) return;
+      navigateTo(request.view, { updateHistory: !request.fromHistory });
+    }
+
+    // Browser Back / Forward.
+    window.addEventListener("hashchange", () => {
+      const target = viewFromHash();
+      if (!target || target === activeView) return; // our own write, ignore it
+      if (isTransitioning) {
+        pendingRequest = { view: target, fromHistory: true };
+        return;
+      }
+      navigateTo(target, { updateHistory: false });
+    });
+
+    // ONE delegated listener drives every internal navigation target: the
+    // sidebar, the action cards and any inline link. Adding data-view="…" to
+    // a button is all it takes to join the transition system — and because
+    // there is only one listener, duplicates are impossible.
+    document.addEventListener("click", (event) => {
+      if (!event.target || !event.target.closest) return;
+      const trigger = event.target.closest("[data-view]");
+      if (!trigger || trigger.classList.contains("app-view")) return;
+      navigateTo(trigger.getAttribute("data-view"));
+    });
+
+    // Keyboard activation for the action cards (role="button").
+    // Native buttons and links already emit click on Enter/Space, so skip them.
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (!event.target || !event.target.closest) return;
+      const trigger = event.target.closest('[data-view][role="button"]');
+      if (!trigger) return;
+      const tag = trigger.tagName;
+      if (tag === "BUTTON" || tag === "A" || tag === "INPUT") return;
+      event.preventDefault();
+      trigger.click();
+    });
+
+    // --- Welcome gate → Sign-in page ---------------------------------------
+    welcomeSignInBtn.addEventListener("click", async () => {
+      if (isTransitioning) return;
+      isTransitioning = true;
+      setScrollLocked(true);
+      try {
+        await playExit(welcomeGate, EXIT_MS);
+        welcomeGate.hidden = true;
+        loginPage.hidden = false;
+        await playEnter(loginPage, ENTER_MS);
+        studentNameInput.focus();
+      } finally {
+        setScrollLocked(false);
+        isTransitioning = false;
+      }
+    });
+
+    // Login Form — validate first, transition only when everything is valid.
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      // 1) Validation: invalid details → inline error, NO transition starts.
+      if (isTransitioning) return;
+      if (!loginForm.reportValidity()) {
+        showLoginError();
+        return;
+      }
+      hideLoginError();
+
+      // 2) Existing behaviour (unchanged): populate the dashboard.
+      const name = studentNameInput.value.trim();
+      const email = studentEmailInput.value.trim();
+      dashboardName.textContent = name;
+      chatUserName.textContent = name.split(/\s+/)[0];
+      profileEmail.textContent = email;
+      profileAvatar.textContent = name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join("");
+
+      setRobotChatOpen(false);
+
+      // 3) Authenticated → only now does the sign-in page zoom/fade/blur out.
+      isTransitioning = true;
+      setScrollLocked(true);
+      try {
+        await playExit(loginPage, EXIT_MS);
+        loginPage.hidden = true;
+
+        // 4) Reveal the real main website (dark → dark swap: no white flash).
+        dashboardPage.hidden = false;
+        robotGreeting.hidden = false;
+        document.body.classList.add("dashboard-mode");
+        window.scrollTo(0, 0);
+
+        isDashboardLive = true;
+        activateView("overview");
+        writeHash("overview");
+
+        // 5) Navbar + content rise in (staggered slide-up + fade-in).
+        robotGreeting.classList.add("is-entering");
+        await playEnter(dashboardPage, DASH_ENTER_MS, ["is-entering"], true);
+        robotGreeting.classList.remove("is-entering");
+      } finally {
+        setScrollLocked(false);
+        isTransitioning = false;
+        // A Back/Forward or menu click that landed during the (long) dashboard
+        // reveal would otherwise be stored and never served — leaving the URL
+        // and the visible page out of step.
+        drainPending();
+      }
+    });
+
+    // Sign Out — reverse transition (dashboard blurs out, sign-in eases back in).
+    signOutButton.addEventListener("click", async () => {
+      if (isTransitioning) return;
+
+      loginForm.reset();
+      hideLoginError();
+      dashboardSearch.value = "";
+      filterDashboard(dashboardSearch.value);
+      setRobotChatOpen(false);
+      closeAllModals();
+      resetRobotChat();
+
+      isTransitioning = true;
+      setScrollLocked(true);
+      try {
+        await playExit(dashboardPage, EXIT_MS);
+        dashboardPage.hidden = true;
+        robotGreeting.hidden = true;
+        document.body.classList.remove("dashboard-mode");
+
+        // Come back to a clean Overview next time, with no hooks fired.
+        isDashboardLive = false;
+        pendingRequest = null;
+        activateView("overview", { skipHooks: true });
+
+        loginPage.hidden = false;
+        await playEnter(loginPage, ENTER_MS);
+        studentNameInput.focus();
+        window.scrollTo(0, 0);
+      } finally {
+        setScrollLocked(false);
+        isTransitioning = false;
+      }
+    });
+
+    // =========================================================================
+    // PAGES THAT RENDER THEIR OWN CONTENT
+    // =========================================================================
+    function setText(selector, value) {
+      const el = document.querySelector(selector);
+      if (el) el.textContent = value;
+    }
+
+    // Learning Progress page — stat cards + the shared mastery list.
+    function renderProgressPage() {
+      if (typeof topicsMasteredState === "undefined" || !topicsMasteredState.length) return;
+
+      const total = topicsMasteredState.length;
+      const masteredCount = topicsMasteredState.filter((t) => t.mastered).length;
+      const percent = Math.round((masteredCount / total) * 100);
+
+      setText("#progressMasteredFraction", `${masteredCount} of ${total}`);
+      setText("#progressMasteredPercent", `${percent}% mastered`);
+      setText("#progressMasteredBadge", `${masteredCount} of ${total}`);
+
+      const bar = document.querySelector("#progressMasteredBar");
+      if (bar) bar.style.width = `${percent}%`;
+
+      // Read the live figures straight from the Overview cards so both pages
+      // always agree, whichever one updated last.
+      const accuracy = document.querySelector("#quizAccuracyDisplay");
+      const files = document.querySelector("#filesCountBadge");
+      setText("#progressAccuracy", accuracy ? accuracy.textContent : "—");
+      setText("#progressFilesCount", files ? files.textContent : "—");
+    }
+
+    // Study Planner page — a week of sessions built from the real topic state.
+    const PLANNER_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    function renderStudyPlan() {
+      const grid = document.querySelector("#plannerGrid");
+      if (!grid) return;
+
+      const inProgress = topicsMasteredState.filter((t) => !t.mastered);
+      const pool = inProgress.length ? inProgress : topicsMasteredState;
+      const revisionOnly = inProgress.length === 0;
+
+      grid.innerHTML = PLANNER_DAYS.map((day, index) => {
+        const topic = pool[index % pool.length];
+        return `
+          <article class="planner-card">
+            <p class="planner-day">${day}</p>
+            <h3 class="planner-topic">${topic.name}</h3>
+            <p class="planner-meta">
+              <span class="topic-subject-badge">${topic.subject}</span>
+              <span class="planner-time">${index % 2 === 0 ? "25 min" : "40 min"}</span>
+            </p>
+            <p class="planner-state">${revisionOnly ? "Revision session" : "Focus session"}</p>
+          </article>`;
+      }).join("");
+    }
+
+    // AI Tutor page — zoom the robot in and replay the greeting.
+    function replayTutorIntro() {
+      const stage = document.querySelector(".tutor-stage");
+      const hi = document.querySelector("#tutorHi");
+      const hiName = document.querySelector("#tutorHiName");
+
+      if (hiName) hiName.textContent = (chatUserName && chatUserName.textContent) || "there";
+
+      [stage, hi].forEach((el) => {
+        if (!el) return;
+        el.classList.remove("is-intro");
+        void el.offsetWidth; // restart the keyframes
+        el.classList.add("is-intro");
+      });
+    }
+
+    const tutorOpenChatBtn = document.querySelector("#tutorOpenChatBtn");
+    if (tutorOpenChatBtn) {
+      tutorOpenChatBtn.addEventListener("click", () => setRobotChatOpen(true));
+    }
+
+    // =========================================================================
+    // GLOBAL ARCHITECTURE BACKDROP
+    // A single continuous row of connected buildings behind every screen. The
+    // row is generated to overflow the viewport so it always reaches both
+    // edges, and a second copy lives inside .app-shell for the signed-in pages.
+    // =========================================================================
+    // `ground` = where the drawing's own ground line sits inside its viewBox.
+    // Buildings have different viewBox heights, so each one is nudged down by
+    // (1 - ground) to land every roof on ONE continuous, connected baseline.
+    const SKYLINE_BUILDINGS = [
+      { id: "dd-temple", height: 56, ground: 0.96 },
+      { id: "dd-townhouse", height: 70, ground: 0.96 },
+      { id: "dd-arch", height: 64, ground: 0.96 },
+      { id: "dd-dome", height: 82, ground: 0.96 },
+      { id: "dd-church", height: 74, ground: 0.8727 },
+      { id: "dd-clocktower", height: 96, ground: 0.9333 },
+      { id: "dd-townhouse", height: 62, ground: 0.96 },
+      { id: "dd-arch", height: 72, ground: 0.96 }
+    ];
+
+    function skylineBuildingCount() {
+      const layerHeight = Math.max(window.innerHeight * 0.62, 180);
+      // Each building is roughly half the layer height wide on average.
+      const approxWidth = Math.max(layerHeight * 0.5, 60);
+      return Math.ceil(window.innerWidth / approxWidth) + 2;
+    }
+
+    function fillSkylineRow(row, count) {
+      if (!row) return;
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < count; i++) {
+        const spec = SKYLINE_BUILDINGS[i % SKYLINE_BUILDINGS.length];
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "vintage-art");
+        svg.style.height = `${spec.height}%`;
+        svg.style.transform = `translateY(${((1 - spec.ground) * 100).toFixed(2)}%)`;
+        const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+        use.setAttribute("href", `#${spec.id}`);
+        svg.appendChild(use);
+        frag.appendChild(svg);
+      }
+      row.replaceChildren(frag);
+    }
+
+    function ensureShellSkyline() {
+      if (!appShell) return;
+      if (appShell.querySelector(".global-skyline--shell")) return;
+      const source = document.querySelector("#globalSkyline");
+      if (!source) return;
+      const clone = source.cloneNode(false); // wrapper only, row is rebuilt below
+      clone.removeAttribute("id");
+      clone.classList.add("global-skyline--shell");
+      const row = document.createElement("div");
+      row.className = "global-skyline-row";
+      clone.appendChild(row);
+      appShell.insertBefore(clone, appShell.firstChild);
+    }
+
+    function renderSkyline() {
+      ensureShellSkyline();
+      const count = skylineBuildingCount();
+      document.querySelectorAll(".global-skyline-row").forEach((row) => fillSkylineRow(row, count));
+    }
+
+    renderSkyline();
+
+    let skylineResizeTimer;
+    window.addEventListener("resize", () => {
+      window.clearTimeout(skylineResizeTimer);
+      skylineResizeTimer = window.setTimeout(renderSkyline, 200);
+    });
+
+    // Toast helper
+    function showToast(message) {
+      toast.textContent = message;
+      toast.hidden = false;
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => {
+        toast.hidden = true;
+      }, 3000);
+    }
+
+    // =========================================================================
+    // 1. SUBJECTS SECTION (Single Box with Expandable Grid)
+    // Subjects: Science, Biology, English, Physics, DLCO, ADSA, OOPS / Java, UHV
+    // =========================================================================
+    const subjectsData = [
+      {
+        id: "sci",
+        name: "Science",
+        code: "SCI-101",
+        category: "Foundational Sciences",
+        topicsCount: 8,
+        masteredCount: 5,
+        desc: "Empirical methodology, kinetic and potential energy, ecological cycles, and chemical bonding principles.",
+        tag: "Core Syllabus"
+      },
+      {
+        id: "bio",
+        name: "Biology",
+        code: "BIO-201",
+        category: "Life Sciences",
+        topicsCount: 10,
+        masteredCount: 6,
+        desc: "Cell biology, membrane transport, light-dependent photosynthesis, respiration, and genetics.",
+        tag: "Active Sprint"
+      },
+      {
+        id: "eng",
+        name: "English",
+        code: "ENG-104",
+        category: "Humanities & Discourse",
+        topicsCount: 6,
+        masteredCount: 4,
+        desc: "Academic writing, technical synthesis, literary analysis, and professional presentation rhetoric.",
+        tag: "Unit 3 In Progress"
+      },
+      {
+        id: "phy",
+        name: "Physics",
+        code: "PHY-110",
+        category: "Applied Physical Sciences",
+        topicsCount: 12,
+        masteredCount: 5,
+        desc: "Newtonian mechanics, rotational dynamics, thermodynamics, electrostatics, and wave optics.",
+        tag: "Problem Sets"
+      },
+      {
+        id: "dlco",
+        name: "DLCO",
+        code: "CS-211",
+        category: "Computer Engineering",
+        topicsCount: 8,
+        masteredCount: 4,
+        desc: "Digital Logic & Computer Organization: Boolean algebra, K-maps, flip-flops, adders, and CPU architecture.",
+        tag: "Lab Practice Due"
+      },
+      {
+        id: "adsa",
+        name: "ADSA",
+        code: "CS-301",
+        category: "Computer Science",
+        topicsCount: 10,
+        masteredCount: 4,
+        desc: "Advanced Data Structures & Algorithms: Self-balancing AVL trees, graphs, shortest path, and dynamic programming.",
+        tag: "Algorithms Sprint"
+      },
+      {
+        id: "oops",
+        name: "OOPS / Java",
+        code: "CS-204",
+        category: "Software Engineering",
+        topicsCount: 9,
+        masteredCount: 6,
+        desc: "Object-Oriented Programming: Encapsulation, inheritance, polymorphism, Java collections, and stream APIs.",
+        tag: "Design Patterns"
+      },
+      {
+        id: "uhv",
+        name: "UHV",
+        code: "UHV-101",
+        category: "Values & Professional Ethics",
+        topicsCount: 5,
+        masteredCount: 4,
+        desc: "Universal Human Values: Self-exploration, harmony in human relationships, societal ethics, and natural order.",
+        tag: "Reflective Study"
+      }
+    ];
+
+    const subjectsMasterBox = document.querySelector("#subjectsMasterBox");
+    const subjectsToggleBtn = document.querySelector("#subjectsToggleBtn");
+    const subjectsToggleLabel = document.querySelector("#subjectsToggleLabel");
+    const subjectsArrow = document.querySelector("#subjectsArrow");
+    const subjectsGridExpand = document.querySelector("#subjectsGridExpand");
+    let isSubjectsExpanded = false;
+
+    function renderSubjectsGrid() {
+      subjectsGridExpand.innerHTML = subjectsData
+        .map((subj) => {
+          const percent = Math.round((subj.masteredCount / subj.topicsCount) * 100);
+          return `
+            <article class="subject-card" data-subject-id="${subj.id}" tabindex="0">
+              <div class="subject-card-head">
+                <span class="subject-code-pill">${subj.code} · ${subj.category}</span>
+                <span class="subject-tag-pill">${subj.tag}</span>
+              </div>
+              <h4 class="subject-card-title">${subj.name}</h4>
+              <p class="subject-card-desc">${subj.desc}</p>
+              
+              <div class="subject-progress-block">
+                <div class="subject-progress-bar-wrap">
+                  <span class="subject-progress-fill" style="width: ${percent}%"></span>
+                </div>
+                <div class="subject-progress-meta">
+                  <span>${subj.masteredCount}/${subj.topicsCount} topics</span>
+                  <strong>${percent}%</strong>
+                </div>
+              </div>
+
+              <div class="subject-actions-row">
+                <button type="button" class="subject-study-btn" data-subject-name="${subj.name}">Study ${subj.name}</button>
+                <button type="button" class="subject-quiz-btn" data-subject-name="${subj.name}">Quiz</button>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+
+      // Bind buttons inside subject cards
+      subjectsGridExpand.querySelectorAll(".subject-study-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const sName = btn.getAttribute("data-subject-name");
+          showToast(`Opening study space for ${sName}...`);
+          robotChatInput.value = `Can you help me review the core topics in ${sName}?`;
+          setRobotChatOpen(true);
+        });
+      });
+
+      subjectsGridExpand.querySelectorAll(".subject-quiz-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const sName = btn.getAttribute("data-subject-name");
+          openQuizForSubject(sName);
+        });
+      });
+    }
+
+    renderSubjectsGrid();
+
+    function setSubjectsExpanded(expanded) {
+      isSubjectsExpanded = expanded;
+      subjectsGridExpand.hidden = !expanded;
+      subjectsMasterBox.setAttribute("aria-expanded", String(expanded));
+      if (expanded) {
+        subjectsToggleLabel.textContent = "Hide subjects view";
+        subjectsArrow.textContent = "▴";
+        subjectsMasterBox.classList.add("is-expanded");
+      } else {
+        subjectsToggleLabel.textContent = "Click to open subjects";
+        subjectsArrow.textContent = "▾";
+        subjectsMasterBox.classList.remove("is-expanded");
+      }
+    }
+
+    subjectsMasterBox.addEventListener("click", (event) => {
+      // Don't toggle if clicking inside the expanded grid cards
+      if (event.target.closest(".subject-card")) return;
+      setSubjectsExpanded(!isSubjectsExpanded);
+    });
+
+    subjectsToggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setSubjectsExpanded(!isSubjectsExpanded);
+    });
+
+    // =========================================================================
+    // 2. WORKING TOPICS MASTERED TRACKER
+    // =========================================================================
+    const topicsMasteredState = [
+      { id: 1, name: "Biology: Cell Structure & Membranes", mastered: true, subject: "Biology" },
+      { id: 2, name: "Biology: Photosynthesis Reactions", mastered: false, subject: "Biology" },
+      { id: 3, name: "DLCO: Logic Gates & Truth Tables", mastered: true, subject: "DLCO" },
+      { id: 4, name: "DLCO: Combinational Circuits & Adders", mastered: false, subject: "DLCO" },
+      { id: 5, name: "ADSA: Binary Search Trees & AVL", mastered: true, subject: "ADSA" },
+      { id: 6, name: "ADSA: Dijkstra & Graph Traversals", mastered: false, subject: "ADSA" },
+      { id: 7, name: "OOPS/Java: Polymorphism & Interfaces", mastered: true, subject: "OOPS/Java" },
+      { id: 8, name: "OOPS/Java: Collections & Generics", mastered: true, subject: "OOPS/Java" },
+      { id: 9, name: "Physics: Newton's Laws & Momentum", mastered: true, subject: "Physics" },
+      { id: 10, name: "UHV: Harmony in Self & Society", mastered: false, subject: "UHV" }
+    ];
+
+    const topicsChecklist = document.querySelector("#topicsChecklist");
+    const masteredFraction = document.querySelector("#masteredFraction");
+    const masteredProgressBar = document.querySelector("#masteredProgressBar");
+    const masteredPercentText = document.querySelector("#masteredPercentText");
+    const masteredRemainingText = document.querySelector("#masteredRemainingText");
+
+    function updateTopicsMasteredUI() {
+      const total = topicsMasteredState.length;
+      const masteredCount = topicsMasteredState.filter((t) => t.mastered).length;
+      const percent = Math.round((masteredCount / total) * 100);
+      const remaining = total - masteredCount;
+
+      masteredFraction.textContent = `${masteredCount} of ${total}`;
+      masteredProgressBar.style.width = `${percent}%`;
+      masteredPercentText.textContent = `${percent}% mastered`;
+      masteredRemainingText.textContent = `${remaining} topics in progress`;
+
+      const topicMarkup = topicsMasteredState
+        .map(
+          (topic) => `
+          <div class="topic-item ${topic.mastered ? "is-mastered" : ""}" data-topic-id="${topic.id}" role="checkbox" aria-checked="${topic.mastered}" tabindex="0">
+            <span class="topic-checkbox" aria-hidden="true">${topic.mastered ? "✓" : ""}</span>
+            <div class="topic-info">
+              <span class="topic-name">${topic.name}</span>
+              <span class="topic-subject-badge">${topic.subject}</span>
+            </div>
+            <span class="topic-status-label">${topic.mastered ? "Mastered" : "In Progress"}</span>
+          </div>
+        `
+        )
+        .join("");
+
+      topicsChecklist.innerHTML = topicMarkup;
+
+      // The Learning Progress page renders the exact same list from the exact
+      // same state, so toggling a topic keeps both pages in step.
+      const progressTopicsList = document.querySelector("#progressTopicsList");
+      if (progressTopicsList) progressTopicsList.innerHTML = topicMarkup;
+
+      // The notifications UI element refs are declared further down this file.
+      // At boot they are not initialised yet, so this early call is a no-op;
+      // the explicit call runs again once section 7 has been initialised.
+      if (typeof updateNotificationsIncompleteUI === "function") {
+        try {
+          updateNotificationsIncompleteUI();
+        } catch (notificationUiNotReadyError) {
+          /* element refs not initialised yet */
+        }
+      }
+
+      // Bind checklist click on every surface that shows the list.
+      bindTopicItems(topicsChecklist);
+      if (progressTopicsList) bindTopicItems(progressTopicsList);
+
+      // Keep the Learning Progress stat cards in step with this data.
+      renderProgressPage();
+    }
+
+    // Shared by every surface that renders the topics checklist.
+    function bindTopicItems(container) {
+      if (!container) return;
+      container.querySelectorAll(".topic-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          const tId = Number(item.getAttribute("data-topic-id"));
+          const topic = topicsMasteredState.find((t) => t.id === tId);
+          if (!topic) return;
+          topic.mastered = !topic.mastered;
+          updateTopicsMasteredUI();
+          showToast(
+            topic.mastered
+              ? `Marked "${topic.name}" as Mastered! 🎉`
+              : `Marked "${topic.name}" for further revision.`
+          );
+        });
+
+        item.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            item.click();
+          }
+        });
+      });
+    }
+
+    updateTopicsMasteredUI();
+
+    // =========================================================================
+    // 3. WORKING LEARNING PROGRESS CHART (Interactive & Timeframe Toggle)
+    // =========================================================================
+    const chartAreaPath = document.querySelector("#chartAreaPath");
+    const chartPolyline = document.querySelector("#chartPolyline");
+    const chartPointsGroup = document.querySelector("#chartPointsGroup");
+    const chartAxisLabels = document.querySelector("#chartAxisLabels");
+    const chartAvgBadge = document.querySelector("#chartAvgBadge");
+    const timeframeBtn = document.querySelector("#timeframeBtn");
+    const chartTooltip = document.querySelector("#chartTooltip");
+
+    const chartDatasets = {
+      "7d": {
+        label: "Last 7 days",
+        nextLabel: "View last 30 days",
+        avg: "76%",
+        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        points: [
+          { x: 40, y: 162, val: "52%", day: "Monday" },
+          { x: 120, y: 148, val: "61%", day: "Tuesday" },
+          { x: 200, y: 152, val: "58%", day: "Wednesday" },
+          { x: 280, y: 128, val: "72%", day: "Thursday" },
+          { x: 360, y: 115, val: "78%", day: "Friday" },
+          { x: 440, y: 102, val: "84%", day: "Saturday" },
+          { x: 520, y: 85, val: "91%", day: "Sunday" }
+        ]
+      },
+      "30d": {
+        label: "Last 30 days",
+        nextLabel: "View last 7 days",
+        avg: "82%",
+        labels: ["Wk 1", "Wk 2", "Wk 3", "Wk 4", "Wk 5"],
+        points: [
+          { x: 40, y: 175, val: "45%", day: "Week 1" },
+          { x: 160, y: 140, val: "65%", day: "Week 2" },
+          { x: 280, y: 118, val: "76%", day: "Week 3" },
+          { x: 400, y: 95, val: "86%", day: "Week 4" },
+          { x: 520, y: 72, val: "93%", day: "Week 5" }
+        ]
+      }
+    };
+
+    let currentChartTimeframe = "7d";
+
+    function renderProgressChart(timeframeKey) {
+      const data = chartDatasets[timeframeKey];
+      timeframeBtn.textContent = data.label;
+      chartAvgBadge.textContent = `Avg: ${data.avg}`;
+
+      // Build polyline points string
+      const polylineStr = data.points.map((p) => `${p.x},${p.y}`).join(" ");
+      chartPolyline.setAttribute("points", polylineStr);
+
+      // Build area path string
+      const firstX = data.points[0].x;
+      const lastX = data.points[data.points.length - 1].x;
+      const pathStr = `M${firstX} ${data.points[0].y} ` +
+        data.points.slice(1).map((p) => `L${p.x} ${p.y}`).join(" ") +
+        ` L${lastX} 200 L${firstX} 200 Z`;
+      chartAreaPath.setAttribute("d", pathStr);
+
+      // Render points
+      chartPointsGroup.innerHTML = data.points
+        .map(
+          (p) => `<circle cx="${p.x}" cy="${p.y}" r="4.5" data-val="${p.val}" data-day="${p.day}" tabindex="0" />`
+        )
+        .join("");
+
+      // Render X labels
+      chartAxisLabels.innerHTML = data.points
+        .map((p, idx) => `<text x="${p.x}" y="218">${data.labels[idx] || ""}</text>`)
+        .join("");
+
+      // Bind point hover/focus for tooltips
+      chartPointsGroup.querySelectorAll("circle").forEach((circle) => {
+        circle.addEventListener("mouseenter", (e) => {
+          const val = circle.getAttribute("data-val");
+          const day = circle.getAttribute("data-day");
+          chartTooltip.innerHTML = `<strong>${val}</strong><span>${day}</span>`;
+          chartTooltip.hidden = false;
+          const rect = circle.getBoundingClientRect();
+          const wrapRect = circle.closest(".chart-wrap").getBoundingClientRect();
+          chartTooltip.style.left = `${rect.left - wrapRect.left - 24}px`;
+          chartTooltip.style.top = `${rect.top - wrapRect.top - 42}px`;
+        });
+
+        circle.addEventListener("mouseleave", () => {
+          chartTooltip.hidden = true;
+        });
+
+        circle.addEventListener("click", () => {
+          const val = circle.getAttribute("data-val");
+          const day = circle.getAttribute("data-day");
+          showToast(`${day}: ${val} study accuracy achieved.`);
+        });
+      });
+    }
+
+    renderProgressChart("7d");
+
+    timeframeBtn.addEventListener("click", () => {
+      currentChartTimeframe = currentChartTimeframe === "7d" ? "30d" : "7d";
+      renderProgressChart(currentChartTimeframe);
+      showToast(`Switched chart view to ${chartDatasets[currentChartTimeframe].label}`);
+    });
+
+    // =========================================================================
+    // 4. FILES OPTION & REAL FILE UPLOAD (Working Modal & Dynamic List)
+    // =========================================================================
+    // Existing records are the source of truth: never overwritten, duplicated
+    // or deleted by this module. They are persisted locally so the list and the
+    // file-count badge survive a page reload.
+    const UPLOADED_FILES_STORAGE_KEY = "learnmate_uploaded_files_v1";
+
+    const defaultUploadedFilesList = [
+      { id: "f1", name: "Biology_Photosynthesis_Summary.pdf", size: "1.4 MB", date: "Oct 10", ext: "pdf", subject: "Biology" },
+      { id: "f2", name: "DLCO_LogicGates_TruthTables.pdf", size: "820 KB", date: "Oct 08", ext: "pdf", subject: "DLCO" },
+      { id: "f3", name: "Java_OOP_Principles_CheatSheet.pdf", size: "2.1 MB", date: "Oct 05", ext: "pdf", subject: "OOPS / Java" },
+      { id: "f4", name: "ADSA_DataStructures_Handout.pdf", size: "1.8 MB", date: "Oct 02", ext: "pdf", subject: "ADSA" }
+    ];
+
+    function loadUploadedFilesState() {
+      try {
+        const stored = localStorage.getItem(UPLOADED_FILES_STORAGE_KEY);
+        if (!stored) {
+          localStorage.setItem(UPLOADED_FILES_STORAGE_KEY, JSON.stringify(defaultUploadedFilesList));
+          return defaultUploadedFilesList.map((file) => ({ ...file }));
+        }
+        const parsed = JSON.parse(stored);
+        if (!Array.isArray(parsed)) return defaultUploadedFilesList.map((file) => ({ ...file }));
+        return parsed;
+      } catch (error) {
+        // localStorage unavailable (private mode / file:// restrictions) —
+        // fall back to the seeded records kept in memory.
+        return defaultUploadedFilesList.map((file) => ({ ...file }));
+      }
+    }
+
+    let uploadedFilesListState = loadUploadedFilesState();
+
+    const openFilesBox = document.querySelector("#openFilesBox");
+    const filesExpandPanel = document.querySelector("#filesExpandPanel");
+    const closeUploadedFilesBtn = document.querySelector("#closeUploadedFilesBtn");
+    const filesCountBadge = document.querySelector("#filesCountBadge");
+    const modalFilesCount = document.querySelector("#modalFilesCount");
+    const uploadedFilesList = document.querySelector("#uploadedFilesList");
+    const fileUploadInput = document.querySelector("#fileUploadInput");
+    const browseFilesBtn = document.querySelector("#browseFilesBtn");
+    const fileDropZone = document.querySelector("#fileDropZone");
+    const addSamplePdfBtn = document.querySelector("#addSamplePdfBtn");
+    const uploadFilesBtn = document.querySelector("#uploadFilesBtn");
+    const viewUploadedFilesBtn = document.querySelector("#viewUploadedFilesBtn");
+    const analyzeUploadedFilesBtn = document.querySelector("#analyzeUploadedFilesBtn");
+    const pendingFilesList = document.querySelector("#pendingFilesList");
+    const pendingFilesCount = document.querySelector("#pendingFilesCount");
+    const uploadConfirmation = document.querySelector("#uploadConfirmation");
+    const confirmationFileList = document.querySelector("#confirmationFileList");
+    const confirmUploadBtn = document.querySelector("#confirmUploadBtn");
+    const cancelUploadBtn = document.querySelector("#cancelUploadBtn");
+    const uploadInterface = document.querySelector("#uploadInterface");
+    const uploadedFilesPanel = document.querySelector("#uploadedFilesPanel");
+    const uploadValidationMessage = document.querySelector("#uploadValidationMessage");
+    const uploadStatusMessage = document.querySelector("#uploadStatusMessage");
+    const topActionGrid = document.querySelector(".top-action-grid");
+    let pendingFiles = [];
+
+    function renderUploadedFiles() {
+      const count = uploadedFilesListState.length;
+      filesCountBadge.textContent = `${count} ${count === 1 ? "file" : "files"}`;
+      modalFilesCount.textContent = count;
+      renderProgressPage(); // mirror the figure on the Learning Progress page
+
+      if (count === 0) {
+        uploadedFilesList.innerHTML = `
+          <div class="empty-files-placeholder">
+            <p>No study files uploaded yet. Drag and drop or browse files above to get started.</p>
+          </div>
+        `;
+        return;
+      }
+
+      uploadedFilesList.innerHTML = uploadedFilesListState
+        .map(
+          (file) => `
+          <div class="file-item-card" data-file-id="${file.id}">
+            <div class="file-type-icon ${file.ext || "pdf"}">
+              ${(file.ext || "pdf").toUpperCase()}
+            </div>
+            <div class="file-item-details">
+              <h4 class="file-item-name" title="${file.name}">${file.name}</h4>
+              <p class="file-item-meta">${file.size} · Uploaded ${file.date} · <span>${file.subject || "General"}</span></p>
+            </div>
+            <div class="file-item-actions">
+              <button type="button" class="file-preview-btn" data-file-name="${file.name}">Preview</button>
+              <button type="button" class="file-delete-btn" data-file-id="${file.id}" title="Delete file">✕</button>
+            </div>
+          </div>
+        `
+        )
+        .join("");
+
+      // Bind Preview and Delete buttons
+      uploadedFilesList.querySelectorAll(".file-preview-btn").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const fName = btn.getAttribute("data-file-name");
+          showToast(`Opening preview for ${fName}...`);
+        });
+      });
+
+      uploadedFilesList.querySelectorAll(".file-delete-btn").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const fId = btn.getAttribute("data-file-id");
+          const target = uploadedFilesListState.find((f) => f.id === fId);
+          uploadedFilesListState = uploadedFilesListState.filter((f) => f.id !== fId);
+          renderUploadedFiles();
+          showToast(`Deleted ${target ? target.name : "file"}`);
+        });
+      });
+    }
+
+    renderUploadedFiles();
+
+    function setFilesExpanded(expanded) {
+      if (!filesExpandPanel) return;
+      filesExpandPanel.hidden = !expanded;
+      openFilesBox.setAttribute("aria-expanded", String(expanded));
+      // The upload panel is no longer a child of the Overview card, so the
+      // 3-card row never has to grow around it any more.
+      if (topActionGrid) topActionGrid.classList.remove("files-open");
+      if (expanded) {
+        openFilesBox.classList.add("is-expanded");
+      } else {
+        openFilesBox.classList.remove("is-expanded");
+      }
+      // Always reset the inner view so the card re-opens on the upload interface.
+      if (uploadInterface) uploadInterface.hidden = false;
+      if (uploadedFilesPanel) uploadedFilesPanel.hidden = true;
+      if (uploadConfirmation) uploadConfirmation.hidden = true;
+    }
+
+    let isFilesExpandedState = false;
+
+    // The upload panel no longer expands inside the Overview card — it lives on
+    // its own "My Materials" page. The card carries data-view="materials", so
+    // the single delegated listener above routes it through navigateTo() with
+    // the shared transition (click and Enter/Space alike).
+
+    if (closeUploadedFilesBtn) {
+      closeUploadedFilesBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        // Close the uploaded-files panel and return to the upload interface.
+        if (uploadedFilesPanel) uploadedFilesPanel.hidden = true;
+        if (uploadInterface) {
+          uploadInterface.hidden = false;
+          uploadInterface.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      });
+    }
+
+    if (fileDropZone) {
+      fileDropZone.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          if (fileUploadInput) fileUploadInput.click();
+        }
+      });
+    }
+
+    browseFilesBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (fileUploadInput) fileUploadInput.click();
+    });
+
+    if (fileDropZone) {
+      fileDropZone.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (fileUploadInput) fileUploadInput.click();
+      });
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes || bytes === 0) return "0 KB";
+      const k = 1024;
+      const sizes = ["Bytes", "KB", "MB", "GB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+    }
+
+    function renderPendingFiles() {
+      if (!pendingFilesList || !pendingFilesCount) return;
+      pendingFilesCount.textContent = pendingFiles.length;
+      if (!pendingFiles.length) {
+        pendingFilesList.innerHTML = `
+            <div class="empty-files-placeholder">
+              <p>No new files selected.</p>
+            </div>
+          `;
+        return;
+      }
+      pendingFilesList.innerHTML = pendingFiles
+        .map(
+          (file, index) => `
+            <div class="file-item-card pending-file-card">
+              <div class="file-type-icon ${file.ext || "pdf"}">
+                ${(file.ext || "pdf").toUpperCase()}
+              </div>
+              <div class="file-item-details">
+                <h4 class="file-item-name" title="${file.name}">${file.name}</h4>
+                <p class="file-item-meta">${file.size}</p>
+              </div>
+              <div class="file-item-actions">
+                <button type="button" class="file-delete-btn" data-pending-index="${index}" title="Remove selected file">✕</button>
+              </div>
+            </div>
+          `
+        )
+        .join("");
+
+      pendingFilesList.querySelectorAll(".file-delete-btn").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const idx = Number(btn.getAttribute("data-pending-index"));
+          if (Number.isInteger(idx)) {
+            pendingFiles.splice(idx, 1);
+            renderPendingFiles();
+          }
+        });
+      });
+    }
+
+
+    function processAddedFiles(files) {
+      if (!files || files.length === 0) return;
+      const allowedExts = ["pdf", "doc", "docx", "ppt", "pptx", "txt"];
+      let addedCount = 0;
+      Array.from(files).forEach((file, index) => {
+        const ext = file.name.split(".").pop().toLowerCase();
+        if (!allowedExts.includes(ext)) return;
+        const alreadyPending = pendingFiles.some((item) => item.name === file.name);
+        if (alreadyPending) return;
+        pendingFiles.push({
+          id: `pending_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 7)}`,
+          file: file,
+          name: file.name,
+          size: formatFileSize(file.size),
+          ext: ext || "pdf"
+        });
+        addedCount += 1;
+      });
+      renderPendingFiles();
+      if (addedCount > 0) {
+        if (uploadValidationMessage) {
+          uploadValidationMessage.textContent = "Please select at least one file to upload.";
+          uploadValidationMessage.hidden = true;
+        }
+      } else if (files && files.length) {
+        // Nothing new was added: explain why (bad type vs. already selected).
+        const unsupported = Array.from(files).some(
+          (file) => !allowedExts.includes(String(file.name).split(".").pop().toLowerCase())
+        );
+        if (uploadValidationMessage) {
+          uploadValidationMessage.textContent = unsupported
+            ? "Unsupported file type. Please choose PDF, DOC, DOCX, PPT, PPTX or TXT files."
+            : "These files are already in your selection.";
+          uploadValidationMessage.hidden = false;
+        }
+      }
+    }
+
+    fileUploadInput.addEventListener("change", (e) => {
+      processAddedFiles(e.target.files);
+      fileUploadInput.value = "";
+    });
+
+    // Drag and drop support
+    ["dragenter", "dragover"].forEach((eventName) => {
+      fileDropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        fileDropZone.classList.add("is-dragging");
+      });
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+      fileDropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        fileDropZone.classList.remove("is-dragging");
+      });
+    });
+
+    fileDropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length) {
+        processAddedFiles(dt.files);
+      }
+    });
+
+    // =========================================================================
+    // 4b. UPLOAD CONFIRMATION FLOW (validate -> confirm -> save / upload)
+    // =========================================================================
+    function setUploadStatus(message, type) {
+      if (!uploadStatusMessage) return;
+      if (!message) {
+        uploadStatusMessage.hidden = true;
+        uploadStatusMessage.textContent = "";
+        uploadStatusMessage.className = "upload-status-message";
+        return;
+      }
+      uploadStatusMessage.textContent = message;
+      uploadStatusMessage.className = `upload-status-message ${type === "error" ? "is-error" : "is-success"}`;
+      uploadStatusMessage.hidden = false;
+    }
+
+    function formatUploadDate() {
+      try {
+        return new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+      } catch (error) {
+        return "Just now";
+      }
+    }
+
+    // =========================================================================
+    // UPLOAD BACKEND
+    // This project is frontend-only (index.html, style.css, sw.js) - there is
+    // no server and no upload API in the repository, so a real network upload
+    // is impossible today.
+    //
+    // Two backends are supported:
+    //   1. REAL  - set window.LEARNMATE_UPLOAD_ENDPOINT to a URL. The selected
+    //              files are POSTed as multipart/form-data.
+    //   2. DEMO  - the default. uploadDemoBackend() below behaves like an API
+    //              call (async, validates, writes, can fail) and stores the
+    //              real file bytes in IndexedDB plus an index row in
+    //              localStorage. It is a LOCAL DEMO of a backend: nothing is
+    //              sent over the network, and the UI says so.
+    //
+    // Success is reported ONLY after the backend call resolves.
+    // =========================================================================
+    const DEMO_BACKEND_INDEX_KEY = "learnmate_demo_upload_backend_v1";
+
+    function getUploadEndpoint() {
+      return typeof window.LEARNMATE_UPLOAD_ENDPOINT === "string"
+        ? window.LEARNMATE_UPLOAD_ENDPOINT.trim()
+        : "";
+    }
+
+    // Store the actual File objects locally (best effort, demo backend only).
+    function demoStoreFileBytes(filesToUpload) {
+      return new Promise((resolve) => {
+        if (!("indexedDB" in window)) {
+          resolve({ mode: "metadata-only", storedIds: [] });
+          return;
+        }
+        let request;
+        try {
+          request = window.indexedDB.open("learnmate_uploads_db", 1);
+        } catch (error) {
+          resolve({ mode: "metadata-only", storedIds: [] });
+          return;
+        }
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains("files")) db.createObjectStore("files", { keyPath: "id" });
+        };
+        request.onerror = () => resolve({ mode: "metadata-only", storedIds: [] });
+        request.onsuccess = () => {
+          const db = request.result;
+          let tx;
+          try {
+            tx = db.transaction("files", "readwrite");
+          } catch (error) {
+            db.close();
+            resolve({ mode: "metadata-only", storedIds: [] });
+            return;
+          }
+          const store = tx.objectStore("files");
+          const storedIds = [];
+          filesToUpload.forEach((item, index) => {
+            const id = `blob_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 7)}`;
+            storedIds.push(id);
+            store.put({ id: id, name: item.name, size: item.size, ext: item.ext, file: item.file || null });
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve({ mode: "files-stored", storedIds: storedIds });
+          };
+          tx.onerror = () => {
+            db.close();
+            resolve({ mode: "metadata-only", storedIds: [] });
+          };
+          tx.onabort = () => {
+            db.close();
+            resolve({ mode: "metadata-only", storedIds: [] });
+          };
+        };
+      });
+    }
+
+    function demoReadIndex() {
+      const raw = localStorage.getItem(DEMO_BACKEND_INDEX_KEY);
+      if (!raw) return [];
+      const rows = JSON.parse(raw);
+      if (!Array.isArray(rows)) throw new Error("the demo backend index is corrupted");
+      return rows;
+    }
+
+    // Simulated backend request: async, validates, writes, and can fail.
+    async function uploadDemoBackend(filesToUpload) {
+      // simulated network round trip
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+
+      if (!filesToUpload.length) throw new Error("the backend received no files");
+
+      // 1. store the file bytes (demo "object storage")
+      const bytesResult = await demoStoreFileBytes(filesToUpload);
+
+      // 2. append rows to the demo backend index (this write can fail)
+      let rows;
+      try {
+        rows = demoReadIndex();
+        filesToUpload.forEach((item, index) => {
+          rows.push({
+            id: `srv_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 7)}`,
+            name: item.name,
+            size: item.size,
+            ext: item.ext,
+            uploadedAt: Date.now()
+          });
+        });
+        localStorage.setItem(DEMO_BACKEND_INDEX_KEY, JSON.stringify(rows));
+      } catch (error) {
+        // compensate: remove the byte records written a moment ago
+        if (bytesResult.storedIds.length && "indexedDB" in window) {
+          try {
+            const open = window.indexedDB.open("learnmate_uploads_db", 1);
+            open.onsuccess = () => {
+              const db = open.result;
+              try {
+                const tx = db.transaction("files", "readwrite");
+                bytesResult.storedIds.forEach((id) => tx.objectStore("files").delete(id));
+                tx.oncomplete = () => db.close();
+                tx.onerror = () => db.close();
+              } catch (e) {
+                db.close();
+              }
+            };
+          } catch (e) {
+            /* nothing else to roll back */
+          }
+        }
+        throw new Error("the demo backend could not store the file (" + (error && error.message ? error.message : "write failed") + ")");
+      }
+
+      return {
+        backend: bytesResult.mode === "files-stored" ? "demo-local" : "demo-local-metadata",
+        stored: filesToUpload.length
+      };
+    }
+
+    async function uploadFilesToBackend(filesToUpload) {
+      const endpoint = getUploadEndpoint();
+      if (endpoint) {
+        const formData = new FormData();
+        (filesToUpload || []).forEach((item) => {
+          if (item.file) formData.append("files", item.file, item.name);
+        });
+        const response = await fetch(endpoint, { method: "POST", body: formData });
+        if (!response.ok) throw new Error(`server rejected the upload (HTTP ${response.status})`);
+        return { backend: "server", stored: (filesToUpload || []).length };
+      }
+      return uploadDemoBackend(filesToUpload);
+    }
+
+    // Persist the client-side record list. Throws when the save does not
+    // succeed, so the caller can roll back and report a failure.
+    async function saveUploadedFilesState(filesToUpload) {
+      const result = await uploadFilesToBackend(filesToUpload);
+
+      const records = uploadedFilesListState.map((file) => ({
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        date: file.date,
+        ext: file.ext,
+        subject: file.subject
+      }));
+      try {
+        localStorage.setItem(UPLOADED_FILES_STORAGE_KEY, JSON.stringify(records));
+      } catch (error) {
+        throw new Error("your browser blocked the local save (storage full or private mode)");
+      }
+      return result;
+    }
+
+    // Step 1 — validate the selection and open the confirmation dialog.
+    uploadFilesBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setUploadStatus("", null);
+
+      if (!pendingFiles.length) {
+        if (uploadValidationMessage) {
+          uploadValidationMessage.textContent = "Please select at least one file to upload.";
+          uploadValidationMessage.hidden = false;
+          uploadValidationMessage.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        if (uploadConfirmation) uploadConfirmation.hidden = true;
+        return;
+      }
+
+      if (uploadValidationMessage) uploadValidationMessage.hidden = true;
+
+      confirmationFileList.replaceChildren();
+      pendingFiles.forEach((file) => {
+        const item = document.createElement("li");
+        const name = document.createElement("strong");
+        name.textContent = file.name;
+        const size = document.createElement("span");
+        size.textContent = file.size;
+        item.append(name, size);
+        confirmationFileList.append(item);
+      });
+
+      uploadConfirmation.hidden = false;
+      uploadConfirmation.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+
+    // Cancel — dismiss the confirmation and keep the pending selection.
+    cancelUploadBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      uploadConfirmation.hidden = true;
+    });
+
+    // Step 2 — confirm: save/upload, and only then update the uploaded list.
+    confirmUploadBtn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+
+      if (!pendingFiles.length) {
+        uploadConfirmation.hidden = true;
+        if (uploadValidationMessage) uploadValidationMessage.hidden = false;
+        return;
+      }
+
+      const snapshot = uploadedFilesListState;
+      // A file name already present in the list is never stored twice, so
+      // existing records are never duplicated or overwritten.
+      const existingNames = new Set(snapshot.map((file) => String(file.name).toLowerCase()));
+      const newRecords = pendingFiles
+        .filter((item) => !existingNames.has(String(item.name).toLowerCase()))
+        .map((item) => ({
+          id: `file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: item.name,
+          size: item.size,
+          date: formatUploadDate(),
+          ext: item.ext,
+          subject: "General",
+          file: item.file
+        }));
+
+      // Nothing new to send: never re-upload or duplicate an existing record.
+      if (newRecords.length === 0) {
+        pendingFiles = [];
+        renderPendingFiles();
+        if (fileUploadInput) fileUploadInput.value = "";
+        uploadConfirmation.hidden = true;
+        setUploadStatus("Those files are already in your uploaded list. Nothing new was added.", "success");
+        showToast("Selection already exists in Study Materials.");
+        return;
+      }
+
+      // Merge first so a successful save is immediately visible, then roll
+      // back if the save/upload did not succeed.
+      uploadedFilesListState = [...newRecords, ...snapshot];
+      confirmUploadBtn.disabled = true;
+      let uploadResult = null;
+
+      try {
+        uploadResult = await saveUploadedFilesState(newRecords);
+
+        renderUploadedFiles();
+        pendingFiles = [];
+        renderPendingFiles();
+        if (fileUploadInput) fileUploadInput.value = "";
+        uploadConfirmation.hidden = true;
+        if (uploadValidationMessage) uploadValidationMessage.hidden = true;
+
+        const label = newRecords.length === 1 ? "1 file" : `${newRecords.length} files`;
+        setUploadStatus(backendSuccessMessage(uploadResult, label), "success");
+        showToast(`${label} uploaded via ${uploadResult && uploadResult.backend === "server" ? "the server" : "the demo backend"}.`);
+      } catch (error) {
+        uploadedFilesListState = snapshot;
+        renderUploadedFiles();
+        setUploadStatus(
+          `Upload failed: ${error && error.message ? error.message : "the save did not complete"}. No records were changed and your selection was kept — please try again.`,
+          "error"
+        );
+        showToast("Upload failed — no files were saved.");
+      } finally {
+        confirmUploadBtn.disabled = false;
+      }
+    });
+
+    function backendSuccessMessage(result, label) {
+      if (result && result.backend === "server") {
+        return `${label} uploaded successfully to the server. Your uploaded list has been updated.`;
+      }
+      if (result && result.backend === "demo-local-metadata") {
+        return `${label} saved by the demo backend (only file details were stored — this browser blocked file storage). This project has no real server yet. Your uploaded list has been updated.`;
+      }
+      return `${label} uploaded to the demo backend and stored in this browser — no real server is configured in this project. Your uploaded list has been updated.`;
+    }
+
+    // View Uploaded Files — show the existing uploaded list (names + types).
+    viewUploadedFilesBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      renderUploadedFiles();
+      if (uploadInterface) uploadInterface.hidden = true;
+      if (uploadedFilesPanel) {
+        uploadedFilesPanel.hidden = false;
+        uploadedFilesPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+
+    // Quick add sample PDF
+    if (addSamplePdfBtn) addSamplePdfBtn.addEventListener("click", () => {
+      const samples = [
+        { name: "Physics_Electromagnetism_Formulas.pdf", size: "1.6 MB", subject: "Physics" },
+        { name: "UHV_Harmony_Framework_Notes.pdf", size: "940 KB", subject: "UHV" },
+        { name: "English_Rhetorical_Devices_Guide.pdf", size: "1.1 MB", subject: "English" },
+        { name: "Science_Thermodynamics_Summary.pdf", size: "1.5 MB", subject: "Science" }
+      ];
+      const randomSample = samples[Math.floor(Math.random() * samples.length)];
+      uploadedFilesListState.unshift({
+        id: `sample_${Date.now()}`,
+        name: randomSample.name,
+        size: randomSample.size,
+        date: "Just now",
+        ext: "pdf",
+        subject: randomSample.subject
+      });
+      renderUploadedFiles();
+      showToast(`Added ${randomSample.name} to study materials.`);
+    });
+
+    // =========================================================================
+    // 5. PRACTICE QUIZ OPTION (Working Modal & Live Assessment)
+    // =========================================================================
+    const openQuizBox = document.querySelector("#openQuizBox");
+    const quizModalBackdrop = document.querySelector("#quizModalBackdrop");
+    const closeQuizModalBtn = document.querySelector("#closeQuizModalBtn");
+    const quizSubjectTabs = document.querySelector("#quizSubjectTabs");
+    const quizSubjectBadge = document.querySelector("#quizSubjectBadge");
+    const quizQCounter = document.querySelector("#quizQCounter");
+    const quizQuestionTitle = document.querySelector("#quizQuestionTitle");
+    const quizOptionsList = document.querySelector("#quizOptionsList");
+    const quizFeedbackBox = document.querySelector("#quizFeedbackBox");
+    const quizNextBtn = document.querySelector("#quizNextBtn");
+    const quizSessionScore = document.querySelector("#quizSessionScore");
+    const quizAccuracyDisplay = document.querySelector("#quizAccuracyDisplay");
+
+    const quizQuestions = [
+      {
+        subject: "Biology",
+        question: "What is the primary function of chlorophyll in photosynthesis?",
+        options: [
+          "Absorb light energy to excite electrons in photosystems",
+          "Directly convert carbon dioxide into glucose molecules",
+          "Store water molecules inside the cell vacuole",
+          "Produce oxygen through cellular glycolysis"
+        ],
+        correct: 0,
+        explanation: "Chlorophyll absorbs photons (primarily blue and red wavelengths) to elevate electrons to higher energy states, powering ATP/NADPH synthesis."
+      },
+      {
+        subject: "DLCO",
+        question: "Which digital logic gate produces an output of 0 only when both of its inputs are 1?",
+        options: ["NOR Gate", "NAND Gate", "XOR Gate", "AND Gate"],
+        correct: 1,
+        explanation: "The NAND (NOT-AND) gate outputs 0 strictly when both inputs A and B are 1; otherwise, its output is 1."
+      },
+      {
+        subject: "OOPS / Java",
+        question: "Which Object-Oriented principle allows a subclass to provide a specific implementation of a method defined in its superclass?",
+        options: ["Method Overriding (Polymorphism)", "Data Encapsulation", "Multiple Inheritance", "Static Binding"],
+        correct: 0,
+        explanation: "Method Overriding is runtime polymorphism, where a subclass implements an overridden superclass method with the same signature."
+      },
+      {
+        subject: "Physics",
+        question: "According to Newton's Second Law of Motion, force (F) equals:",
+        options: [
+          "Mass divided by acceleration (m / a)",
+          "Mass times velocity (m × v)",
+          "Mass times acceleration (m × a)",
+          "Work done divided by time (W / t)"
+        ],
+        correct: 2,
+        explanation: "Newton's Second Law establishes that net Force equals mass multiplied by acceleration ($F = ma$)."
+      },
+      {
+        subject: "Science",
+        question: "Which cellular organelle is responsible for generating the majority of chemical energy (ATP)?",
+        options: ["Ribosome", "Mitochondria", "Endoplasmic Reticulum", "Golgi Apparatus"],
+        correct: 1,
+        explanation: "Mitochondria generate ATP via oxidative phosphorylation and the Krebs cycle, making them the metabolic powerhouses of the cell."
+      }
+    ];
+
+    let currentQIndex = 0;
+    let quizCorrectCount = 0;
+    let quizAnsweredCount = 0;
+    let currentQuizFilter = "all";
+
+    function getFilteredQuestions() {
+      if (currentQuizFilter === "all") return quizQuestions;
+      return quizQuestions.filter(
+        (q) => q.subject.toLowerCase() === currentQuizFilter.toLowerCase()
+      );
+    }
+
+    function renderQuizQuestion() {
+      const filtered = getFilteredQuestions();
+      if (currentQIndex >= filtered.length) {
+        currentQIndex = 0;
+      }
+      const q = filtered[currentQIndex] || filtered[0];
+
+      quizSubjectBadge.textContent = q.subject;
+      quizQCounter.textContent = `Question ${currentQIndex + 1} of ${filtered.length}`;
+      quizQuestionTitle.textContent = q.question;
+      quizFeedbackBox.hidden = true;
+      quizNextBtn.disabled = true;
+
+      quizOptionsList.innerHTML = q.options
+        .map(
+          (opt, idx) => `
+          <button type="button" class="quiz-option-btn" data-index="${idx}">
+            <span class="quiz-opt-letter">${String.fromCharCode(65 + idx)}</span>
+            <span class="quiz-opt-text">${opt}</span>
+          </button>
+        `
+        )
+        .join("");
+
+      // Bind option clicks
+      quizOptionsList.querySelectorAll(".quiz-option-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (!quizNextBtn.disabled) return; // already answered
+          const chosenIdx = Number(btn.getAttribute("data-index"));
+          const isCorrect = chosenIdx === q.correct;
+
+          quizAnsweredCount++;
+          if (isCorrect) quizCorrectCount++;
+
+          const sessionAcc = Math.round((quizCorrectCount / quizAnsweredCount) * 100);
+          quizSessionScore.textContent = `${sessionAcc}%`;
+          quizAccuracyDisplay.textContent = `${sessionAcc}%`;
+          renderProgressPage(); // mirror the figure on the Learning Progress page
+
+          // Mark buttons
+          quizOptionsList.querySelectorAll(".quiz-option-btn").forEach((b) => {
+            const bIdx = Number(b.getAttribute("data-index"));
+            b.disabled = true;
+            if (bIdx === q.correct) {
+              b.classList.add("is-correct");
+            } else if (bIdx === chosenIdx && !isCorrect) {
+              b.classList.add("is-wrong");
+            }
+          });
+
+          // Show feedback
+          quizFeedbackBox.hidden = false;
+          quizFeedbackBox.className = `quiz-feedback-box ${isCorrect ? "feedback-correct" : "feedback-wrong"}`;
+          quizFeedbackBox.innerHTML = `
+            <strong>${isCorrect ? "✓ Correct!" : "✕ Incorrect"}</strong>
+            <p>${q.explanation}</p>
+          `;
+
+          quizNextBtn.disabled = false;
+        });
+      });
+    }
+
+    // The practice quiz now lives on its own page. The "Practice Assessments"
+    // card carries data-view="assessments", so the router swaps pages and the
+    // assessments view hook unhides + renders the quiz. Close = go back.
+    closeQuizModalBtn.addEventListener("click", () => {
+      navigateTo("overview");
+    });
+
+    quizNextBtn.addEventListener("click", () => {
+      const filtered = getFilteredQuestions();
+      currentQIndex = (currentQIndex + 1) % filtered.length;
+      renderQuizQuestion();
+    });
+
+    quizSubjectTabs.querySelectorAll(".quiz-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        quizSubjectTabs.querySelectorAll(".quiz-tab").forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        currentQuizFilter = tab.getAttribute("data-subject");
+        currentQIndex = 0;
+        renderQuizQuestion();
+      });
+    });
+
+    function openQuizForSubject(subjectName) {
+      const matchingTab = Array.from(quizSubjectTabs.querySelectorAll(".quiz-tab")).find((t) =>
+        subjectName.toLowerCase().includes(t.getAttribute("data-subject").toLowerCase())
+      );
+      if (matchingTab) {
+        matchingTab.click();
+      } else {
+        quizSubjectTabs.querySelector(".quiz-tab").click();
+      }
+      // Then travel to the Assessments page through the shared transition.
+      navigateTo("assessments");
+    }
+
+    // =========================================================================
+    // 6. RECOMMENDED NEXT STEP REVIEW MODAL
+    // =========================================================================
+    const openRecommendBox = document.querySelector("#openRecommendBox");
+    const recommendModalBackdrop = document.querySelector("#recommendModalBackdrop");
+    const closeRecommendModalBtn = document.querySelector("#closeRecommendModalBtn");
+    const startPhotosynthesisQuizBtn = document.querySelector("#startPhotosynthesisQuizBtn");
+    const markPhotosynthesisMasteredBtn = document.querySelector("#markPhotosynthesisMasteredBtn");
+
+    openRecommendBox.addEventListener("click", () => {
+      recommendModalBackdrop.hidden = false;
+    });
+
+    closeRecommendModalBtn.addEventListener("click", () => {
+      recommendModalBackdrop.hidden = true;
+    });
+
+    startPhotosynthesisQuizBtn.addEventListener("click", () => {
+      recommendModalBackdrop.hidden = true;
+      openQuizForSubject("Biology");
+    });
+
+    markPhotosynthesisMasteredBtn.addEventListener("click", () => {
+      const photoTopic = topicsMasteredState.find((t) => t.name.includes("Photosynthesis"));
+      if (photoTopic) {
+        photoTopic.mastered = true;
+        updateTopicsMasteredUI();
+        showToast("Photosynthesis marked as Mastered! 🎉");
+      }
+      recommendModalBackdrop.hidden = true;
+    });
+
+    // Declared here (not in section 7) because closeAllModals() and the shared
+    // backdrop click handlers below run before section 7 is initialised.
+    const notificationsModalBackdrop = document.querySelector("#notificationsModalBackdrop");
+
+    // Close all modals helper
+    function closeAllModals() {
+      isFilesExpandedState = false;
+      setFilesExpanded(false);
+      quizModalBackdrop.hidden = true;
+      recommendModalBackdrop.hidden = true;
+      if (notificationsModalBackdrop) notificationsModalBackdrop.hidden = true;
+    }
+
+    [quizModalBackdrop, recommendModalBackdrop, notificationsModalBackdrop].forEach((backdrop) => {
+      if (!backdrop) return;
+      backdrop.addEventListener("click", (e) => {
+        if (e.target !== backdrop) return;
+        // The quiz backdrop is a full page, not a dialog: clicking outside the
+        // card returns to Overview with the same transition.
+        if (backdrop === quizModalBackdrop) navigateTo("overview");
+        else backdrop.hidden = true;
+      });
+    });
+
+    // =========================================================================
+    // 7. BELL NOTIFICATIONS & 3-DAY INACTIVITY REMINDERS
+    // =========================================================================
+    const notificationBellBtn = document.querySelector("#notificationBellBtn");
+    const bellStatusDot = document.querySelector("#bellStatusDot");
+    const closeNotificationsModalBtn = document.querySelector("#closeNotificationsModalBtn");
+    const notifStatusPill = document.querySelector("#notifStatusPill");
+    const notifMasterSwitch = document.querySelector("#notifMasterSwitch");
+    const notifPreviewMessage = document.querySelector("#notifPreviewMessage");
+    const incompleteTopicsCount = document.querySelector("#incompleteTopicsCount");
+    const incompleteTopicsTags = document.querySelector("#incompleteTopicsTags");
+    const testDesktopNotificationBtn = document.querySelector("#testDesktopNotificationBtn");
+    const simulate3DaysBtn = document.querySelector("#simulate3DaysBtn");
+    const notifPermissionText = document.querySelector("#notifPermissionText");
+    const inactivityAlertBanner = document.querySelector("#inactivityAlertBanner");
+    const inactivityBannerDesc = document.querySelector("#inactivityBannerDesc");
+    const resumeIncompleteTopicsBtn = document.querySelector("#resumeIncompleteTopicsBtn");
+    const dismissInactivityBannerBtn = document.querySelector("#dismissInactivityBannerBtn");
+
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    let notificationsEnabled = localStorage.getItem("learnmate_notifications_enabled") !== "false";
+
+    function getIncompleteTopics() {
+      return topicsMasteredState.filter((t) => !t.mastered);
+    }
+
+    function updateNotificationsIncompleteUI() {
+      if (!incompleteTopicsCount) return;
+      const incomplete = getIncompleteTopics();
+      incompleteTopicsCount.textContent = incomplete.length;
+
+      if (incomplete.length === 0) {
+        incompleteTopicsTags.innerHTML = `<span class="all-mastered-note">All topics are currently mastered! Outstanding progress! 🌟</span>`;
+        notifPreviewMessage.textContent = `"It's been a long time to see your dashboard and stuff! All enrolled curriculum is up to date. Come back to review or take practice quizzes!"`;
+        if (inactivityBannerDesc) {
+          inactivityBannerDesc.textContent = "All enrolled curriculum topics are up to date! Jump back into a quiz to maintain peak recall.";
+        }
+        return;
+      }
+
+      incompleteTopicsTags.innerHTML = incomplete
+        .map((t) => `<span class="incomplete-topic-tag"><strong>${t.subject}:</strong> ${(t.name.split(':')[1] || t.name).trim()}</span>`)
+        .join("");
+
+      const shortList = incomplete
+        .slice(0, 3)
+        .map((t) => `${t.subject} (${(t.name.split(':')[1] || t.name).trim()})`)
+        .join(", ");
+      const extraCount = incomplete.length > 3 ? `, +${incomplete.length - 3} more` : "";
+
+      const msg = `"It's been a long time to see your dashboard and stuff! You have ${incomplete.length} incomplete topics waiting: ${shortList}${extraCount}. Time to get back on track!"`;
+      notifPreviewMessage.textContent = msg;
+      if (inactivityBannerDesc) {
+        const subjectsList = Array.from(new Set(incomplete.map((t) => t.subject))).join(", ");
+        inactivityBannerDesc.textContent = `You have ${incomplete.length} incomplete study topics waiting across ${subjectsList}. Let's resume where you left off!`;
+      }
+    }
+
+    function updateNotificationBellUI() {
+      if (notificationsEnabled) {
+        bellStatusDot.className = "bell-status-dot is-active";
+        bellStatusDot.title = "Notifications: ON (3-day inactivity alerts active)";
+        notificationBellBtn.setAttribute("title", "Study Reminders: ON (Click to configure or turn off)");
+        notifStatusPill.className = "notif-status-pill is-on";
+        notifStatusPill.textContent = "Active (ON)";
+        notifMasterSwitch.className = "notif-master-switch is-active";
+        notifMasterSwitch.setAttribute("aria-checked", "true");
+      } else {
+        bellStatusDot.className = "bell-status-dot is-off";
+        bellStatusDot.title = "Notifications: OFF (Muted)";
+        notificationBellBtn.setAttribute("title", "Study Reminders: OFF (Click to turn on)");
+        notifStatusPill.className = "notif-status-pill is-off";
+        notifStatusPill.textContent = "Disabled (OFF)";
+        notifMasterSwitch.className = "notif-master-switch is-off";
+        notifMasterSwitch.setAttribute("aria-checked", "false");
+      }
+      localStorage.setItem("learnmate_notifications_enabled", String(notificationsEnabled));
+    }
+
+    function checkPermissionStatus() {
+      if (!("Notification" in window)) {
+        notifPermissionText.textContent = "Your browser does not support the Web Notification API, but in-app dashboard alerts are active.";
+        return;
+      }
+      if (Notification.permission === "granted") {
+        notifPermissionText.textContent = "✓ Desktop notification permission is GRANTED. You will receive system alerts even when the website is closed.";
+      } else if (Notification.permission === "denied") {
+        notifPermissionText.textContent = "⚠️ Desktop notification permission is blocked in browser settings. Notifications will show as in-app banners.";
+      } else {
+        notifPermissionText.textContent = "Desktop notifications are ready. Clicking 'Send Test Message' will prompt you to grant browser permission.";
+      }
+    }
+
+    function showInactivityBanner(msg) {
+      if (inactivityAlertBanner) {
+        inactivityAlertBanner.hidden = false;
+        inactivityAlertBanner.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+
+    function triggerInactivityNotification(reason) {
+      if (!notificationsEnabled && reason !== "test") return;
+
+      const incomplete = getIncompleteTopics();
+      const shortList = incomplete
+        .slice(0, 3)
+        .map((t) => (t.name.split(':')[1] || t.name).trim())
+        .join(", ");
+      const extraCount = incomplete.length > 3 ? `, +${incomplete.length - 3} more` : "";
+
+      const title = "LearnMate AI · Study Reminder";
+      const body = `It's been a long time to see your dashboard and stuff! You have ${incomplete.length} incomplete topics waiting (${shortList}${extraCount}). Time to review!`;
+
+      // 1. Desktop Notification
+      if ("Notification" in window) {
+        if (Notification.permission === "granted") {
+          try {
+            const notif = new Notification(title, {
+              body: body,
+              icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>📖</text></svg>",
+              tag: "learnmate-inactivity-reminder",
+              renotify: true
+            });
+            notif.onclick = () => {
+              window.focus();
+              notif.close();
+            };
+          } catch (e) {
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+              navigator.serviceWorker.controller.postMessage({
+                type: 'SHOW_NOTIFICATION',
+                title: title,
+                options: { body: body, tag: 'learnmate-inactivity-reminder' }
+              });
+            }
+          }
+        } else if (Notification.permission === "default" && reason === "test") {
+          Notification.requestPermission().then((perm) => {
+            checkPermissionStatus();
+            if (perm === "granted") {
+              triggerInactivityNotification("test");
+            }
+          });
+        }
+      }
+
+      // 2. In-App Banner & Toast
+      showToast(`🔔 Reminder: ${body}`);
+      showInactivityBanner(body);
+    }
+
+    // Bell Button Click
+    notificationBellBtn.addEventListener("click", () => {
+      notificationsModalBackdrop.hidden = false;
+      checkPermissionStatus();
+      updateNotificationsIncompleteUI();
+    });
+
+    closeNotificationsModalBtn.addEventListener("click", () => {
+      notificationsModalBackdrop.hidden = true;
+    });
+
+    // Master Switch Toggle
+    notifMasterSwitch.addEventListener("click", () => {
+      notificationsEnabled = !notificationsEnabled;
+      updateNotificationBellUI();
+
+      if (notificationsEnabled) {
+        if ("Notification" in window && Notification.permission === "default") {
+          Notification.requestPermission().then(() => checkPermissionStatus());
+        }
+        showToast("Study reminders turned ON! You'll be alerted after 3 days of inactivity.");
+      } else {
+        showToast("Study reminders turned OFF.");
+      }
+    });
+
+    // Test Notification Button
+    testDesktopNotificationBtn.addEventListener("click", () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().then((perm) => {
+          checkPermissionStatus();
+          triggerInactivityNotification("test");
+        });
+      } else {
+        triggerInactivityNotification("test");
+      }
+    });
+
+    // Simulate 3 Days Inactivity Trigger
+    simulate3DaysBtn.addEventListener("click", () => {
+      notificationsModalBackdrop.hidden = true;
+      triggerInactivityNotification("simulated_3_days");
+      showToast("Simulated 3-day inactivity trigger! Notice the notification & top banner.");
+    });
+
+    // Dismiss banner
+    dismissInactivityBannerBtn.addEventListener("click", () => {
+      inactivityAlertBanner.hidden = true;
+    });
+
+    // Resume Incomplete Work Button
+    resumeIncompleteTopicsBtn.addEventListener("click", () => {
+      inactivityAlertBanner.hidden = true;
+      topicsChecklist.scrollIntoView({ behavior: "smooth", block: "center" });
+      const firstIncomplete = topicsChecklist.querySelector(".topic-item:not(.is-mastered)");
+      if (firstIncomplete) {
+        firstIncomplete.classList.add("highlight-pulse");
+        window.setTimeout(() => firstIncomplete.classList.remove("highlight-pulse"), 2500);
+      }
+    });
+
+    // Service Worker Registration
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(() => { });
+    }
+
+    // Inactivity Detection on Page Load
+    function checkInactivityOnStartup() {
+      const lastVisit = localStorage.getItem("learnmate_last_visit");
+      const now = Date.now();
+      if (lastVisit && notificationsEnabled) {
+        const elapsed = now - Number(lastVisit);
+        if (elapsed >= THREE_DAYS_MS) {
+          window.setTimeout(() => {
+            triggerInactivityNotification("3_days_away");
+          }, 1200);
+        }
+      }
+      localStorage.setItem("learnmate_last_visit", String(now));
+    }
+
+    window.addEventListener("beforeunload", () => {
+      localStorage.setItem("learnmate_last_visit", String(Date.now()));
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        localStorage.setItem("learnmate_last_visit", String(Date.now()));
+      }
+    });
+
+    // Initialize notification states
+    updateNotificationBellUI();
+    updateNotificationsIncompleteUI();
+    checkInactivityOnStartup();
+
+    // =========================================================================
+    // 8. GLOBAL SEARCH FILTER (Across Subjects, Action Boxes, Files)
+    // =========================================================================
+    function filterDashboard(query) {
+      const q = query.trim().toLowerCase();
+      if (!q) {
+        document.querySelectorAll(".subject-card, .top-action-box, .topic-item").forEach((el) => {
+          el.hidden = false;
+        });
+        return;
+      }
+
+      // Check if user is searching for a subject
+      let matchedSubject = false;
+      document.querySelectorAll(".subject-card").forEach((card) => {
+        const matches = card.textContent.toLowerCase().includes(q);
+        card.hidden = !matches;
+        if (matches) matchedSubject = true;
+      });
+
+      if (matchedSubject && !isSubjectsExpanded) {
+        setSubjectsExpanded(true);
+      }
+
+      document.querySelectorAll(".top-action-box").forEach((box) => {
+        box.hidden = !box.textContent.toLowerCase().includes(q);
+      });
+
+      document.querySelectorAll(".topic-item").forEach((topic) => {
+        topic.hidden = !topic.textContent.toLowerCase().includes(q);
+      });
+    }
+
+    dashboardSearch.addEventListener("input", () => {
+      filterDashboard(dashboardSearch.value);
+    });
+
+    // Escape — closes the top-most overlay, or steps back to Overview when a
+    // full page (My Materials / Assessments) is on screen. Both use the same
+    // transition system, so backing out looks identical to navigating in.
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+
+      if (activeView === "assessments" || activeView === "materials") {
+        navigateTo("overview");
+        return;
+      }
+
+      if (recommendModalBackdrop && !recommendModalBackdrop.hidden) recommendModalBackdrop.hidden = true;
+      if (notificationsModalBackdrop && !notificationsModalBackdrop.hidden) notificationsModalBackdrop.hidden = true;
+      if (!robotChatPanel.hidden) {
+        setRobotChatOpen(false);
+        robotGreeting.focus();
+      }
+    });
+
+    // =========================================================================
+    // 8. AI STUDY BUDDY CHAT
+    // =========================================================================
+    function setRobotChatOpen(isOpen) {
+      robotChatPanel.hidden = !isOpen;
+      robotGreeting.setAttribute("aria-expanded", String(isOpen));
+      if (isOpen) {
+        robotChatInput.focus();
+      }
+    }
+
+    function addRobotChatMessage(message, sender) {
+      const messageElement = document.createElement("div");
+      messageElement.className = `robot-chat-message ${sender}-message`;
+      messageElement.textContent = message;
+      robotChatMessages.append(messageElement);
+      robotChatMessages.scrollTop = robotChatMessages.scrollHeight;
+    }
+
+    function resetRobotChat() {
+      window.clearTimeout(chatReplyTimer);
+      robotChatMessages.replaceChildren();
+      const greeting = document.createElement("div");
+      greeting.className = "robot-chat-message assistant-message";
+      greeting.append("Hi ");
+      const name = document.createElement("span");
+      name.textContent = chatUserName.textContent;
+      greeting.append(name, "! What are you studying today?");
+      robotChatMessages.append(greeting);
+    }
+
+    function getStudyReply(question) {
+      const text = question.toLowerCase();
+      if (text.includes("photosynthesis") || text.includes("biology")) {
+        return "Photosynthesis converts light into glucose: light reactions generate ATP/NADPH in thylakoids, while the Calvin cycle in the stroma fixes carbon into G3P.";
+      }
+      if (text.includes("dlco") || text.includes("logic") || text.includes("gate")) {
+        return "For DLCO, review basic logic gates (AND, OR, NOT, NAND, NOR, XOR), Boolean algebra simplification via K-Maps, and sequential flip-flops (SR, JK, D, T).";
+      }
+      if (text.includes("adsa") || text.includes("tree") || text.includes("algorithm") || text.includes("graph")) {
+        return "In ADSA, ensure you understand balanced binary search trees (AVL rotations, B-trees) and graph algorithms (BFS/DFS, Dijkstra, Prim's/Kruskal's).";
+      }
+      if (text.includes("oops") || text.includes("java") || text.includes("class")) {
+        return "Java OOP relies on 4 pillars: Encapsulation (access modifiers), Inheritance (extends), Polymorphism (overriding/overloading), and Abstraction (interfaces/abstract classes).";
+      }
+      if (text.includes("physics") || text.includes("newton") || text.includes("force")) {
+        return "Newton's laws govern mechanics: 1st is Inertia, 2nd is F = ma (rate of change of momentum), and 3rd is Equal and Opposite Reaction.";
+      }
+      if (text.includes("english") || text.includes("writing")) {
+        return "For academic English, focus on structured thesis statements, cohesive transitions, and active voice precision in technical reporting.";
+      }
+      if (text.includes("uhv") || text.includes("values") || text.includes("ethics")) {
+        return "Universal Human Values emphasizes natural acceptance, self-exploration, living in harmony with self, family, society, and nature.";
+      }
+      return "I'm ready to help you with Science, Biology, English, Physics, DLCO, ADSA, OOPS / Java, or UHV. Which topic should we tackle?";
+    }
+
+    robotGreeting.addEventListener("click", () => {
+      setRobotChatOpen(robotChatPanel.hidden);
+    });
+
+    robotChatClose.addEventListener("click", () => {
+      setRobotChatOpen(false);
+      robotGreeting.focus();
+    });
+
+    robotChatForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const question = robotChatInput.value.trim();
+      if (!question) return;
+      addRobotChatMessage(question, "user");
+      robotChatInput.value = "";
+      window.clearTimeout(chatReplyTimer);
+      chatReplyTimer = window.setTimeout(() => {
+        addRobotChatMessage(getStudyReply(question), "assistant");
+        chatReplyTimer = undefined;
+      }, 350);
+    });
+  </script>
+</body>
+
+</html>
