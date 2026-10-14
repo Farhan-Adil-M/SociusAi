@@ -16,10 +16,13 @@ import {
 mountShell('library');
 mountHealthBanner(document.querySelector('[data-health]'));
 
-const headHost = document.querySelector('[data-session-head]');
-const sourcesHost = document.querySelector('[data-sources]');
+// The session page gets a light restyle, so the classic data-* hosts stay the
+// contract; anything missing degrades to a detached element instead of
+// crashing the page.
+const headHost = document.querySelector('[data-session-head]') || document.createElement('div');
+const sourcesHost = document.querySelector('[data-sources]') || document.createElement('div');
 const sourcesMeta = document.querySelector('[data-sources-meta]');
-const decksHost = document.querySelector('[data-decks]');
+const decksHost = document.querySelector('[data-decks]') || document.createElement('div');
 const importPanel = document.querySelector('[data-import-panel]');
 
 const params = new URLSearchParams(window.location.search);
@@ -66,7 +69,9 @@ async function loadOtherSessions() {
 
 function renderFatal(title, text, href, label) {
   headHost.innerHTML = '';
-  showEmpty(headHost.parentElement, {
+  const target = headHost.parentElement || document.getElementById('main');
+  if (!target) return;
+  showEmpty(target, {
     iconName: 'folder', title, text,
     actions: `<a class="btn btn-primary btn-sm" href="${href}">${label}</a>`,
   });
@@ -129,7 +134,7 @@ async function setStatus(status) {
 }
 
 function wireImportToggle(toggle) {
-  if (!toggle) return;
+  if (!toggle || !importPanel) return;
   toggle.addEventListener('click', () => {
     const open = importPanel.hidden;
     if (open && !importPanel.dataset.mounted) {
@@ -161,7 +166,7 @@ function moveSelect(source) {
 }
 
 function renderSources() {
-  sourcesMeta.textContent = sources.length ? `${sources.length} ${sources.length === 1 ? 'item' : 'items'}` : '';
+  if (sourcesMeta) sourcesMeta.textContent = sources.length ? `${sources.length} ${sources.length === 1 ? 'item' : 'items'}` : '';
 
   if (sources.length === 0) {
     if (decks.length === 0) {

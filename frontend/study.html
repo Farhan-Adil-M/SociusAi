@@ -7,23 +7,61 @@
   <meta name="description" content="Read your material and ask the tutor questions that cite the exact page.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/shell.css">
   <link rel="stylesheet" href="css/study.css">
+  <link rel="stylesheet" href="css/redesign.css">
 </head>
 <body class="shell">
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar" data-shell="header"></header>
 
   <main id="main" class="shell-main">
-    <div class="page-head">
-      <p class="page-eyebrow">Study</p>
-      <h1 class="page-title">Ask your material</h1>
-      <p class="page-sub">Pick what the tutor may search, then ask. Every answer shows the file and page it came from, so you can check it yourself.</p>
-    </div>
+    <!-- AI Tutor — migrated from demo4.1 #viewTutor (branded Socius AI).
+         The real conversation lives in .study-layout below; this block is the
+         tutor hero (greeting + robot + open-chat action). -->
+    <section class="app-view" id="viewTutor" aria-label="AI Tutor">
+      <header class="page-head view-head view-head-center">
+        <p class="page-eyebrow view-eyebrow">AI TUTOR</p>
+        <h1 class="page-title">Meet Socius AI, your study buddy</h1>
+        <p class="page-sub view-desc">Ask about anything in your material. Every answer shows the file and page it came from, so you can check it yourself.</p>
+      </header>
+
+      <div class="tutor-stage">
+        <div class="tutor-hi" id="tutorHi" aria-hidden="true">
+          Hi <span id="tutorHiName">there</span>! <span class="tutor-hi-wave">👋</span>
+        </div>
+        <div class="tutor-robot" id="tutorRobot" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <path class="robot-antenna" d="M32 8v7" />
+            <circle class="robot-antenna-tip" cx="32" cy="6" r="3.5" />
+            <path class="robot-ear" d="M12 27H8v9h5m38-9h5v9h-5" />
+            <path class="robot-arm" d="M17 40 11 46m36-6 6 6" />
+            <circle class="robot-hand" cx="10" cy="48" r="3" />
+            <circle class="robot-hand" cx="54" cy="48" r="3" />
+            <path class="robot-leg" d="M25 53v5m14-5v5" />
+            <path class="robot-foot" d="M21 59h8m6 0h8" />
+            <path class="robot-body" d="M21 39h22a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Z" />
+            <path class="robot-body-panel" d="M27 44h10v7H27z" />
+            <circle class="robot-body-light" cx="32" cy="47.5" r="1.5" />
+            <rect class="robot-head" x="13" y="15" width="38" height="29" rx="11" />
+            <rect class="robot-face" x="18" y="21" width="28" height="17" rx="7" />
+            <circle class="robot-eye" cx="26" cy="28" r="2.3" />
+            <circle class="robot-eye" cx="38" cy="28" r="2.3" />
+            <path class="robot-smile" d="M28 33q4 4 8 0" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="tutor-actions">
+        <button type="button" class="btn btn-primary" id="tutorOpenChatBtn" aria-controls="robotChatPanel" aria-expanded="false">
+          Open study chat
+        </button>
+      </div>
+    </section>
 
     <div data-health class="stack stack-3"></div>
 
@@ -90,6 +128,73 @@
   </main>
 
   <footer class="shell-footer" data-shell="footer"></footer>
+
+  <!-- Floating study chat — migrated from demo4.1 (#robotChatPanel + #robotGreeting).
+       Starts hidden; js must wire open/close/submit before it appears. -->
+  <section class="robot-chat-panel" id="robotChatPanel" aria-label="Socius AI study chat" hidden>
+    <header class="robot-chat-header">
+      <div class="robot-avatar" aria-hidden="true">
+        <svg viewBox="0 0 64 64">
+          <path class="robot-antenna" d="M32 8v7" />
+          <circle class="robot-antenna-tip" cx="32" cy="6" r="3.5" />
+          <path class="robot-ear" d="M12 27H8v9h5m38-9h5v9h-5" />
+          <path class="robot-arm" d="m17 43-5 6m35-6 5 6" />
+          <path class="robot-leg" d="M25 53v4m14-4v4" />
+          <path class="robot-body" d="M21 39h22a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Z" />
+          <path class="robot-body-panel" d="M27 44h10v7H27z" />
+          <circle class="robot-body-light" cx="32" cy="47.5" r="1.5" />
+          <rect class="robot-head" x="13" y="15" width="38" height="29" rx="11" />
+          <rect class="robot-face" x="18" y="21" width="28" height="17" rx="7" />
+          <circle class="robot-eye" cx="26" cy="28" r="2.3" />
+          <circle class="robot-eye" cx="38" cy="28" r="2.3" />
+          <path class="robot-smile" d="M28 33q4 4 8 0" />
+        </svg>
+      </div>
+      <div>
+        <h2>Socius AI</h2>
+        <p>Your study buddy</p>
+      </div>
+      <button class="robot-chat-close" id="robotChatClose" type="button" aria-label="Close chat">×</button>
+    </header>
+    <div class="robot-chat-messages" id="robotChatMessages" aria-live="polite" aria-relevant="additions">
+      <div class="robot-chat-message assistant-message">Hi <span id="chatUserName">there</span>! What are you studying
+        today?</div>
+    </div>
+    <form class="robot-chat-form" id="robotChatForm">
+      <label class="sr-only" for="robotChatInput">Message Socius AI</label>
+      <input id="robotChatInput" type="text" placeholder="Ask a study question..." autocomplete="off" required />
+      <button type="submit" aria-label="Send message">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 20.5 21 12 3 3.5v6.6l12 1.9-12 1.9v6.6Z" />
+        </svg>
+      </button>
+    </form>
+    <p class="robot-chat-note">Study chat · Answers come from your material</p>
+  </section>
+  <button class="robot-greeting" id="robotGreeting" type="button" aria-expanded="false" aria-controls="robotChatPanel"
+    aria-label="Open study chat" hidden>
+    <span class="robot-avatar" aria-hidden="true">
+      <svg viewBox="0 0 64 64">
+        <path class="robot-antenna" d="M32 8v7" />
+        <circle class="robot-antenna-tip" cx="32" cy="6" r="3.5" />
+        <path class="robot-ear" d="M12 27H8v9h5m38-9h5v9h-5" />
+        <path class="robot-arm" d="M17 40 11 46m36-6 6 6" />
+        <circle class="robot-hand" cx="10" cy="48" r="3" />
+        <circle class="robot-hand" cx="54" cy="48" r="3" />
+        <path class="robot-leg" d="M25 53v5m14-5v5" />
+        <path class="robot-foot" d="M21 59h8m6 0h8" />
+        <path class="robot-body" d="M21 39h22a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Z" />
+        <path class="robot-body-panel" d="M27 44h10v7H27z" />
+        <circle class="robot-body-light" cx="32" cy="47.5" r="1.5" />
+        <rect class="robot-head" x="13" y="15" width="38" height="29" rx="11" />
+        <rect class="robot-face" x="18" y="21" width="28" height="17" rx="7" />
+        <circle class="robot-eye" cx="26" cy="28" r="2.3" />
+        <circle class="robot-eye" cx="38" cy="28" r="2.3" />
+        <path class="robot-smile" d="M28 33q4 4 8 0" />
+      </svg>
+    </span>
+  </button>
+
   <script type="module" src="js/pages/study.js"></script>
 </body>
 </html>

@@ -110,6 +110,7 @@ function renderNotice(host, kind, html) {
  * @param {Function}   opts.onOrganised   called with the source after any placement change
  */
 export function mountImportPanel({ host, sessionId = null, onOrganised = () => {}, knownSources = () => [] }) {
+  if (!host) return; // no panel host in this markup — nothing to mount
   host.innerHTML = `
     <div class="imp-block">
       <label class="field-label" for="imp-file">Upload a PDF or PowerPoint</label>
@@ -151,7 +152,11 @@ export function mountImportPanel({ host, sessionId = null, onOrganised = () => {
     fileInput.value = '';
     try {
       let data;
-      const authCfg = getHealth()?.checks?.auth;
+      // getHealth() resolves to { ok, data } — read checks inside .data, or the
+      // storage (25 MB) path silently never fires and every upload goes through
+      // the API body, which Vercel caps at ~4.5 MB.
+      let authCfg = null;
+      try { authCfg = (await getHealth())?.data?.checks?.auth; } catch { authCfg = null; }
       if (authCfg && authCfg.mode === 'supabase' && authCfg.supabaseUrl) {
         // 25 MB path: direct-to-storage, then ask the backend to ingest it
         const { storagePath } = await storageUploadToStudySources(file);

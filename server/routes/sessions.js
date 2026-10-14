@@ -52,23 +52,28 @@ export function sessionToApi(row, extra = {}) {
 }
 
 // lastActivityAt: session updated_at plus the newest source, deck, quiz or
-// logged activity that belongs to the session. Scalar MAX() subqueries ignore
-// NULLs and keep the query simple (no nested compound selects).
+// logged activity that belongs to the session. Each timestamp is fetched with
+// a single-argument MAX() subquery — that form works on both SQLite and
+// Postgres (SQLite's scalar multi-argument MAX(a, b, …) does not exist on
+// Postgres, which broke this list with a 500). The newest value is picked in
+// JS by latestIso() below.
 const LIST_COLUMNS = `
   s.*,
   (SELECT COUNT(*) FROM sources  WHERE session_id = s.id) AS source_count,
   (SELECT COUNT(*) FROM decks    WHERE session_id = s.id) AS deck_count,
-  (
-    SELECT MAX(
-      s.updated_at,
-      (SELECT MAX(created_at)     FROM sources WHERE session_id = s.id),
-      (SELECT MAX(created_at)     FROM decks   WHERE session_id = s.id),
-      (SELECT MAX(last_reviewed_at) FROM decks WHERE session_id = s.id),
-      (SELECT MAX(created_at)     FROM quizzes WHERE session_id = s.id),
-      (SELECT MAX(at)             FROM activity WHERE session_id = s.id)
-    )
-  ) AS last_activity
+  (SELECT MAX(created_at)       FROM sources  WHERE session_id = s.id) AS src_last,
+  (SELECT MAX(created_at)       FROM decks    WHERE session_id = s.id) AS deck_last,
+  (SELECT MAX(last_reviewed_at) FROM decks    WHERE session_id = s.id) AS deck_reviewed_last,
+  (SELECT MAX(created_at)       FROM quizzes  WHERE session_id = s.id) AS quiz_last,
+  (SELECT MAX(at)               FROM activity WHERE session_id = s.id) AS activity_last
 `;
+
+// Newest of several timestamps; NULL/undefined entries are ignored. ISO-8601
+// strings from nowIso() sort correctly as plain strings.
+export function latestIso(...values) {
+  const present = values.filter(Boolean).sort();
+  return present.length ? present[present.length - 1] : null;
+}
 
 export function sessionsRouter({ db, auth }) {
   const router = express.Router();
@@ -97,19 +102,28 @@ export function sessionsRouter({ db, auth }) {
       params.push(like, like, like);
     }
 
-    const orderBy = { recent: 's.updated_at DESC', alpha: 'LOWER(s.title) ASC', active: 'last_activity DESC' }[sort];
-    const rows = await db.all(`SELECT ${LIST_COLUMNS} FROM study_sessions s ${where} ORDER BY ${orderBy}`, ...params);
+    // "active" sorts by lastActivityAt, which is computed in JS — fetch the
+    // rows unsorted and sort after mapping (the list is small, no paging).
+    const sqlOrder = { recent: 's.updated_at DESC', alpha: 'LOWER(s.title) ASC', active: null }[sort];
+    const rows = await db.all(
+      `SELECT ${LIST_COLUMNS} FROM study_sessions s ${where}${sqlOrder ? ` ORDER BY ${sqlOrder}` : ''}`,
+      ...params,
+    );
 
     const unsortedSourceCount = (await db.get('SELECT COUNT(*) AS n FROM sources WHERE user_id = ? AND session_id IS NULL', req.userId)).n;
 
-    res.json({
-      sessions: rows.map((row) => sessionToApi(row, {
-        sourceCount: row.source_count,
-        deckCount: row.deck_count,
-        lastActivityAt: row.last_activity,
-      })),
-      unsortedSourceCount,
-    });
+    const sessions = rows.map((row) => sessionToApi(row, {
+      sourceCount: row.source_count,
+      deckCount: row.deck_count,
+      lastActivityAt: latestIso(
+        row.updated_at, row.src_last, row.deck_last, row.deck_reviewed_last, row.quiz_last, row.activity_last,
+      ),
+    }));
+    if (sort === 'active') {
+      sessions.sort((a, b) => String(b.lastActivityAt ?? '').localeCompare(String(a.lastActivityAt ?? '')));
+    }
+
+    res.json({ sessions, unsortedSourceCount });
   });
 
   router.post('/', async (req, res) => {

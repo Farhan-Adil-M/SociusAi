@@ -115,6 +115,26 @@ Ingest a PDF or PowerPoint file: extract text with page/slide locations → chun
 
 ---
 
+### POST /api/sources/storage-ingest
+
+Large-upload ingest for deployments where the platform caps request bodies (e.g. Vercel's ~4.5 MB): the browser uploads the file DIRECTLY to the Supabase Storage bucket `study-sources`, then hands the server the object path. The server fetches the object back with the user's OWN JWT (RLS keeps it owner-safe) and runs the same extraction → chunking → embedding pipeline as `/sources/upload`.
+
+**Auth required** (Bearer JWT; prototype mode has no request token and cannot use this route).
+
+**Request:**
+
+```json
+{ "storagePath": "<userId>/<file>.pdf", "title": "Chapter 3", "sizeBytes": 1234567 }
+```
+
+`storagePath` required — a bucket object path containing `/`, no `..` allowed; `.pdf` or `.pptx` only. `title` optional (defaults to the object file name). `sizeBytes` optional; if present and above `MAX_STORAGE_UPLOAD_MB` (default 25 MB) the request is rejected before touching storage.
+
+**Response 201:** same `source` shape as `/sources/upload` (`url: null`).
+
+**Errors:** 400 `VALIDATION_ERROR` (missing/invalid `storagePath`, unreadable PDF), 400 `UNSUPPORTED_FILE`, 400 `EMPTY_CONTENT`, 401 `UNAUTHENTICATED`, 413 `FILE_TOO_LARGE` (`sizeBytes` above the cap), 422 `STORAGE_FETCH_FAILED` (storage object missing/unreadable — re-upload), 502 `NIM_ERROR`, 503 `CHROMA_UNAVAILABLE`.
+
+---
+
 ### POST /api/sources/webpage
 
 Ingest pasted webpage text with its URL.

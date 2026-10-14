@@ -17,12 +17,21 @@ import {
 mountShell('profile');
 mountHealthBanner(document.querySelector('[data-health]'));
 
-const aboutHost = document.querySelector('[data-about]');
-const styleHost = document.querySelector('[data-style]');
-const subjectsHost = document.querySelector('[data-subjects]');
-const stateHost = document.querySelector('[data-state-banner]');
-const dangerStatus = document.querySelector('[data-danger-status]');
-const live = document.querySelector('[data-live]');
+/**
+ * Prefer the redesign's element id, fall back to the pre-redesign hook, so the
+ * page keeps working whichever markup generation ships first.
+ */
+function host(newId, oldSelector) {
+  return document.getElementById(newId) || document.querySelector(oldSelector);
+}
+
+const aboutHost = host('profileAbout', '[data-about]');
+const styleHost = host('profileStyle', '[data-style]');
+const subjectsHost = host('profileSubjects', '[data-subjects]');
+const stateHost = host('profileStateBanner', '[data-state-banner]');
+const dangerStatus = host('profileDangerStatus', '[data-danger-status]');
+const live = host('profileLive', '[data-live]');
+const fieldHosts = [aboutHost, styleHost, subjectsHost].filter(Boolean);
 
 let profile = null;                 // last state accepted by the server
 const editing = {};                 // field name → true while open
@@ -414,13 +423,14 @@ function renderSubjects() {
 /* --------------------------------------------------------------- render */
 
 function renderAll() {
-  aboutHost.innerHTML = renderInterests() + renderGoals() + renderPurpose();
-  styleHost.innerHTML = renderStyle();
-  subjectsHost.innerHTML = renderSubjects();
+  if (aboutHost) aboutHost.innerHTML = renderInterests() + renderGoals() + renderPurpose();
+  if (styleHost) styleHost.innerHTML = renderStyle();
+  if (subjectsHost) subjectsHost.innerHTML = renderSubjects();
 }
 
 /** Top banner driven by profile.state (new / skipped / completed). */
 function renderStateBanner() {
+  if (!stateHost) return;
   const state = profile && profile.state;
   if (state === 'completed') { stateHost.hidden = true; return; }
   const skipped = state === 'skipped';
@@ -463,7 +473,7 @@ async function saveField(name) {
     delete drafts[name];
     renderStateBanner();
     renderAll();
-    live.textContent = `${FIELD_TITLES[name]} saved.`;
+    if (live) live.textContent = `${FIELD_TITLES[name]} saved.`;
   } catch (error) {
     // Server rechecks everything; shown inline under the still-open editor.
     showFieldError(name, errorMessage(error));
@@ -475,8 +485,8 @@ async function saveField(name) {
 /* ------------------------------------------------------------------ load */
 
 async function load() {
-  [aboutHost, styleHost, subjectsHost].forEach((host) => showLoading(host, 'Loading your profile…'));
-  stateHost.hidden = true;
+  fieldHosts.forEach((node) => showLoading(node, 'Loading your profile…'));
+  if (stateHost) stateHost.hidden = true;
   try {
     const data = await api.getProfile();
     profile = data.profile
@@ -484,8 +494,8 @@ async function load() {
     renderStateBanner();
     renderAll();
   } catch (error) {
-    [aboutHost, styleHost, subjectsHost].forEach((host) =>
-      showError(host, error, { title: 'Could not load your profile', onRetry: load }));
+    fieldHosts.forEach((node) =>
+      showError(node, error, { title: 'Could not load your profile', onRetry: load }));
   }
 }
 
@@ -576,7 +586,7 @@ function wireDanger() {
           if (other !== button) { disarm(other, other.textContent); }
         });
         button.dataset.armed = '1';
-        button.textContent = button.dataset.armedLabel;
+        button.textContent = button.dataset.armedLabel || original;
         button.classList.add('pf-armed');
         return;
       }
@@ -591,7 +601,7 @@ function wireDanger() {
         }
         disarm(button, original);
         await load(); // profile returns to state "new" — rerender the page
-        live.textContent = 'Profile deleted. Quizzes, flashcard decks and uploaded material were not touched.';
+        if (live) live.textContent = 'Profile deleted. Quizzes, flashcard decks and uploaded material were not touched.';
       } catch (error) {
         disarm(button, original);
         if (dangerStatus) {
@@ -599,7 +609,7 @@ function wireDanger() {
             <span><strong>That did not work.</strong> ${escapeHtml(errorMessage(error))}</span>`;
           dangerStatus.hidden = false;
         }
-        live.textContent = 'The profile action failed.';
+        if (live) live.textContent = 'The profile action failed.';
       }
     });
   });

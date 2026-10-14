@@ -1,9 +1,15 @@
 // Dashboard: pulls the learner rollup and the source list once each, then
-// renders the six workspace blocks. Every block handles its own loading, empty
+// renders the workspace blocks. Every block handles its own loading, empty
 // and error state so one failed request never blanks the whole page.
+//
+// Two markup generations are supported side by side during the redesign
+// migration — the pre-redesign hooks ([data-summary], [data-continue],
+// [data-mastery] …) and the redesign's ids (#dashboardName, #profileEmail,
+// #profileAvatar, #dashboardSearch, #dashboardToast, the stat cards). Every
+// lookup is optional: a page shipping only one generation still works.
 
 import { mountShell, currentUser, mountHealthBanner } from '../components/shell.js';
-import { authReady } from '../auth.js';
+import { authReady, getSupabaseClient } from '../auth.js';
 import { api } from '../api.js';
 import {
   icon, escapeHtml, showError, showEmpty,
@@ -12,37 +18,119 @@ import {
 
 mountShell('dashboard');
 
+const $ = (selector) => document.querySelector(selector);
+const byId = (id) => document.getElementById(id);
+const setText = (id, value) => { const node = byId(id); if (node) node.textContent = value; };
+
 /* ------------------------------------------------------------ page chrome */
 
 document.querySelectorAll('[data-icon]').forEach((node) => {
   node.innerHTML = icon(node.dataset.icon, { size: node.classList.contains('dash-jump-arrow') ? 16 : 18 });
 });
 
-const today = new Date();
-document.querySelector('[data-today]').textContent = today.toLocaleDateString(undefined, {
-  weekday: 'long', month: 'long', day: 'numeric',
-});
+const todayEl = $('[data-today]');
+if (todayEl) {
+  todayEl.textContent = new Date().toLocaleDateString(undefined, {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+}
 
-const greetingEl = document.querySelector('[data-welcome]');
-const hour = today.getHours();
+const greetingEl = $('[data-welcome]');
+const hour = new Date().getHours();
 const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
-/** The name can resolve after this first render (Supabase session restore). */
-function renderGreeting() {
-  const name = currentUser();
-  greetingEl.textContent = name ? `${greeting}, ${name}.` : 'Welcome back.';
+/* ------------------------------------------- identity + toast (redesign) */
+
+const toastHost = byId('dashboardToast');
+let toastTimer = null;
+
+/** Short-lived status line in the redesign's toast host. */
+function toast(message) {
+  if (!toastHost) return;
+  toastHost.textContent = message;
+  toastHost.hidden = false;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => { toastHost.hidden = true; }, 3200);
 }
-renderGreeting();
-authReady().then(renderGreeting);
+
+/** The signed-in email when Supabase owns the session; '' otherwise. */
+async function accountEmail() {
+  try {
+    const client = getSupabaseClient();
+    if (!client) return '';
+    const { data } = await client.auth.getSession();
+    return (data && data.session && data.session.user && data.session.user.email) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** #dashboardName / #profileEmail / #profileAvatar, plus the legacy greeting. */
+function renderIdentity() {
+  const name = currentUser();
+  setText('dashboardName', name || 'there');
+  if (greetingEl) greetingEl.textContent = name ? `${greeting}, ${name}.` : 'Welcome back.';
+  accountEmail().then((email) => {
+    setText('profileEmail', email || name || 'Prototype mode');
+    const avatarEl = byId('profileAvatar');
+    const seed = (name || email || 'S').trim();
+    if (avatarEl) avatarEl.textContent = seed.charAt(0).toUpperCase();
+  });
+}
+renderIdentity();
+authReady().then(renderIdentity);
 
 /* ------------------------------------------------------- health banner */
 
-mountHealthBanner(document.querySelector('[data-health]'));
+mountHealthBanner($('[data-health]'));
+
+/* ----------------------------------------------- search (redesign, live) */
+
+const searchInput = byId('dashboardSearch');
+const SEARCH_LISTS = ['[data-materials]', '[data-activity]', '[data-revision]'];
+
+/** Filter the dashboard's rendered lists as the learner types. */
+function filterLists(rawQuery) {
+  const term = rawQuery.trim().toLowerCase();
+  let rows = 0;
+  let matches = 0;
+  SEARCH_LISTS.forEach((selector) => {
+    const host = $(selector);
+    if (!host) return;
+    host.querySelectorAll('.row-item, .revision-item').forEach((row) => {
+      rows += 1;
+      const match = !term || row.textContent.toLowerCase().includes(term);
+      row.style.display = match ? '' : 'none';
+      if (match) matches += 1;
+    });
+  });
+  if (rows > 0 && term.length >= 2 && matches === 0) {
+    toast('No matches on this page — press Enter to search the library.');
+  }
+}
+
+if (searchInput) {
+  searchInput.addEventListener('input', () => filterLists(searchInput.value));
+  searchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      searchInput.value = '';
+      filterLists('');
+      return;
+    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const term = searchInput.value.trim();
+    // The Library page owns full search; `q` is passed for it to pick up.
+    if (term) toast(`Searching the library for “${term}”…`);
+    window.location.href = term ? `library.html?q=${encodeURIComponent(term)}` : 'library.html';
+  });
+}
 
 /* ------------------------------------------------------------ summaries */
 
 function renderSummary(progress, sources) {
-  const node = document.querySelector('[data-summary]');
+  const node = $('[data-summary]');
+  if (!node) return;
   const topics = progress?.topics || [];
   const revision = topics.filter((topic) => topic.needsRevision).length;
   const parts = [];
@@ -62,7 +150,8 @@ function renderSummary(progress, sources) {
 /* -------------------------------------------------------- continue block */
 
 function renderContinue(progress) {
-  const host = document.querySelector('[data-continue]');
+  const host = $('[data-continue]');
+  if (!host) return;
   const next = progress?.suggestedNext;
   const topics = progress?.topics || [];
 
@@ -105,13 +194,14 @@ function renderContinue(progress) {
 /* ------------------------------------------------------------- mastery */
 
 function renderMastery(progress, materialCount = 0) {
-  const host = document.querySelector('[data-mastery]');
-  const meta = document.querySelector('[data-mastery-meta]');
+  const host = $('[data-mastery]');
+  if (!host) return;
+  const meta = $('[data-mastery-meta]');
   const topics = progress?.topics || [];
   const overall = progress?.overall || { quizzesTaken: 0, questionsAnswered: 0, accuracyPercent: 0 };
 
   if (topics.length === 0) {
-    meta.textContent = '';
+    if (meta) meta.textContent = '';
     showEmpty(host, {
       iconName: 'trend',
       title: 'No mastery data yet',
@@ -122,7 +212,7 @@ function renderMastery(progress, materialCount = 0) {
   }
 
   const average = Math.round(topics.reduce((sum, topic) => sum + topic.masteryPercent, 0) / topics.length);
-  meta.textContent = `${topics.length} ${topics.length === 1 ? 'topic' : 'topics'} tracked`;
+  if (meta) meta.textContent = `${topics.length} ${topics.length === 1 ? 'topic' : 'topics'} tracked`;
 
   // With one topic "overall accuracy" and "average mastery" are the same number —
   // show the material count instead of a duplicated stat.
@@ -163,7 +253,8 @@ function renderMastery(progress, materialCount = 0) {
 /* ----------------------------------------------------------- revision */
 
 function renderRevision(progress) {
-  const host = document.querySelector('[data-revision]');
+  const host = $('[data-revision]');
+  if (!host) return;
   const topics = (progress?.topics || []).filter((topic) => topic.needsRevision);
 
   if (topics.length === 0) {
@@ -197,7 +288,8 @@ const ACTIVITY_ICONS = {
 };
 
 function renderActivity(progress) {
-  const host = document.querySelector('[data-activity]');
+  const host = $('[data-activity]');
+  if (!host) return;
   const activity = progress?.recentActivity || [];
 
   if (activity.length === 0) {
@@ -223,7 +315,8 @@ function renderActivity(progress) {
 /* ------------------------------------------------------------ materials */
 
 function renderMaterials(sources) {
-  const host = document.querySelector('[data-materials]');
+  const host = $('[data-materials]');
+  if (!host) return;
 
   if (sources.length === 0) {
     showEmpty(host, {
@@ -245,12 +338,69 @@ function renderMaterials(sources) {
     </div>`).join('')}</div>`;
 }
 
+/* --------------------------------------------------- redesign stat cards */
+
+// Real numbers for the redesign's overview cards. "Mastered" is a display-only,
+// deterministic rule: mastery ≥ 80% (the backend has no mastered flag).
+const MASTERED_AT = 80;
+
+function renderStatCards(progress, sources) {
+  setText('filesCountBadge', `${sources.length} ${sources.length === 1 ? 'file' : 'files'}`);
+  if (!progress) return; // progress request failed — leave the card defaults alone
+
+  const topics = progress?.topics || [];
+  const overall = progress?.overall;
+
+  if (overall && topics.length > 0) {
+    setText('quizAccuracyDisplay', `${overall.accuracyPercent}%`);
+    setText('chartAvgBadge', `Avg: ${overall.accuracyPercent}%`);
+  }
+
+  if (topics.length === 0) {
+    setText('masteredFraction', '0 of 0');
+    setText('masteredPercentText', 'No topics yet');
+    setText('masteredRemainingText', 'Take a quiz to start tracking mastery');
+    return;
+  }
+
+  const masteredCount = topics.filter((topic) => topic.masteryPercent >= MASTERED_AT).length;
+  const remaining = topics.length - masteredCount;
+  const percent = Math.round((masteredCount / topics.length) * 100);
+
+  setText('masteredFraction', `${masteredCount} of ${topics.length}`);
+  const bar = byId('masteredProgressBar');
+  if (bar) bar.style.width = `${percent}%`;
+  setText('masteredPercentText', `${percent}% mastered`);
+  setText('masteredRemainingText', remaining === 0
+    ? 'All topics mastered'
+    : `${remaining} ${remaining === 1 ? 'topic' : 'topics'} in progress`);
+
+  const checklist = byId('topicsChecklist');
+  if (checklist && checklist.childElementCount === 0) {
+    checklist.innerHTML = topics
+      .slice()
+      .sort((a, b) => b.masteryPercent - a.masteryPercent)
+      .map((topic) => {
+        const mastered = topic.masteryPercent >= MASTERED_AT;
+        return `
+          <div class="topic-item${mastered ? ' is-mastered' : ''}">
+            <span class="topic-checkbox" aria-hidden="true">${mastered ? '✓' : ''}</span>
+            <div class="topic-info">
+              <span class="topic-name">${escapeHtml(topic.topic)}</span>
+              <span class="topic-subject-badge">${escapeHtml(topic.difficulty || '')}</span>
+            </div>
+            <span class="topic-status-label">${mastered ? 'Mastered' : 'In Progress'}</span>
+          </div>`;
+      }).join('');
+  }
+}
+
 /* ------------------------------------------------- personalisation nudge */
 
 /** One small nudge card while the profile is new or was skipped (v1.4). */
 function renderProfileNudge(profile) {
   if (!profile || (profile.state !== 'new' && profile.state !== 'skipped')) return;
-  const anchor = document.querySelector('.dash-continue');
+  const anchor = $('.dash-continue');
   if (!anchor) return;
   const skipped = profile.state === 'skipped';
   anchor.insertAdjacentHTML('beforebegin', `
@@ -274,11 +424,18 @@ async function load() {
   ]);
 
   const sources = sourcesResult.status === 'fulfilled' ? sourcesResult.value.sources : [];
+  const progress = progressResult.status === 'fulfilled' ? progressResult.value : null;
+
+  renderStatCards(progress, sources);
+
+  const materialsHost = $('[data-materials]');
   if (sourcesResult.status === 'fulfilled') renderMaterials(sources);
-  else showError(document.querySelector('[data-materials]'), sourcesResult.reason, { title: 'Could not load your material', onRetry: load });
+  else if (materialsHost) {
+    showError(materialsHost, sourcesResult.reason, { title: 'Could not load your material', onRetry: load });
+    toast('Your material could not be loaded.');
+  }
 
   if (progressResult.status === 'fulfilled') {
-    const progress = progressResult.value;
     renderSummary(progress, sources);
     renderContinue(progress);
     renderMastery(progress, sources.length);
@@ -290,11 +447,20 @@ async function load() {
   }
 
   const error = progressResult.reason;
-  document.querySelector('[data-summary]').textContent = 'Your progress could not be loaded.';
+  toast('Your progress could not be loaded.');
+  const summary = $('[data-summary]');
+  if (summary) summary.textContent = 'Your progress could not be loaded.';
   renderContinue(null);
-  showError(document.querySelector('[data-mastery]'), error, { title: 'Could not load your progress', onRetry: load });
-  showEmpty(document.querySelector('[data-revision]'), { iconName: 'clock', title: 'Unavailable', text: 'Progress is needed to build the revision queue.' });
-  showEmpty(document.querySelector('[data-activity]'), { iconName: 'clock', title: 'Unavailable', text: 'Progress is needed to list recent activity.' });
+  const masteryHost = $('[data-mastery]');
+  if (masteryHost) showError(masteryHost, error, { title: 'Could not load your progress', onRetry: load });
+  const revisionHost = $('[data-revision]');
+  if (revisionHost) {
+    showEmpty(revisionHost, { iconName: 'clock', title: 'Unavailable', text: 'Progress is needed to build the revision queue.' });
+  }
+  const activityHost = $('[data-activity]');
+  if (activityHost) {
+    showEmpty(activityHost, { iconName: 'clock', title: 'Unavailable', text: 'Progress is needed to list recent activity.' });
+  }
 }
 
 load();

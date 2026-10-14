@@ -3,7 +3,12 @@
 // `sourceIds` filter, and each question is rendered as an exchange block with
 // its citations. Loading, empty and error states are all handled per block.
 
-import { mountShell, mountHealthBanner } from '../components/shell.js';
+import { mountShell, mountHealthBanner, getHealth, currentUser } from '../components/shell.js';
+// getHealth + storageUploadToStudySources feed the upload gate in the file
+// handler below (the 25 MB direct-to-storage path). Without these imports the
+// gate's `await getHealth()` threw a ReferenceError that the catch swallowed,
+// so supabase-mode uploads silently fell back to the ~4.5 MB API body.
+import { storageUploadToStudySources } from '../auth.js';
 import {
   offerSuggestion, checkUploadFile, checkWebpageInput, findDuplicateSource,
   showDuplicateHint, setUploadLimitHint,
@@ -17,14 +22,24 @@ import {
 mountShell('study');
 mountHealthBanner(document.querySelector('[data-health]'));
 
-const transcript = document.querySelector('[data-transcript]');
-const composer = document.querySelector('[data-composer]');
-const input = document.querySelector('#question');
-const sendButton = document.querySelector('[data-send]');
+/* Element hosts: the redesign (demo4.1) may ship the robot-chat markup
+   (#robotChatMessages / #robotChatForm / #robotChatInput) instead of — or
+   alongside — the classic study markup. We prefer the classic study
+   containers, fall back to the demo IDs, and finally to detached elements so
+   a missing host degrades quietly instead of crashing the whole page. */
+const transcript = document.querySelector('[data-transcript]')
+  || document.getElementById('robotChatMessages')
+  || document.createElement('div');
+const composer = document.querySelector('[data-composer]')
+  || document.getElementById('robotChatForm');
+const input = document.querySelector('#question')
+  || document.getElementById('robotChatInput');
+const sendButton = document.querySelector('[data-send]')
+  || (composer ? composer.querySelector('button[type="submit"]') : null);
 const sendLabel = document.querySelector('[data-send-label]');
 const countLabel = document.querySelector('[data-count]');
-const liveRegion = document.querySelector('[data-live]');
-const sourcesHost = document.querySelector('[data-sources]');
+const liveRegion = document.querySelector('[data-live]') || document.createElement('p');
+const sourcesHost = document.querySelector('[data-sources]') || document.createElement('div');
 
 wireCitations(transcript);
 
@@ -168,7 +183,7 @@ function renderIntro() {
 
 transcript.addEventListener('click', (event) => {
   const button = event.target.closest('[data-suggest]');
-  if (!button) return;
+  if (!button || !input) return;
   input.value = button.dataset.suggest;
   input.dispatchEvent(new Event('input'));
   input.focus();
@@ -252,12 +267,15 @@ function answerHtml(data, question = '') {
 /* ---------------------------------------------------------------- asking */
 
 function updateComposer() {
+  if (!input) return;
   const length = input.value.trim().length;
-  countLabel.textContent = `${input.value.length} / 300`;
+  if (countLabel) countLabel.textContent = `${input.value.length} / 300`;
   const waitingForMaterial = Boolean(sessionContext) && sources.length === 0;
   const locked = introRequired();
   input.disabled = locked;
-  sendButton.disabled = sending || length < 3 || waitingForMaterial || locked;
+  if (sendButton) {
+    sendButton.disabled = sending || length < 3 || waitingForMaterial || locked;
+  }
   input.placeholder = profileState === 'pending'
     ? 'Checking your setup…'
     : locked
@@ -269,8 +287,8 @@ function updateComposer() {
 
 function setSending(value) {
   sending = value;
-  sendLabel.textContent = value ? 'Thinking…' : 'Send';
-  sendButton.disabled = value || input.value.trim().length < 3;
+  if (sendLabel) sendLabel.textContent = value ? 'Thinking…' : 'Send';
+  if (sendButton) sendButton.disabled = value || !input || input.value.trim().length < 3;
 }
 
 /** `approach` (optional) is a one-off style request for THIS answer only. */
@@ -298,7 +316,7 @@ async function ask(question, { approach } = {}) {
     </div>`);
 
   setSending(true);
-  input.value = '';
+  if (input) input.value = '';
   updateComposer();
 
   try {
@@ -383,35 +401,121 @@ transcript.addEventListener('click', (event) => {
   }
 });
 
-composer.addEventListener('submit', (event) => {
+composer?.addEventListener('submit', (event) => {
   event.preventDefault();
+  if (!input) return;
   const question = input.value.trim();
   if (question.length < 3 || question.length > 300 || sending) return;
   ask(question);
 });
 
-input.addEventListener('input', updateComposer);
-input.addEventListener('keydown', (event) => {
+input?.addEventListener('input', updateComposer);
+input?.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
-    composer.requestSubmit();
+    composer?.requestSubmit();
   }
 });
+
+/* ---------------------------------------------------- robot chat panel ---
+   The redesign's floating robot chat (demo4.1 lines 848–912): the greeting
+   button (#robotGreeting) toggles #robotChatPanel, #robotChatClose closes it,
+   and the tutor view's "Open study chat" button (#tutorOpenChatBtn) opens it.
+   Every element is optional — without the panel markup this block is a no-op. */
+const robotPanel = document.getElementById('robotChatPanel');
+const robotGreeting = document.getElementById('robotGreeting');
+const robotClose = document.getElementById('robotChatClose');
+const tutorOpenChat = document.getElementById('tutorOpenChatBtn');
+const robotInput = document.getElementById('robotChatInput');
+
+function setRobotChatOpen(open) {
+  if (!robotPanel) return;
+  robotPanel.hidden = !open;
+  robotGreeting?.setAttribute('aria-expanded', String(open));
+  if (open) (robotInput || input)?.focus?.();
+}
+
+if (robotPanel) {
+  if (robotGreeting) {
+    robotGreeting.hidden = false; // the demo only reveals it in its own dashboard mode
+    robotGreeting.addEventListener('click', () => setRobotChatOpen(robotPanel.hidden));
+  }
+  robotClose?.addEventListener('click', () => {
+    setRobotChatOpen(false);
+    robotGreeting?.focus();
+  });
+  tutorOpenChat?.addEventListener('click', () => setRobotChatOpen(true));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !robotPanel.hidden) {
+      setRobotChatOpen(false);
+      robotGreeting?.focus();
+    }
+  });
+}
+
+// When the page ships BOTH composers (classic study composer + robot panel
+// form), the panel's form is a second way to ask the same tutor. When only
+// the robot form exists it IS the composer and is wired above.
+if (robotPanel && composer !== document.getElementById('robotChatForm')) {
+  document.getElementById('robotChatForm')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const field = document.getElementById('robotChatInput');
+    const question = (field ? field.value : '').trim();
+    if (question.length < 3 || question.length > 300 || sending) return;
+    if (field) field.value = '';
+    // The exchange renders in the main transcript — bring it into view.
+    document.querySelector('.study-workspace')?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    ask(question);
+  });
+}
+
+/* Personalised greeting in the chat panel and tutor stage, when present. */
+const chatUserName = document.getElementById('chatUserName');
+const tutorHiName = document.getElementById('tutorHiName');
+const userName = (currentUser() || '').trim();
+if (userName) {
+  if (chatUserName) chatUserName.textContent = userName;
+  if (tutorHiName) tutorHiName.textContent = userName;
+}
 
 /* --------------------------------------------------------- add material */
 
 const addToggle = document.querySelector('[data-add-toggle]');
 const addPanel = document.querySelector('#add-panel');
-const addStatus = document.querySelector('[data-add-status]');
-const fileInput = document.querySelector('#file-input');
+const addStatus = document.querySelector('[data-add-status]') || document.createElement('div');
+// The redesign's upload widget uses #fileUploadInput inside a clickable
+// #fileDropZone; the classic markup has a plain #file-input. Either works —
+// this handler only reads files[0].
+const fileInput = document.querySelector('#file-input')
+  || document.getElementById('fileUploadInput');
 const webpageForm = document.querySelector('[data-webpage-form]');
 
-addToggle.addEventListener('click', () => {
+addToggle?.addEventListener('click', () => {
+  if (!addPanel) return;
   const open = addPanel.hidden;
   addPanel.hidden = !open;
   addToggle.setAttribute('aria-expanded', String(open));
   addToggle.textContent = open ? 'Hide material tools' : 'Add material';
 });
+
+/* Demo drop-zone convenience: if the redesign ships its clickable upload box
+   (#fileDropZone / #browseFilesBtn, keyboard-operable per role="button"),
+   wire it to open the file input so the upload path stays reachable. */
+const dropZone = document.getElementById('fileDropZone');
+const browseFilesBtn = document.getElementById('browseFilesBtn');
+if (fileInput) {
+  browseFilesBtn?.addEventListener('click', (event) => {
+    event.stopPropagation(); // the zone below would open a second dialog
+    fileInput.click();
+  });
+  dropZone?.addEventListener('click', () => fileInput.click());
+  dropZone?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      fileInput.click();
+    }
+  });
+}
 
 function showAddStatus(kind, message) {
   addStatus.innerHTML = `<div class="banner banner-${kind}" style="font-size: var(--fs-xs); padding: var(--s2) var(--s3);">${escapeHtml(message)}</div>`;
@@ -426,7 +530,7 @@ dupHost.setAttribute('data-dup-hint', '');
 dupHost.setAttribute('aria-live', 'polite');
 addStatus.insertAdjacentElement('beforebegin', dupHost);
 
-fileInput.addEventListener('change', async () => {
+fileInput?.addEventListener('change', async () => {
   const file = fileInput.files && fileInput.files[0];
   if (!file) return;
   const problem = checkUploadFile(file);
@@ -436,7 +540,7 @@ fileInput.addEventListener('change', async () => {
   try {
     let data;
     let authCfg = null;
-    try { authCfg = (await getHealth())?.checks?.auth; } catch { authCfg = null; }
+    try { authCfg = (await getHealth())?.data?.checks?.auth; } catch { authCfg = null; }
     if (authCfg && authCfg.mode === 'supabase' && authCfg.supabaseUrl) {
       // big-file mode: direct-to-storage (no ~4.5 MB serverless body cap)
       const { storagePath } = await storageUploadToStudySources(file);
@@ -471,10 +575,13 @@ async function afterImport(source) {
   await loadSources();
 }
 
-webpageForm.addEventListener('submit', async (event) => {
+webpageForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const url = document.querySelector('#webpage-url').value.trim();
-  const text = document.querySelector('#webpage-text').value.trim();
+  const urlField = webpageForm.querySelector('#webpage-url') || document.querySelector('#webpage-url');
+  const textField = webpageForm.querySelector('#webpage-text') || document.querySelector('#webpage-text');
+  if (!urlField || !textField) return;
+  const url = urlField.value.trim();
+  const text = textField.value.trim();
 
   const problem = checkWebpageInput(url, text);
   if (problem) { showAddStatus('error', problem); return; }
@@ -508,10 +615,11 @@ function introRequired() {
   return profileState === 'pending' || profileState === 'new' || profileState === 'in_progress';
 }
 
-const onboardChat = () => onboardPanel.querySelector('[data-onboard-chat]');
+const onboardChat = () => (onboardPanel ? onboardPanel.querySelector('[data-onboard-chat]') : null);
 
 function setOnboardBusy(value) {
   onboardSending = value;
+  if (!onboardPanel) return;
   const input = onboardPanel.querySelector('[data-onboard-input]');
   const send = onboardPanel.querySelector('[data-onboard-send]');
   if (input) input.disabled = value || onboardDone;
@@ -566,6 +674,7 @@ function showOnboardError(message) {
 }
 
 function renderOnboardShell(title) {
+  if (!onboardPanel) return;
   onboardPanel.hidden = false;
   onboardOpen = true;
   onboardDone = false;
@@ -582,14 +691,15 @@ function renderOnboardShell(title) {
 
   const input = onboardPanel.querySelector('[data-onboard-input]');
   const send = onboardPanel.querySelector('[data-onboard-send]');
-  input.addEventListener('input', () => {
-    send.disabled = onboardSending || onboardDone || input.value.trim().length === 0;
+  input?.addEventListener('input', () => {
+    if (send) send.disabled = onboardSending || onboardDone || input.value.trim().length === 0;
   });
-  input.focus();
+  input?.focus();
 }
 
 function showOnboardNote(html) {
   onboardOpen = false;
+  if (!onboardPanel) return;
   onboardPanel.hidden = false;
   onboardPanel.innerHTML = `<p class="onboard-note">${html}</p>`;
 }
@@ -658,18 +768,19 @@ function retryOnboard() {
   return sendOnboardTurn(onboardLastSent, { echoUser: false });
 }
 
-onboardPanel.addEventListener('submit', (event) => {
+onboardPanel?.addEventListener('submit', (event) => {
   if (!event.target.matches('[data-onboard-form]')) return;
   event.preventDefault();
   if (onboardSending || onboardDone) return;
-  const text = onboardPanel.querySelector('[data-onboard-input]').value.trim();
-  if (text.length < 1 || text.length > 800) return;
   const input = onboardPanel.querySelector('[data-onboard-input]');
+  if (!input) return;
+  const text = input.value.trim();
+  if (text.length < 1 || text.length > 800) return;
   input.value = '';
   sendOnboardTurn(text);
 });
 
-onboardPanel.addEventListener('click', (event) => {
+onboardPanel?.addEventListener('click', (event) => {
   if (event.target.closest('[data-onboard-retry]')) {
     event.target.closest('.onboard-error')?.remove();
     retryOnboard();

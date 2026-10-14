@@ -24,11 +24,14 @@ import {
 mountShell('flashcards');
 mountHealthBanner(document.querySelector('[data-health]'));
 
-const stage = document.querySelector('[data-stage]');
+// The flashcards page gets a light restyle, so the classic hosts stay the
+// contract; anything missing degrades to a detached element instead of
+// crashing the page.
+const stage = document.querySelector('[data-stage]') || document.createElement('div');
 const libraryView = document.querySelector('[data-library]');
-const groupsHost = document.querySelector('[data-deck-groups]');
-const live = document.querySelector('[data-live]');
-const setupStatus = document.querySelector('[data-setup-status]');
+const groupsHost = document.querySelector('[data-deck-groups]') || document.createElement('div');
+const live = document.querySelector('[data-live]') || document.createElement('p');
+const setupStatus = document.querySelector('[data-setup-status]') || document.createElement('div');
 const form = document.querySelector('[data-generate-form]');
 const topicInput = document.querySelector('#fc-topic');
 const topicError = document.querySelector('#fc-topic-error');
@@ -38,7 +41,8 @@ const sessionSelect = document.querySelector('[data-session]');
 const generateButton = document.querySelector('[data-generate]');
 const scopeNote = document.querySelector('[data-scope-note]');
 
-document.querySelector('[data-search-icon]').innerHTML = icon('search', { size: 16 });
+const searchIcon = document.querySelector('[data-search-icon]');
+if (searchIcon) searchIcon.innerHTML = icon('search', { size: 16 });
 wireCitations(stage);
 
 const params = new URLSearchParams(window.location.search);
@@ -131,11 +135,15 @@ function renderGroups(decks) {
   }).join('');
 }
 
+const searchInput = document.querySelector('#fc-search');
+const sessionFilter = document.querySelector('#fc-session-filter');
+const sortSelectEl = document.querySelector('#fc-sort');
+
 groupsHost.addEventListener('click', (event) => {
   if (event.target.closest('[data-clear-filters]')) {
     libState.q = ''; libState.sessionId = '';
-    document.querySelector('#fc-search').value = '';
-    document.querySelector('#fc-session-filter').value = '';
+    if (searchInput) searchInput.value = '';
+    if (sessionFilter) sessionFilter.value = '';
     loadLibrary();
   }
 });
@@ -143,21 +151,22 @@ groupsHost.addEventListener('click', (event) => {
 /* ------------------------------------------------------------ toolbar --- */
 
 let searchTimer = null;
-document.querySelector('#fc-search').addEventListener('input', (event) => {
+searchInput?.addEventListener('input', (event) => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { libState.q = event.target.value.trim(); loadLibrary(); }, 300);
 });
-document.querySelector('#fc-session-filter').addEventListener('change', (event) => {
+sessionFilter?.addEventListener('change', (event) => {
   libState.sessionId = event.target.value;
   loadLibrary();
 });
-document.querySelector('#fc-sort').addEventListener('change', (event) => {
+sortSelectEl?.addEventListener('change', (event) => {
   libState.sort = event.target.value;
   loadLibrary();
 });
 
 async function populateSessionFilter() {
-  const select = document.querySelector('#fc-session-filter');
+  const select = sessionFilter;
+  if (!select) return;
   try {
     const data = await api.listSessions();
     for (const session of data.sessions || []) {
@@ -195,12 +204,12 @@ async function openDeck(deckId) {
     practice.error = '';
     practice.deleteArmed = false;
     document.title = `${data.deck.topic} — Socius AI`;
-    libraryView.hidden = true;
+    if (libraryView) libraryView.hidden = true;
     stage.hidden = false;
     render();
     live.textContent = `Deck open: ${data.deck.topic}, ${practice.cards.length} cards.`;
   } catch (error) {
-    libraryView.hidden = true;
+    if (libraryView) libraryView.hidden = true;
     stage.hidden = false;
     if (error.code === 'DECK_NOT_FOUND') {
       showEmpty(stage, {
@@ -424,6 +433,7 @@ function setSetupStatus(kind, html) {
 
 /** Start the generator's "Search in" select from a clean state. */
 function resetGeneratorSessionSelect() {
+  if (!sessionSelect) return;
   sessionSelect.replaceChildren();
   const allMaterial = document.createElement('option');
   allMaterial.value = '';
@@ -442,6 +452,7 @@ function showSessionScopeError(messageHtml) {
 
 async function populateGeneratorSessionSelect() {
   resetGeneratorSessionSelect();
+  if (!sessionSelect) return; // no session dropdown in this markup → no scoping
   try {
     const data = await api.listSessions();
     for (const session of data.sessions || []) {
@@ -473,26 +484,32 @@ async function populateGeneratorSessionSelect() {
 
 /** Repopulate the "Search in" list whenever the chosen session changes. */
 async function refreshScope() {
+  if (!scopeSelect || !sessionSelect) return;
   const sessionId = sessionSelect.value || null;
   const sources = await populateScopeSelect(scopeSelect, scopeNote, { sessionId });
-  if (sessionId && sources.length === 0) {
+  if (sessionId && sources.length === 0 && scopeNote) {
     scopeNote.textContent = 'This session has no material yet — add material first.';
   }
 }
 
-sessionSelect.addEventListener('change', refreshScope);
+sessionSelect?.addEventListener('change', refreshScope);
 
-form.addEventListener('submit', async (event) => {
+form?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (!topicInput || !sessionSelect) return;
 
   const problem = topicCheck(topicInput);
-  if (problem) { setTopicError(topicInput, topicError, problem); topicInput.focus(); return; }
-  setTopicError(topicInput, topicError, '');
+  if (problem) {
+    if (topicError) setTopicError(topicInput, topicError, problem);
+    topicInput.focus();
+    return;
+  }
+  if (topicError) setTopicError(topicInput, topicError, '');
   setSetupStatus('', '');
 
   const topic = topicInput.value.trim();
-  const count = Number(countSelect.value);
-  const sourceIds = scopeSelect.value ? [scopeSelect.value] : [];
+  const count = Number(countSelect ? countSelect.value : 8);
+  const sourceIds = scopeSelect && scopeSelect.value ? [scopeSelect.value] : [];
   const sessionId = sessionSelect.value || null;
 
   // The page was opened for a specific session; never generate outside it.
@@ -502,7 +519,7 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
-  setGenerating(generateButton, GENERATING_LABELS, true);
+  if (generateButton) setGenerating(generateButton, GENERATING_LABELS, true);
   try {
     const data = await api.generateFlashcards({ topic, count, sourceIds, sessionId });
     live.textContent = `Deck ready: ${data.cards.length} cards, saved to your library.`;
@@ -522,19 +539,18 @@ form.addEventListener('submit', async (event) => {
       setSetupStatus('error', `${icon('alert', { size: 16 })} <span>${escapeHtml(errorMessage(error))}</span>`);
     }
   } finally {
-    setGenerating(generateButton, GENERATING_LABELS, false);
+    if (generateButton) setGenerating(generateButton, GENERATING_LABELS, false);
   }
 });
 
-document.querySelector('[data-create-deck]').addEventListener('click', () => {
-  const setup = document.querySelector('[data-setup]');
-  setup.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  topicInput.focus({ preventScroll: true });
+document.querySelector('[data-create-deck]')?.addEventListener('click', () => {
+  document.querySelector('[data-setup]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  topicInput?.focus({ preventScroll: true });
 });
 
 /* ---------------------------------------------------------------- init --- */
 
-if (presetTopic) topicInput.value = presetTopic;
+if (presetTopic && topicInput) topicInput.value = presetTopic;
 
 populateSessionFilter();
 populateGeneratorSessionSelect();

@@ -18,9 +18,17 @@ const GENERATING_LABELS = { ready: 'Start quiz', busy: 'Writing questions…' };
 mountShell('quiz');
 mountHealthBanner(document.querySelector('[data-health]'));
 
-const stage = document.querySelector('[data-stage]');
-const live = document.querySelector('[data-live]');
-const setupStatus = document.querySelector('[data-setup-status]');
+/* Hosts: the redesign's assessments view renders the active question inside
+   #quizQuestionBox (demo4.1 lines 753–773). The classic page keeps its own
+   [data-stage]; when that is missing we render into the demo box (or the
+   whole assessments view), and finally into a detached element so a missing
+   host never crashes the page. */
+const stage = document.querySelector('[data-stage]')
+  || document.getElementById('quizQuestionBox')
+  || document.getElementById('viewAssessments')
+  || document.createElement('div');
+const live = document.querySelector('[data-live]') || document.createElement('p');
+const setupStatus = document.querySelector('[data-setup-status]') || document.createElement('div');
 const form = document.querySelector('[data-generate-form]');
 const topicInput = document.querySelector('#qz-topic');
 const topicError = document.querySelector('#qz-topic-error');
@@ -57,9 +65,12 @@ async function loadSessionContext() {
   }
 }
 
-loadSessionContext().then(() =>
-  populateScopeSelect(scopeSelect, document.querySelector('[data-scope-note]'),
-    { sessionId: sessionContext ? sessionContext.id : null }));
+loadSessionContext().then(() => {
+  if (scopeSelect) {
+    populateScopeSelect(scopeSelect, document.querySelector('[data-scope-note]'),
+      { sessionId: sessionContext ? sessionContext.id : null });
+  }
+});
 
 const state = {
   quiz: null,     // { id, topic, difficulty, questions }
@@ -78,19 +89,24 @@ function setSetupStatus(kind, message) {
   setupStatus.innerHTML = message ? `<div class="banner banner-${kind}">${escapeHtml(message)}</div>` : '';
 }
 
-form.addEventListener('submit', async (event) => {
+form?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (!topicInput) return;
   const topic = topicInput.value.trim();
 
   const problem = topicCheck(topicInput);
-  if (problem) { setTopicError(topicInput, topicError, problem); topicInput.focus(); return; }
-  setTopicError(topicInput, topicError, '');
+  if (problem) {
+    if (topicError) setTopicError(topicInput, topicError, problem);
+    topicInput.focus();
+    return;
+  }
+  if (topicError) setTopicError(topicInput, topicError, '');
   setSetupStatus('', '');
 
   const difficulty = form.querySelector('input[name="difficulty"]:checked')?.value || '';
-  const sourceIds = scopeSelect.value ? [scopeSelect.value] : [];
+  const sourceIds = scopeSelect && scopeSelect.value ? [scopeSelect.value] : [];
 
-  setGenerating(generateButton, GENERATING_LABELS, true);
+  if (generateButton) setGenerating(generateButton, GENERATING_LABELS, true);
   try {
     const data = await api.generateQuiz({
       topic,
@@ -119,7 +135,7 @@ form.addEventListener('submit', async (event) => {
       setSetupStatus('error', errorMessage(error));
     }
   } finally {
-    setGenerating(generateButton, GENERATING_LABELS, false);
+    if (generateButton) setGenerating(generateButton, GENERATING_LABELS, false);
   }
 });
 
@@ -140,7 +156,35 @@ function placeholder() {
         <p class="state-text">Choose a topic below. Socius AI writes the questions, and your score decides the difficulty of the next set.</p>
       </div>
     </div></div>`;
+  syncAssessmentChrome();
 }
+
+/* ---------------------------------------------------- assessments chrome ---
+   The redesign's assessments view has chrome elements that may live OUTSIDE
+   whatever stage we render into: #quizQCounter, #quizSubjectBadge and
+   #quizSessionScore. Elements inside the stage are replaced by our own
+   markup, so these lookups simply miss and do nothing. Accuracy stays '—'
+   until the quiz is submitted: the answer key must not reach this page
+   before then. */
+function syncAssessmentChrome() {
+  const counter = document.getElementById('quizQCounter');
+  if (counter && state.quiz) {
+    counter.textContent = `Question ${state.index + 1} of ${state.quiz.questions.length}`;
+  }
+  const badge = document.getElementById('quizSubjectBadge');
+  if (badge && state.quiz) badge.textContent = state.quiz.topic;
+  const scorePill = document.getElementById('quizSessionScore');
+  if (scorePill && state.quiz) {
+    scorePill.textContent = state.result ? `${state.result.score.percent}%` : '—';
+  }
+}
+
+/* Redesign extra: the assessments view ships a close button that means "back
+   to overview" in the demo. On a standalone page there is no modal to close,
+   so it returns to the dashboard instead. */
+document.getElementById('closeQuizModalBtn')?.addEventListener('click', () => {
+  window.location.href = 'dashboard.html';
+});
 
 /* -------------------------------------------------------------- question */
 
@@ -244,6 +288,7 @@ function renderQuestion() {
         <p class="field-hint" style="text-align: right;">${locked ? 'Answer locked in — you can still change it.' : 'Pick an option, then submit it.'}</p>
       </div>
     </div>`;
+  syncAssessmentChrome();
 }
 
 /* --------------------------------------------------------------- results */
@@ -335,6 +380,7 @@ function renderResults() {
         <a class="btn btn-secondary" href="dashboard.html">Back to dashboard</a>
       </div>
     </div>`;
+  syncAssessmentChrome();
 }
 
 /* ---------------------------------------------------------------- render */
@@ -447,12 +493,12 @@ stage.addEventListener('click', (event) => {
     state.answers = [];
     state.locked = [];
     render();
-    topicInput.focus();
+    topicInput?.focus();
   }
 });
 
 /* ------------------------------------------------------------------ init */
 
-if (presetTopic) topicInput.value = presetTopic;
+if (presetTopic && topicInput) topicInput.value = presetTopic;
 
 render();

@@ -7,23 +7,24 @@
   <meta name="description" content="Your flashcard library: decks grouped by study session, generated from your own material.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/shell.css">
   <link rel="stylesheet" href="css/flashcards.css">
+  <link rel="stylesheet" href="css/redesign.css">
 </head>
 <body class="shell">
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar" data-shell="header"></header>
 
   <main id="main" class="shell-main">
-    <div class="page-head lib-head">
+    <div class="page-head lib-head view-head">
       <div>
-        <p class="page-eyebrow">Flashcards</p>
+        <p class="page-eyebrow view-eyebrow">FLASHCARDS</p>
         <h1 class="page-title">Flashcard library</h1>
-        <p class="page-sub">Decks written from your own material and grouped by study session. Open one to practise — your “know it” and “review again” marks are saved.</p>
+        <p class="page-sub view-desc">Decks written from your own material and grouped by study session. Open one to practise — your “know it” and “review again” marks are saved.</p>
       </div>
       <div class="lib-head-actions">
         <button type="button" class="btn btn-primary" data-create-deck>Create flashcard deck</button>
@@ -33,7 +34,7 @@
     <div data-health class="stack stack-3"></div>
 
     <!-- Practice stage — shown when a deck is open (?deck=deck_…) -->
-    <section data-stage hidden></section>
+    <section data-stage hidden class="view-panel"></section>
     <p class="sr-only" aria-live="polite" data-live></p>
 
     <!-- Library: search/filter + decks grouped by session -->
@@ -65,7 +66,7 @@
     </div>
 
     <!-- Deck generator -->
-    <section class="fc-setup" aria-labelledby="setup-title" data-setup>
+    <section class="fc-setup view-panel" aria-labelledby="setup-title" data-setup>
       <div class="panel">
         <div class="panel-head">
           <h2 class="panel-title" id="setup-title">Create flashcard deck</h2>

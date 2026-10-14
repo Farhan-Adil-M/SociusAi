@@ -18,15 +18,21 @@ mountHealthBanner(document.querySelector('[data-health]'));
 
 const sessionsHost = document.querySelector('[data-sessions]');
 const sessionsMeta = document.querySelector('[data-sessions-meta]');
-const unsortedHost = document.querySelector('[data-unsorted]');
+// The redesign's materials view lists uploads in #uploadedFilesList (demo4.1
+// lines 671–677); the classic markup uses [data-unsorted]. Same rows, same
+// data flow (GET /api/sources?sessionId=unsorted).
+const unsortedHost = document.querySelector('[data-unsorted]')
+  || document.getElementById('uploadedFilesList');
 const unsortedMeta = document.querySelector('[data-unsorted-meta]');
+const filesCount = document.getElementById('modalFilesCount'); // demo "Uploaded documents (N)"
 
 const searchInput = document.querySelector('#lib-search');
 const categorySelect = document.querySelector('#lib-category');
 const sortSelect = document.querySelector('#lib-sort');
 const archivedCheckbox = document.querySelector('#lib-include-archived');
 
-document.querySelector('[data-search-icon]').innerHTML = icon('search', { size: 16 });
+const searchIcon = document.querySelector('[data-search-icon]');
+if (searchIcon) searchIcon.innerHTML = icon('search', { size: 16 });
 
 const state = {
   q: '',
@@ -35,6 +41,7 @@ const state = {
   includeArchived: false,
   sessions: [],
   pendingArchive: null, // session id waiting for an inline confirmation
+  unsortedSources: [],  // last loaded Unsorted list (feeds the import duplicate hint)
 };
 
 /* ---------------------------------------------------------------- load --- */
@@ -51,7 +58,7 @@ async function loadSessions() {
     state.unsortedSourceCount = data.unsortedSourceCount || 0;
     renderSessions();
   } catch (error) {
-    showError(sessionsHost, error, { title: 'Could not load your sessions', onRetry: loadSessions });
+    if (sessionsHost) showError(sessionsHost, error, { title: 'Could not load your sessions', onRetry: loadSessions });
   }
 }
 
@@ -60,7 +67,7 @@ async function loadUnsorted() {
     const data = await api.listSources({ sessionId: 'unsorted' });
     renderUnsorted(data.sources || []);
   } catch (error) {
-    showError(unsortedHost, error, { title: 'Could not load unsorted material', onRetry: loadUnsorted });
+    if (unsortedHost) showError(unsortedHost, error, { title: 'Could not load unsorted material', onRetry: loadUnsorted });
   }
 }
 
@@ -110,6 +117,7 @@ function sessionRow(session) {
 }
 
 function renderSessions() {
+  if (!sessionsHost) return;
   if (state.sessions.length === 0) {
     const filtering = state.q || state.category;
     showEmpty(sessionsHost, {
@@ -122,10 +130,10 @@ function renderSessions() {
         ? '<button type="button" class="btn btn-secondary btn-sm" data-clear-filters>Clear filters</button>'
         : '<button type="button" class="btn btn-primary btn-sm" data-new-session-empty>New session</button>',
     });
-    sessionsMeta.textContent = '';
+    if (sessionsMeta) sessionsMeta.textContent = '';
     return;
   }
-  sessionsMeta.textContent = `${state.sessions.length} ${state.sessions.length === 1 ? 'session' : 'sessions'}`;
+  if (sessionsMeta) sessionsMeta.textContent = `${state.sessions.length} ${state.sessions.length === 1 ? 'session' : 'sessions'}`;
   sessionsHost.innerHTML = `<div class="lib-rows">${state.sessions.map(sessionRow).join('')}</div>`;
 }
 
@@ -151,8 +159,11 @@ function unsortedRow(source) {
 }
 
 function renderUnsorted(sources) {
+  state.unsortedSources = sources; // remembered for the import panel's duplicate hint
   const count = sources.length;
-  unsortedMeta.textContent = count ? `${count} ${count === 1 ? 'file' : 'files'} not in a session` : '';
+  if (unsortedMeta) unsortedMeta.textContent = count ? `${count} ${count === 1 ? 'file' : 'files'} not in a session` : '';
+  if (filesCount) filesCount.textContent = String(count); // demo panel counter
+  if (!unsortedHost) return;
   if (count === 0) {
     showEmpty(unsortedHost, {
       iconName: 'checkCircle',
@@ -179,15 +190,16 @@ async function newSession() {
   }
 }
 
-document.querySelector('[data-new-session]').addEventListener('click', newSession);
+document.querySelector('[data-new-session]')?.addEventListener('click', newSession);
 
-sessionsHost.addEventListener('click', async (event) => {
+sessionsHost?.addEventListener('click', async (event) => {
   const target = event.target;
 
   if (target.closest('[data-new-session-empty]')) { newSession(); return; }
   if (target.closest('[data-clear-filters]')) {
     state.q = ''; state.category = '';
-    searchInput.value = ''; categorySelect.value = '';
+    if (searchInput) searchInput.value = '';
+    if (categorySelect) categorySelect.value = '';
     loadSessions();
     return;
   }
@@ -231,7 +243,7 @@ sessionsHost.addEventListener('click', async (event) => {
   }
 });
 
-unsortedHost.addEventListener('change', async (event) => {
+unsortedHost?.addEventListener('change', async (event) => {
   const select = event.target.closest('[data-move-select]');
   if (!select || !select.value) return;
   const row = select.closest('[data-source-row]');
@@ -249,33 +261,90 @@ unsortedHost.addEventListener('change', async (event) => {
 /* ------------------------------------------------------------ toolbar --- */
 
 let searchTimer = null;
-searchInput.addEventListener('input', () => {
+searchInput?.addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.q = searchInput.value.trim(); loadSessions(); }, 300);
 });
-categorySelect.addEventListener('change', () => { state.category = categorySelect.value; loadSessions(); });
-sortSelect.addEventListener('change', () => { state.sort = sortSelect.value; loadSessions(); });
-archivedCheckbox.addEventListener('change', () => { state.includeArchived = archivedCheckbox.checked; loadSessions(); });
+categorySelect?.addEventListener('change', () => { state.category = categorySelect.value; loadSessions(); });
+sortSelect?.addEventListener('change', () => { state.sort = sortSelect.value; loadSessions(); });
+archivedCheckbox?.addEventListener('change', () => { state.includeArchived = archivedCheckbox.checked; loadSessions(); });
+
+// Deep link from the dashboard search box (Enter → library.html?q=…).
+const deepLinkQ = new URLSearchParams(window.location.search).get('q');
+if (deepLinkQ && searchInput) {
+  searchInput.value = deepLinkQ;
+  state.q = deepLinkQ.trim();
+}
 
 /* ------------------------------------------------------------ import --- */
 
 const importToggle = document.querySelector('[data-import-toggle]');
-const importPanel = document.querySelector('[data-import-panel]');
+// The redesign's materials view hosts the upload UI in #uploadInterface (a
+// child of #filesExpandPanel, next to the #uploadedFilesPanel list); the
+// classic markup uses [data-import-panel]. Prefer the INNER panel so mounting
+// never wipes the sibling uploaded-files list.
+const importPanel = document.querySelector('[data-import-panel]')
+  || document.getElementById('uploadInterface')
+  || document.getElementById('filesExpandPanel');
 
-importToggle.addEventListener('click', () => {
-  const open = importPanel.hidden;
-  if (open && !importPanel.dataset.mounted) {
-    mountImportPanel({
-      host: importPanel,
-      sessionId: null, // imports from the Library land in Unsorted, then get suggested
-      onOrganised: loadAll,
-    });
-    importPanel.dataset.mounted = '1';
+function mountImport() {
+  if (!importPanel || importPanel.dataset.mounted) return;
+  mountImportPanel({
+    host: importPanel,
+    sessionId: null, // imports from the Library land in Unsorted, then get suggested
+    knownSources: () => state.unsortedSources, // feeds the duplicate hint
+    onOrganised: loadAll,
+  });
+  importPanel.dataset.mounted = '1';
+}
+
+/** Show the panel plus any hidden ancestor (e.g. the demo's wrapper panel). */
+function revealImportPanel() {
+  for (let node = importPanel; node; node = node.parentElement) {
+    node.hidden = false;
   }
-  importPanel.hidden = !open;
-  importToggle.setAttribute('aria-expanded', String(open));
-  importToggle.textContent = open ? 'Hide import' : 'Import material';
-});
+}
+
+/** Visible right now? Checks ancestors too — the demo hides the WRAPPER. */
+function importPanelVisible() {
+  for (let node = importPanel; node; node = node.parentElement) {
+    if (node.hidden) return false;
+  }
+  return true;
+}
+
+if (importToggle && importPanel) {
+  importToggle.addEventListener('click', () => {
+    const open = !importPanelVisible();
+    if (open) {
+      revealImportPanel();
+      mountImport();
+    } else {
+      importPanel.hidden = true; // only the panel itself; ancestors stay as they were
+    }
+    importToggle.setAttribute('aria-expanded', String(open));
+    importToggle.textContent = open ? 'Hide import' : 'Import material';
+  });
+} else if (importPanel) {
+  // The redesigned materials view ships the upload interface with no separate
+  // toggle: show and mount it right away so importing stays reachable.
+  revealImportPanel();
+  mountImport();
+}
+
+/* Redesign extras: the demo's "Uploaded documents" panel opens via
+   #viewUploadedFilesBtn and closes via #closeUploadedFilesBtn. When those
+   exist, opening it also refreshes the list. */
+const filesPanel = document.getElementById('uploadedFilesPanel');
+if (filesPanel) {
+  document.getElementById('viewUploadedFilesBtn')?.addEventListener('click', () => {
+    filesPanel.hidden = false;
+    loadUnsorted();
+  });
+  document.getElementById('closeUploadedFilesBtn')?.addEventListener('click', () => {
+    filesPanel.hidden = true;
+  });
+}
 
 /* ---------------------------------------------------------------- init --- */
 
